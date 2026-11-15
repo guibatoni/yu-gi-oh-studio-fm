@@ -74,13 +74,19 @@ class DuelLab:
         for cid, quantity in counts.items():
             self.card(cid)
             per_card = 3
+            explicit = []
+            unlimited = False
             for entry in self.effects.get(str(cid), self.effects.get(cid, [])):
                 if entry.get('acao') in ('sem_limite_deck','limite_copias_deck'):
                     eff = check_effect(entry)
                     if eff['acao'] == 'sem_limite_deck':
-                        per_card = MAX_DECK
+                        unlimited = True
                     else:
-                        per_card = max(per_card, eff['valor'])
+                        explicit.append(eff['valor'])
+            if unlimited:
+                per_card = MAX_DECK
+            elif explicit:
+                per_card = min(explicit)  # Em conflito, aplica o limite mais restritivo.
             if quantity > per_card:
                 raise ModError(f'Deck: carta #{cid} tem {quantity} cópias '
                                f'(máximo configurado {per_card}, deck com até {MAX_DECK}).')
