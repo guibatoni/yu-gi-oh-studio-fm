@@ -1,3 +1,11 @@
+## v1.2.8 — Aceitar padding FF verdadeiro na tabela de Equip do Drop X15
+
+- Analisada a imagem real **Yu-Gi-Oh! FM Original (Drop x15)** já compartilhada: suas sete tabelas de equipamentos têm conteúdo idêntico, terminador u16 em 0x201A e, após o terminador, 2020 bytes do valor FF até o fim da região reservada (0x2800).
+- O Studio incorretamente tratava todos os FF como dados ocupados e informava zero bytes livres. Agora pode expandir a lista usando o preenchimento homogêneo FF de TODO o restante da área reservada.
+- O patch continua preservando dados adicionais não padronizados, bloqueando regiões mistas e verificando estrutura, limites, fusões e as sete cópias.
+- Um teste com duas permissões existentes (Equip #302 e #315 para monstro #016) consome 4 bytes desse espaço, deixando os 2016 bytes restantes em FF, sem precisar realocar o ISO.
+- O método bitmap MIPS da v1.2.7 permanece para MODs que efetivamente usem esse formato. A nova gravação das permissões ainda requer validação dentro do ePSXe.
+
 ## v1.2.7 — Equip: reconhecimento de bitmap MIPS e adições automáticas
 
 - Detecta a rotina Duel_CheckEquip modificada que utiliza registros de 94 bytes (u16 Equip + 92 bytes bitmap de monstros), seguindo endereços presentes no executável, inclusive salto direto para rotina alternativa.
