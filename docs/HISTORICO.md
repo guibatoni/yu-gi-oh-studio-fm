@@ -1,3 +1,12 @@
+## v1.2.2 — Reutilizar ISOs de teste sem acumular duplicatas
+
+- O BIN de teste passa a ter nome estável derivado do nome do BIN de origem, com sufixo identificador para evitar colisões por caracteres semelhantes e nomes longos.
+- Gerar novamente da mesma origem substitui o BIN/CUE de teste anterior; origem com outro nome gera um arquivo separado.
+- A cópia anterior permanece intacta até o novo BIN ser gerado, validado e pronto para substituir o destino.
+- Se o ePSXe bloquear a imagem, o Studio informa para fechar o jogo e tenta restaurar CUE/manifesto anteriores.
+- O BIN original permanece intocado; arquivos antigos gerados com nomes por data não são apagados automaticamente.
+- Os efeitos ainda não implementados no motor PS1 continuam pendentes normalmente.
+
 ## v1.2.1 — Consolidação e teste de gravação de Equip
 
 - Teste integrado de BIN/CUE sintético confirmou a escrita de alvos de equipamentos no WA_MRG.MRG e a preservação do disco original.

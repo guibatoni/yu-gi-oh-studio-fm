@@ -1615,7 +1615,9 @@ class Studio(tk.Tk):
         from .ps1_compat import audit
         report=audit(self.project)
         pending=report['pendente_de_motor']
-        question = ('Será criada uma NOVA cópia do disco, sem modificar o original.\n\n'
+        question = ('Será criada ou atualizada a cópia de teste do disco, sem modificar o original.\n'
+                    'Mesmo nome de origem: substitui o teste anterior. Outro nome: cria outro arquivo.\n'
+                    'Se o ePSXe estiver usando a imagem anterior, feche o jogo antes de substituí-la.\n\n'
                     'Compatível para teste: estatísticas, textos curtos e artes em paleta original.\n'
                     f'PENDÊNCIAS DE MOTOR: {len(pending)}. Novos efeitos, cartas extras e cores de nomes NÃO serão aplicados.\n\n'
                     + ('\n'.join(pending[:3]) + '\n\n' if pending else '') + 'Gerar somente a cópia parcial de teste?')
@@ -1627,7 +1629,9 @@ class Studio(tk.Tk):
         except (OSError, ValueError, ModError, DiscError) as exc:
             messagebox.showerror('Não foi possível gerar BIN/CUE', str(exc), parent=self)
             return
-        messagebox.showinfo('BIN/CUE de teste gerado',
+        action='substituída' if manifest.get('acao_arquivo')=='substituido' else 'criada'
+        messagebox.showinfo(f'Imagem de teste {action}',
+            f'Imagem de teste {action} com sucesso.\n\n'
             f'BIN: {manifest["bin"]}\nCUE: {manifest["cue"]}\n'
             f'Setores modificados: {manifest["setores_modificados"]}\n\n'
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
@@ -1635,7 +1639,7 @@ class Studio(tk.Tk):
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             f'Equip originais com novos alvos: {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
-        self._update_status('Cópia BIN/CUE de teste criada em exportacao/teste_ps1.')
+        self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
 
     def verify_disc(self):
         if self._extract_running or not self._ensure_project():
