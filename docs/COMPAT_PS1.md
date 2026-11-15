@@ -1,3 +1,28 @@
+## v1.3.0 — Efeitos nativos adicionais
+
+O Studio pode gravar diretamente alguns efeitos existentes no motor de Forbidden Memories:
+
+| Efeito | Formato | Status |
+| --- | --- | --- |
+| Alvos para Equip original | WA_MRG.MRG, tabelas por terreno | Confirmado no ePSXe no Drop X15 |
+| Ritual original (3 tributos + resultado) | WA_MRG.MRG +0x34800, registros de 5 u16 | Testado em BIN sintético; jogo real pendente |
+| Limites de ATK das Traps #681–686 | SLUS_014.11, seis bytes em 0x8B724 | Apenas layout retail; jogo real pendente |
+| Bônus por terreno/tipo original | SLUS_014.11, s8[20x6] em 0x811D4 | Apenas tabela stock ±500; jogo real pendente |
+
+Cada modificação é conferida por releitura. A escrita de bytes não prova
+execução: um MOD com rotina MIPS modificada pode ignorar a tabela.
+
+Para Ritual, escolha uma carta Ritual com receita presente na base e informe
+três tributos e o resultado. Para Trap, selecione #681–#686 e configure o
+máximo de ATK em múltiplos de 100 mantendo os limites em ordem. Para terreno,
+escolha Forest, Wasteland, Mountain, Sogen, Umi ou Yami, tipo original (0–19)
+e bônus de ATK/DEF em múltiplos de 10.
+
+As fusões originais são preservadas. Efeitos personalizados inéditos seguem
+somente no simulador, aguardando rotinas MIPS.
+
+---
+
 # Compatibilidade PlayStation 1 — Studio FM v1.1.0
 
 ## Objetivo

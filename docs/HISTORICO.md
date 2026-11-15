@@ -1,3 +1,13 @@
+## v1.3.0 — Mais efeitos nativos graváveis em BIN/CUE PS1
+
+- Ritual: altera três tributos e o resultado de um Ritual original em sete tabelas, sem aumentar registros ou tocar nas fusões.
+- Armadilhas de ataque #681–#686: altera o limiar em centenas de ATK na tabela de seis bytes do SLUS; rejeita layout alterado e valores fora de ordem.
+- Bônus de terreno: configura bônus ATK/DEF dos seis campos por tipo original (0–19), exigindo origem com tabela stock ±500.
+- Interface Efeitos recebe os três controles, com auditoria e manifesto de exportação detalhados.
+- Testes sintéticos verificam os três grupos no mesmo BIN/CUE, os bytes modificados e a preservação do arquivo original.
+- Apenas Equip teve funcionamento em duelo confirmado pelo usuário. Ritual, Trap e terreno ainda precisam de teste real no ePSXe.
+- Bônus dinâmicos de cemitério, auras inéditas, imunidades, ataques 2x/3x, perfuração, primeiro turno, cartas extras e tipo God seguem pendentes de programação MIPS.
+
 ## Validação no ePSXe — Equip funcionando (15/11/2026)
 
 - **Confirmado pelo usuário:** após atualizar para Studio FM v1.2.8 e testar no ePSXe com o MOD Original Drop X15, a alteração de compatibilidade de Equip funcionou em duelo.

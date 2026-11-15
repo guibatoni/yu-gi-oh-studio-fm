@@ -1,3 +1,15 @@
+# Yu-Gi-Oh Studio FM v1.3.0 — Efeitos nativos PS1
+
+**Efeitos exportáveis para BIN/CUE, sem criar novos handlers MIPS:** compatibilidade de equipamentos (já validada no ePSXe pelo usuário), receitas dos rituais originais (3 tributos + resultado), limiares das seis armadilhas de ataque (#681–#686) e bônus de terrenos para 20 tipos originais nos seis campos. Os três últimos recursos foram testados com imagens sintéticas, mas ainda precisam de validação no emulador.
+
+**Segurança:** edições vão somente à cópia BIN/CUE, nunca substituem a origem. A exportação exige SLUS/WA da mesma base, recusa layouts desconhecidos, conserva as sete cópias e verifica os arquivos gerados. Rituais exigem registros existentes, traps exigem tabela retail de seis bytes, terrenos exigem tabela stock ±500.
+
+**Habilidades inéditas não implementadas no PS1:** bônus por cemitério, auras, imunidades, indestrutibilidade, ataques 2x/3x, dano perfurante, primeiro turno, cartas extras e tipo God. Elas seguem no simulador, aguardando hooks/eventos MIPS específicos. Não confunda a prévia do Studio com suporte real no console.
+
+**Uso:** atualize, abra seu projeto com BIN importado, salve, vá à aba Efeitos, use os botões em EFEITOS NATIVOS DO PS1 e gere o BIN/CUE para testar no ePSXe.
+
+---
+
 # Yu-Gi-Oh Studio FM v1.0.1 — Expansão de cartas e descrições
 
 ## Correção v1.0.1
