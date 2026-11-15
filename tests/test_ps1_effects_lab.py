@@ -11,7 +11,7 @@ from fmstudio.abilities import quick_settings, replace_quick_effects
 from fmstudio.core import check_effect, ModError
 from fmstudio.duel_engine import DuelLab
 from fmstudio.ps1_effects_lab import (
-    SITES, scan_effect_sites, deck_global_patch_probe, patch_deck_global_limit,
+    SITES, scan_effect_sites, scan_direct_mips_calls, deck_global_patch_probe, patch_deck_global_limit,
     analyze_project_effects, save_project_effect_analysis,
 )
 from fmstudio.disc_build import build_test_disc
@@ -48,6 +48,38 @@ class MipsEffectProbeTests(unittest.TestCase):
                          '0x800336F0')
         self.assertEqual(report['construcao_deck']['sha256_regiao'],
                          hashlib.sha256(exe[DECK_SITE:DECK_SITE+0x1F4]).hexdigest())
+
+    def test_jal_crossrefs_from_valid_psx_header(self):
+        exe=bytearray(stock_like_exe())
+        # O SLUS analisado tem carga 0x80010000, mapeada após header 0x800.
+        struct.pack_into('<II',exe,0x18,EXE_DELTA+0x800,0x30000)
+        caller=0x80010400
+        target=SITES['atributos_dinamicos'][1]
+        instruction=0x0C000000|((target>>2)&0x03FFFFFF)
+        struct.pack_into('<I',exe,caller-EXE_DELTA,instruction)
+        scan=scan_direct_mips_calls(bytes(exe))
+        self.assertEqual(scan['status'],'varredura_estatica_sem_hooks_validados')
+        entry=scan['por_funcao']['atributos_dinamicos']
+        self.assertEqual(entry['total_jal_diretos'],1)
+        self.assertEqual(entry['locais_jal'][0]['endereco_ram'],'0x80010400')
+        self.assertFalse(entry['amostragem_limitada'])
+        report=scan_effect_sites(bytes(exe))
+        self.assertEqual(report['atributos_dinamicos']['referencias_jal'],entry)
+        self.assertFalse(report['atributos_dinamicos']['prologo_classico_addiu_sp'])
+
+    def test_invalid_or_mismatched_segment_cannot_prove_callers(self):
+        original=stock_like_exe()
+        self.assertEqual(scan_direct_mips_calls(original)['status'],
+                         'segmento_invalido')
+        exe=bytearray(original)
+        struct.pack_into('<II',exe,0x18,0x80020000,0x30000)
+        result=scan_direct_mips_calls(bytes(exe))
+        self.assertEqual(result['status'],'segmento_invalido')
+        self.assertEqual(result['por_funcao'],{})
+        exe=bytearray(original)
+        struct.pack_into('<II',exe,0x18,EXE_DELTA+0x800,0xFFFFFFFC)
+        self.assertEqual(scan_direct_mips_calls(bytes(exe))['status'],
+                         'segmento_invalido')
 
     def test_single_comparison_changes_only_immediate(self):
         original=stock_like_exe()

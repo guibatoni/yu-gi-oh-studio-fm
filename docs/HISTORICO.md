@@ -1,3 +1,11 @@
+## v1.4.1 — Grafo preliminar de chamadas MIPS
+
+- Adicionada varredura de referências diretas JAL para nove endereços de referência.
+- Usa t_addr e t_size do cabeçalho PS-X EXE e recusa endereço base inesperado.
+- Registra total e até 16 chamadas por rotina, indício de prólogo clássico e aviso explícito de que nenhuma habilidade inédita foi injetada.
+- Testes sintéticos para chamadas válidas, cabeçalho incorreto e segmento fora dos limites.
+- Mantém patch global de deck e ferramentas de Equip existentes; novos testes reais no ePSXe ainda são necessários.
+
 ## v1.4.0 — Prioridade aos efeitos inéditos e relatório MIPS
 
 - Ferramenta Diagnosticar motor MIPS: mapeamento e hashes das regiões de cálculo,

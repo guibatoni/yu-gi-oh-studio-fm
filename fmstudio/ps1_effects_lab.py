@@ -53,7 +53,63 @@ def _range(exe: bytes, address: int, size: int) -> tuple[int, bytes]:
     return offset, exe[offset:offset+size]
 
 
+def scan_direct_mips_calls(exe: bytes) -> dict:
+    """Read-only JAL references to known locations in a PS-X EXE code segment.
+
+    Requires a credible executable header and a consistent original load base.
+    This is an inventory of static candidates, NOT proof of a safe hook or
+    proof that a function starts at the address listed in SITES.
+    """
+    if len(exe) < 0x800 or exe[:8] != b'PS-X EXE':
+        return {'status':'segmento_invalido',
+                'motivo':'Cabeçalho PS-X EXE ausente ou incompleto.',
+                'por_funcao':{}}
+    load_address, code_size = struct.unpack_from('<II', exe, 0x18)
+    expected_load = EXE_DELTA + 0x800
+    if load_address != expected_load:
+        return {'status':'segmento_invalido',
+                'motivo':'Endereço de carga incompatível com os offsets SLUS conhecidos: '
+                         f'0x{load_address:08X} (esperado 0x{expected_load:08X}).',
+                'por_funcao':{}}
+    if not code_size or code_size % 4 or 0x800 + code_size > len(exe):
+        return {'status':'segmento_invalido',
+                'motivo':'Tamanho do segmento carregado ausente, desalinhado '
+                         'ou superior aos bytes disponíveis.',
+                'por_funcao':{}}
+    addresses={definition[1]:alias for alias,definition in SITES.items()}
+    references={alias:[] for alias in SITES}
+    counts={alias:0 for alias in SITES}
+    for offset in range(0x800, 0x800+code_size, 4):
+        instruction=struct.unpack_from('<I',exe,offset)[0]
+        if instruction>>26 != 3:  # JAL, chamadas indiretas JALR não são capturadas.
+            continue
+        pc=EXE_DELTA+offset
+        destination=((pc+4)&0xF0000000)|((instruction&0x03FFFFFF)<<2)
+        alias=addresses.get(destination)
+        if alias is None:
+            continue
+        counts[alias]+=1
+        if len(references[alias])<16:
+            references[alias].append({'endereco_ram':f'0x{pc:08X}',
+                                     'offset_slus':f'0x{offset:X}'})
+    return {
+        'status':'varredura_estatica_sem_hooks_validados',
+        'segmento_ram':f'0x{load_address:08X}',
+        'tamanho_segmento_bytes':code_size,
+        'por_funcao':{
+            alias:{'total_jal_diretos':counts[alias],
+                   'locais_jal':references[alias],
+                   'amostragem_limitada':counts[alias]>len(references[alias])}
+            for alias in SITES
+        },
+        'aviso':'JAL encontrado é apenas referência estática: dados podem parecer instruções, '
+                'chamadas JALR não aparecem, e MODs podem usar outros endereços. '
+                'Não autoriza injeção automática MIPS.',
+    }
+
+
 def scan_effect_sites(exe: bytes) -> dict:
+    referencias=scan_direct_mips_calls(exe)
     sites={}
     for alias, (name,address,size) in SITES.items():
         try:
@@ -70,6 +126,12 @@ def scan_effect_sites(exe: bytes) -> dict:
                 'palavras_ativas':active,
                 'status':'regiao_encontrada_sem_hook_validado' if active>=3
                          else 'regiao_ausente_ou_alterada',
+                'prologo_classico_addiu_sp':(first & 0xFFFF0000)==0x27BD0000
+                                              and (first & 0x8000)!=0,
+                'referencias_jal':referencias.get('por_funcao',{}).get(alias,
+                                   {'total_jal_diretos':None,'locais_jal':[],
+                                    'diagnostico':'segmento de código inválido'}),
+                'aviso_entrada':'Endereço de referência, não hook MIPS validado.',
             }
         except ModError as exc:
             sites[alias]={'funcao':name,'status':'fora_do_SLUS','erro':str(exc)}
@@ -189,6 +251,7 @@ def analyze_project_effects(project) -> dict:
         'versao_perfil':1,'alvo':'SLUS_014.11 (PS1 MIPS)',
         'sha256_executavel_origem':hashlib.sha256(exe).hexdigest(),
         'funcoes_encontradas':scan_effect_sites(exe),
+        'referencias_chamadas_mips':scan_direct_mips_calls(exe),
         'perfil_limite_global_deck':deck_global_patch_probe(exe,limit),
         'grupos_programados_no_studio':grouped,
         'outros_efeitos':unknown,

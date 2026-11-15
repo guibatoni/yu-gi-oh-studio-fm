@@ -1,3 +1,19 @@
+## v1.4.1 — Referências JAL verificáveis (somente leitura)
+
+O relatório MIPS agora faz varredura de JAL estáticos para as nove rotinas
+mapeadas, *somente* quando o cabeçalho PS-X EXE declara endereço e tamanho
+de segmento coerentes com o SLUS importado. Informa o número de chamadas,
+até 16 endereços de origem por rotina, e se o primeiro opcode parece um
+prólogo clássico (`addiu sp,sp,-N`). Endereços sem prólogo podem ser
+funções folha legítimas; ausência de JAL pode significar JALR, inlining,
+redirecionamento ou região não utilizada.
+
+**É um diagnóstico, não um patch:** uma referência JAL, mesmo única,
+não comprova que ela possa ser substituída por hook, que existe espaço
+seguro para código novo ou que um efeito tenha sido instalado. Até o
+momento não há nova habilidade inédita executável no PS1. Testes no ePSXe
+continuam indispensáveis.
+
 ## v1.4.0 — Preparação de efeitos MIPS sem falsos positivos
 
 **Estado:** aura, cemitério, imunidades, indestrutibilidade, ataques 2x/3x,

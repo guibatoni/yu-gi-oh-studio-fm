@@ -1,3 +1,19 @@
+# Studio FM v1.4.1 — Referências MIPS de chamadas (diagnóstico)
+
+O botão **Efeitos > Diagnosticar motor MIPS** agora registra, para cada
+rotina de efeitos conhecida, referências diretas `JAL` encontradas no
+segmento declarado pelo cabeçalho do `SLUS_014.11`, até 16 locais de
+chamada por função, total de ocorrências, e indício de prólogo clássico.
+O resultado fica em `exportacao/diagnostico_motor_efeitos_mips.json`.
+
+O scanner **recusa concluir** quando a base de carregamento, o tamanho do
+segmento ou o cabeçalho são incompatíveis. Uma chamada estática não
+prova que a função está correta e **não instala habilidades inéditas**.
+Não altera BIN/CUE, arquivo SLUS ou projetos. O primeiro efeito nativo
+continua sendo a compatibilidade Equip validada no ePSXe.
+
+---
+
 # Studio FM v1.4.0 — Preparação do motor de efeitos inéditos (MIPS)
 
 **Prioridade: habilidades inéditas, não rituais.** A aba Efeitos destaca auras, bônus por cemitério, imunidades, indestrutibilidade, ataques múltiplos, dano perfurante e ataque direto mesmo com monstros adversários. Esses presets seguem configuráveis e simuláveis; ainda NÃO são novas rotinas executáveis no PS1.
