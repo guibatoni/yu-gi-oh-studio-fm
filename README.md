@@ -1,4 +1,14 @@
-# Yu-Gi-Oh Studio Card FM v0.6.2 — Editor visual de Forbidden Memories (PS1)
+# Yu-Gi-Oh Studio FM v0.9.1 — Atualizações diretas
+
+O botão **Atualizar** consulta GitHub Releases do repositório `guibatoni/yu-gi-oh-studio-fm`, baixa o pacote correto de forma automática, verifica SHA-256 e instala na mesma pasta, preservando os projetos.
+
+A cada commit novo na branch `main`, o workflow de Windows compila e publica o Release identificado por `fmstudio/__init__.py`. A versão deve ser incrementada antes da publicação.
+
+**Primeira migração:** instalações antigas do modo Python podem bloquear módulos que não existiam na época, como o motor de habilidades. Use a ferramenta em `tools/ATUALIZAR_SEM_ZIP.ps1` apenas uma vez; após instalar esta versão, utilize somente o botão Atualizar.
+
+**Não há patch jogável de efeitos no PS1 nesta versão:** os efeitos funcionam no simulador do editor.
+
+# Yu-Gi-Oh Studio Card FM v0.9.0 — Editor visual de Forbidden Memories (PS1)
 
 Editor gráfico para **Windows**, em português, para criar projetos de MOD de *Yu-Gi-Oh! Forbidden Memories* sem alterar sua imagem original. Desenvolvido em Python/Tkinter e sem dependências externas para executar.
 
@@ -30,7 +40,7 @@ Antes de permitir alterações binárias, o programa verifica todos os 722 regis
 
 ### O que é editável hoje
 
-| Recurso | Estado na v0.3 |
+| Recurso | Estado na v0.9.0 |
 |---|---|
 | Buscar as 722 cartas | Funcional por número e nome personalizado |
 | ATK / DEF | Editável, valida múltiplos de 10 e pode gerar SLUS auxiliar |
@@ -52,6 +62,36 @@ Antes de permitir alterações binárias, o programa verifica todos os 722 regis
 - `mudancas_binarias.json` — **apenas se** houve alterações numéricas e SLUS foi vinculado, com offsets e bytes antes/depois.
 - `build_local/SLUS_014.11` — **apenas se** houve alterações numéricas e SLUS foi vinculado. Cópia local para posterior repack do disco; **não é imagem jogável** e não deve ser distribuída como jogo.
 
+### Novidades v0.9.0 — Habilidades rápidas das criaturas
+
+- Na aba **Efeitos**, configure sem janelas adicionais: 1x/2x/3x ataques, indestrutível, imune a mágicas, imune a armadilhas, dano perfurante, não bloqueável e perda de X LP em cada ataque.
+- Marque **Sem limite de cópias** para uma carta superar o limite padrão de três cópias no deck; o deck completo continua com limite de **40 cartas**.
+- Todas as escolhas ficam pendentes automaticamente e podem ser gravadas pelo botão **Salvar projeto** / `Ctrl+S`; troque de carta sem confirmação.
+- No Laboratório, o botão **Atacar alvo** testa o combate contra ATK ou DEF, **Ataque direto** testa ataque direto e **Novo turno** reinicia a quantidade de ataques. Habilidades não são patches de PS1.
+- Cada cartão mantém os efeitos avançados antigos (auras, equipamentos, gatilhos) junto aos presets. Fusões originais não foram alteradas.
+- Detalhes e limites: `docs/HABILIDADES_RAPIDAS.md`.
+
+### Novidades v0.8.0 — Efeitos por deck, encantamentos e Laboratório de Duelo
+
+- **Por tipo no deck configurado (até 40 cartas):** a carta ganha `X ATK` e `Y DEF` por cópia do TIPO selecionado. Escolha `Todos os tipos` para contar todas as cartas. O bônus é contínuo, não acumulado a cada turno. O "deck" é a lista completa configurada para simulação, não o monte de compra restante.
+- **LP por tipo:** ao invocar, recupera X LP por carta do tipo no deck, ou causa X pontos de dano aos LP do adversário por carta do tipo. Esses gatilhos acontecem apenas quando você pressiona **Aplicar gatilho**, não em cada atualização de tela.
+- **Descarte ao invocar:** adversário descarta até X cartas de sua mão; sem cartas na mão, não há descarte. O limite de mão do simulador é 5 cartas.
+- **Dano ao monstro alvo:** dano numérico cumulativo experimental. O Forbidden Memories clássico não atribui HP aos monstros, então a resistência deste laboratório começa em DEF-base (mínimo de 1), independente do ATK/DEF de combate. **Não representa uma regra original do PS1.**
+- **Equipamentos como encantamentos:** `imune a armadilha`, `imune a mágicas e armadilhas`, `indestrutível` e `+X ATK`. O simulador deixa equipar uma carta em cada slot de monstro; sua estrutura interna aceita múltiplos equipamentos por slot. Proteções abrangem os efeitos de dano simulados de origem mágica/armadilha; imunidade completa a todos os efeitos dessas categorias ainda depende da implementação das outras ações.
+- **Aura que concede / aura que recebe:** a primeira concede bônus às cartas do tipo escolhido; a segunda ganha bônus por cada carta correspondente em campo. Ambas aceitam `Todos os tipos` e escopos `aliados`, `inimigos` ou `todos`. Bônus cessam ao remover a fonte e são recalculados do zero.
+- **Interface:** na aba **Efeitos**, clique em `+ Adicionar efeito` e escolha a nova ação. Para testar, abra **Laboratório: campo, decks e equips**. Na aba **Campo e equipamentos**, selecione monstros e anexos; em **Deck, mão e gatilhos**, preencha IDs de cartas (ex.: `1x3, 2x2, 16`), selecione origem/alvo e clique **Aplicar gatilho uma vez**.
+- **Compatibilidade:** continua com `Salvar projeto`/`Ctrl+S` e fusões originais protegidas. O Studio não injeta esses efeitos no BIN do PS1; são definição e simulação de um novo motor experimental.
+
+### Novidades v0.7.0 — Auras e bônus contínuos (simulador de campo)
+
+- **Aura por tipo:** uma carta em campo concede `+X ATK` e `+Y DEF` a todos os monstros **aliados virados para cima** do tipo selecionado (ex.: Fairy/Fada). A aura termina se a carta-fonte sair do campo ou ficar virada para baixo.
+- **Bônus por quantidade:** a carta-fonte ganha `+X ATK` e `+Y DEF` para cada aliado virado para cima do tipo selecionado. Conta a própria carta-fonte quando ela for daquele tipo; mudanças no campo recalculam instantaneamente o bônus.
+- **Empilhamento controlado:** múltiplas auras podem somar bônus, mas **não** existe acúmulo permanente ao trocar monstros. A simulação sempre parte dos atributos-base. Bônus ficam limitados no simulador a ATK/DEF 99.999.
+- **Editor:** na aba **Efeitos**, use `+ Adicionar efeito`, selecione `Enquanto estiver em campo` e escolha `Aura: aliados do tipo ganham ATK/DEF` ou `Recebe ATK/DEF por monstro do tipo em campo`. Defina os pontos de ATK, DEF e tipo (`08 — Fairy`).
+- **Campo visual:** clique em **Simular campo 5×5** para escolher até cinco monstros de cada lado. Retire uma Fada da lista e veja o bônus diminuir na hora. Desmarque `↑` para tratá-la como carta virada para baixo.
+- **Salvamento:** mantém o fluxo sem prompts ao trocar de carta; as novas definições entram no projeto com **Salvar projeto** / `Ctrl+S`.
+- **Fusões:** originais, intocadas. Nenhuma ROM, executável ou BIN/CUE recebe esses efeitos: **somente o simulador do editor**. Futura implementação no PS1 requer rotinas MIPS, investigação do executável e teste em ePSXe.
+
 ### Novidades v0.6.0 — Editar sem interrupções
 
 - Ao trocar entre cartas, nenhuma pergunta aparece. O programa guarda as alterações **na memória** até clicar **Salvar projeto** (ou `Ctrl+S`). A quantidade de cartas com alterações pendentes é mostrada abaixo da biblioteca.
@@ -71,11 +111,11 @@ Antes de permitir alterações binárias, o programa verifica todos os 722 regis
 - A versão importada pode ser um Drop X15. As 15 fusões sinalizadas como `possivel_glitch` não serão removidas nem alteradas.
 - O ZIP não inclui jogo, ROM, executável do jogo, artes, BIOS nem cartas protegidas extraídas de ROM.
 
-### Atualizações diretas — correção v0.6.2
+### Atualizações diretas — v0.8.0
 
 O botão **⟳ Atualizar** agora funciona tanto no **Python** (`INICIAR_FM_MOD_STUDIO.bat` / `.pyw`), quanto no **EXE compilado**. No Python ele instala o pacote `FM-Mod-Studio-Source.zip`; no EXE instala `FM-Mod-Studio-Windows.zip`. Ambos exigem `.sha256` no GitHub Release.
 
-**Condição obrigatória:** o repositório público `guibatoni/yu-gi-oh-studio-fm` precisa existir e ter ao menos um GitHub Release publicado. Antes disso, o botão avisa que falta publicar o projeto, em vez de tentar atualizar arquivos inexistentes. `PUBLICAR_GITHUB.bat` clona o repositório existente, envia o código e a tag `studio-v0.6.2` para iniciar GitHub Actions.
+**Condição obrigatória:** o repositório público `guibatoni/yu-gi-oh-studio-fm` precisa existir e ter ao menos um GitHub Release publicado. Antes disso, o botão avisa que falta publicar o projeto, em vez de tentar atualizar arquivos inexistentes. `PUBLICAR_GITHUB.bat` clona o repositório existente, envia o código e a tag `studio-v0.8.0` para iniciar GitHub Actions.
 
 - Ao detectar versão nova, exibe notas e pede confirmação.
 - Se houver edição pendente, solicita salvamento antes de fechar o Studio.
@@ -103,3 +143,7 @@ python -m unittest discover -s tests -v
 ```
 
 O kit inclui testes automatizados com **dados totalmente sintéticos**. Dados da imagem real importada pelo usuário ainda exigem confirmação de compatibilidade e testes no ePSXe.
+
+### Migração especial do atualizador Python v0.6.x/v0.7.0 para v0.8.0
+
+Os atualizadores antigos possuem listas de segurança de arquivos permitidos que **não incluem** os dois novos módulos `fmstudio/duel_engine.py` e `fmstudio/lab_gui.py`; por isso a atualização automática pelo botão pode rejeitar este salto com "conteúdo inesperado". Essa é uma proteção, não corrompimento. **Faça a primeira instalação v0.8.0 localmente:** feche a versão antiga, extraia a v0.8.0 numa pasta separada e execute `INSTALAR_CORRECAO_NO_STUDIO_ATUAL.bat`; selecione a pasta anterior que contém `app.py`. O instalador copia os módulos novos e preserva `projetos/` e `backups/`. A partir da v0.8.0 o whitelist já inclui os novos módulos para futuras atualizações. Em instalações EXE não se aplica essa limitação de nomes de módulos porque os novos módulos vêm dentro do executável.

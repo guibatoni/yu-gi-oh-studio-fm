@@ -2,6 +2,8 @@ name: FM Mod Studio - Windows e Release
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'studio-v*'
 permissions:
@@ -46,10 +48,19 @@ jobs:
             FM-Mod-Studio-Windows.zip.sha256
             FM-Mod-Studio-Source.zip
             FM-Mod-Studio-Source.zip.sha256
-      - name: Criar GitHub Release para a tag
-        if: startsWith(github.ref, 'refs/tags/studio-v')
+      - name: Identificar versão no código
+        id: version
+        shell: pwsh
+        run: |
+          $v = python -c "from fmstudio import __version__; print(__version__)"
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw 'Versão inválida' }
+          "tag=studio-v$v" >> $env:GITHUB_OUTPUT
+      - name: Publicar GitHub Release automaticamente
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Yu-Gi-Oh Studio FM ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |
             FM-Mod-Studio-Windows.zip

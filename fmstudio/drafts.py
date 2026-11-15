@@ -77,6 +77,11 @@ class DraftSession:
         items.append(check_effect(entry))
         self._stage_effects(cid, items)
 
+    def set_quick_abilities(self, cid: int, settings: dict) -> None:
+        from .abilities import replace_quick_effects
+        items = replace_quick_effects(self.get_effects(cid), settings)
+        self._stage_effects(cid, items)
+
     def remove_effect(self, cid: int, index: int) -> None:
         items = self.get_effects(cid)
         items.pop(index)
@@ -86,6 +91,12 @@ class DraftSession:
         data = check_card_edit(self.get_card(cid))
         return self.project.simulate(cid, event, card_override=data,
                                      effects_override=self.get_effects(cid))
+
+    def simulate_field(self, monsters: list[dict], *, deck_types=None, equipments=None):
+        ids = {m['card_id'] for m in monsters}
+        effects = {str(cid): self.get_effects(cid) for cid in ids}
+        return self.project.simulate_field(monsters, effects_override=effects,
+                                           deck_types=deck_types, equipments=equipments)
 
     def save(self) -> int:
         if not self.is_dirty:

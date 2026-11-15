@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 echo.
-echo FM MOD STUDIO - CORRECAO LOCAL DO ATUALIZADOR v0.6.2
+echo FM MOD STUDIO - ATUALIZACAO LOCAL PARA v0.9.0
 echo Feche a versao antiga antes de continuar.
 echo Na janela de escolha, selecione a PASTA onde app.py esta instalado.
 echo Nao selecione a pasta do projeto MOD nem a pasta da ROM.

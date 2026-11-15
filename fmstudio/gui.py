@@ -8,9 +8,11 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from pathlib import Path
-from .core import Project, ModError, EVENTS, ACTIONS, TARGETS, FIELDS, DEFAULT_NAME_COLOR
+from .core import Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR, ONCE_ACTIONS
 from .drafts import DraftSession
 from .tables import TYPE_NAMES, ATTR_NAMES, STAR_NAMES
+from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
+from .abilities import QUICK_ACTIONS, BOOLEAN_ACTIONS, quick_settings
 from . import __version__
 from .updates import read_latest, start_updater, UpdateError
 
@@ -33,47 +35,246 @@ def caption_key(mapping, key):
 
 
 class EffectDialog(tk.Toplevel):
+    """Editor guiado de gatilhos, auras, efeitos por deck e equipamentos."""
     def __init__(self, master, on_save):
         super().__init__(master)
-        self.on_save = on_save
-        self.title('Adicionar efeito à carta')
+        self.on_save=on_save
+        self.title('Criar efeito — Studio FM')
         self.configure(bg=BG)
-        self.resizable(False,False)
+        self.geometry('610x690')
+        self.minsize(565,650)
         self.transient(master)
         self.grab_set()
-        self.vars = {}
-        options = [('evento','Quando acontece', EVENTS),('acao','O que acontece',ACTIONS),('alvo','Quem recebe o efeito',TARGETS)]
-        for i,(key,title,source) in enumerate(options):
-            ttk.Label(self,text=title).grid(row=i*2,column=0,padx=18,pady=(12,2),sticky='w')
-            v = tk.StringVar(value=list(source.keys())[0])
-            self.vars[key] = v
-            labels = [f'{keyname} — {label}' for keyname,label in source.items()]
-            combo = ttk.Combobox(self,width=42,state='readonly',values=labels)
+        form=ttk.Frame(self,padding=20)
+        form.pack(fill='both',expand=True)
+        self.vars={}
+        self.combos={}
+        self.sources={'evento':{k:v for k,v in EVENTS.items() if k != 'regra_deck'},
+                      'acao':{k:v for k,v in ACTIONS.items() if k not in QUICK_ACTIONS},
+                      'alvo':TARGETS,'escopo':SCOPES}
+        row=0
+        for key,label in [('evento','Quando ativa'),('acao','O que acontece'),('alvo','Alvo do efeito')]:
+            ttk.Label(form,text=label).grid(row=row,column=0,sticky='w',pady=(0,3));row+=1
+            source=self.sources[key]
+            v=tk.StringVar(value=next(iter(source)))
+            self.vars[key]=v
+            combo=ttk.Combobox(form,state='readonly',width=60,values=[f'{k} — {t}' for k,t in source.items()])
             combo.current(0)
-            combo.grid(row=i*2+1,column=0,padx=18,sticky='ew')
-            combo.bind('<<ComboboxSelected>>',lambda e,k=key,s=source,c=combo: self.vars[k].set(list(s.keys())[c.current()]))
-        ttk.Label(self,text='Valor (pontos)').grid(row=6,column=0,padx=18,pady=(12,2),sticky='w')
-        self.vars['valor'] = tk.StringVar(value='500')
-        ttk.Entry(self,textvariable=self.vars['valor'],width=44).grid(row=7,column=0,padx=18,sticky='ew')
-        ttk.Label(self,text='Observação (opcional)').grid(row=8,column=0,padx=18,pady=(12,2),sticky='w')
-        self.vars['observacao'] = tk.StringVar()
-        ttk.Entry(self,textvariable=self.vars['observacao'],width=44).grid(row=9,column=0,padx=18,sticky='ew')
-        controls = ttk.Frame(self)
-        controls.grid(row=10,column=0,padx=18,pady=18,sticky='e')
-        ttk.Button(controls,text='Cancelar',command=self.destroy).pack(side='left',padx=(0,8))
-        ttk.Button(controls,text='Adicionar efeito',style='Accent.TButton',command=self._submit).pack(side='left')
+            combo.grid(row=row,column=0,sticky='ew',pady=(0,9));row+=1
+            combo.bind('<<ComboboxSelected>>',lambda e,k=key,c=combo:self._choice(k,list(self.sources[k])[c.current()]))
+            self.combos[key]=combo
+        ttk.Label(form,text='X pontos (ATK, LP, dano ou cartas descartadas)').grid(row=row,column=0,sticky='w');row+=1
+        self.vars['valor']=tk.StringVar(value='500')
+        self.value_entry=ttk.Entry(form,textvariable=self.vars['valor'],width=60)
+        self.value_entry.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
+        ttk.Label(form,text='X pontos de DEF (auras e bônus contínuos)').grid(row=row,column=0,sticky='w');row+=1
+        self.vars['valor_def']=tk.StringVar(value='0')
+        self.def_entry=ttk.Entry(form,textvariable=self.vars['valor_def'],width=60,state='disabled')
+        self.def_entry.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
+        ttk.Label(form,text='Tipo afetado / contado').grid(row=row,column=0,sticky='w');row+=1
+        self.vars['tipo_id']=tk.IntVar(value=-1)
+        options=[(-1,'Todos os tipos')]+[(i,name) for i,name in enumerate(TYPE_NAMES[:24])]
+        self.type_ids=[i for i,_ in options]
+        self.type_combo=ttk.Combobox(form,state='disabled',width=60,values=[f'{i:02d} — {label}' for i,label in options])
+        self.type_combo.current(0)
+        self.type_combo.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
+        self.type_combo.bind('<<ComboboxSelected>>',lambda e:self.vars['tipo_id'].set(self.type_ids[self.type_combo.current()]))
+        ttk.Label(form,text='Quem participa da aura / contagem').grid(row=row,column=0,sticky='w');row+=1
+        self.vars['escopo']=tk.StringVar(value='aliados')
+        self.scope_combo=ttk.Combobox(form,state='disabled',width=60,values=[f'{k} — {label}' for k,label in SCOPES.items()])
+        self.scope_combo.current(0)
+        self.scope_combo.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
+        self.scope_combo.bind('<<ComboboxSelected>>',lambda e:self.vars['escopo'].set(list(SCOPES)[self.scope_combo.current()]))
+        ttk.Label(form,text='Observação (opcional)').grid(row=row,column=0,sticky='w');row+=1
+        self.vars['observacao']=tk.StringVar()
+        ttk.Entry(form,textvariable=self.vars['observacao']).grid(row=row,column=0,sticky='ew',pady=(3,8));row+=1
+        self.help=tk.Label(form,text='',bg=BG,fg='#edc47e',font=('Segoe UI',9),justify='left',wraplength=560)
+        self.help.grid(row=row,column=0,sticky='w',pady=(0,8));row+=1
+        buttons=ttk.Frame(form)
+        buttons.grid(row=row,column=0,sticky='e')
+        ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left',padx=6)
+        ttk.Button(buttons,text='Adicionar efeito',style='Accent.TButton',command=self._submit).pack(side='left')
+        form.columnconfigure(0,weight=1)
+        self._refresh_controls()
         self.bind('<Escape>',lambda e:self.destroy())
         self.wait_visibility()
         self.focus_force()
 
+    def _set(self,key,value):
+        self.vars[key].set(value)
+        self.combos[key].current(list(self.sources[key]).index(value))
+
+    def _choice(self,key,value):
+        self.vars[key].set(value)
+        action=self.vars['acao'].get()
+        if key=='evento':
+            if value=='continuo' and action not in EFFECT_ACTIONS:
+                self._set('acao','aura_tipo')
+            elif value=='equipado' and action not in EQUIPMENT_ACTIONS:
+                self._set('acao','equip_atk')
+            elif value not in ('continuo','equipado') and action in EFFECT_ACTIONS|EQUIPMENT_ACTIONS:
+                self._set('acao','aumentar_atk')
+        if key=='acao':
+            if value in EFFECT_ACTIONS:
+                self._set('evento','continuo')
+            elif value in EQUIPMENT_ACTIONS:
+                self._set('evento','equipado')
+            elif value in ONCE_ACTIONS:
+                self._set('evento','invocar')
+            elif self.vars['evento'].get() in ('continuo','equipado'):
+                self._set('evento','invocar')
+        action=self.vars['acao'].get()
+        if key=='acao' and action=='descartar_alvo':
+            self.vars['valor'].set('1')
+        required={
+            'aura_tipo':'aliados_tipo', 'bonus_por_tipo':'proprio', 'bonus_deck_tipo':'proprio',
+            'cura_lp_deck_tipo':'proprio', 'dano_lp_deck_tipo':'inimigo',
+            'descartar_alvo':'inimigo','dano_monstro_alvo':'monstro_alvo',
+            'equip_imune_armadilha':'monstro_equipado',
+            'equip_imune_magia_armadilha':'monstro_equipado',
+            'equip_indestrutivel':'monstro_equipado','equip_atk':'monstro_equipado'}
+        if action in required:
+            self._set('alvo',required[action])
+        elif self.vars['alvo'].get() in ('aliados_tipo','monstro_alvo','monstro_equipado'):
+            self._set('alvo','proprio')
+        self._refresh_controls()
+
+    def _refresh_controls(self):
+        action=self.vars['acao'].get()
+        continuous=action in EFFECT_ACTIONS
+        typ=continuous or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo')
+        protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'})
+        self.def_entry.configure(state='normal' if continuous else 'disabled')
+        self.type_combo.configure(state='readonly' if typ else 'disabled')
+        self.scope_combo.configure(state='readonly' if continuous else 'disabled')
+        if protection:
+            self.vars['valor'].set('0')
+        elif self.vars['valor'].get()=='0' and not continuous:
+            self.vars['valor'].set('500' if action!='descartar_alvo' else '1')
+        self.value_entry.configure(state='disabled' if protection else 'normal')
+        if action=='bonus_deck_tipo':
+            help_text='Bônus contínuo X vezes o número de cartas do tipo no deck configurado (máximo 40). Não acumula a cada turno.'
+        elif action in EFFECT_ACTIONS:
+            help_text='Auras são recalculadas ao mudar o campo. "Todos os tipos" inclui qualquer criatura; posição e lado dependem do escopo.'
+        elif action in ('cura_lp_deck_tipo','dano_lp_deck_tipo'):
+            help_text='X vezes o número de cartas do tipo no deck configurado. Ativado UMA vez ao entrar em campo.'
+        elif action=='dano_monstro_alvo':
+            help_text='Dano a criatura é experimental: HP simulado começa igual à DEF-base (mínimo 1).'
+        elif action=='descartar_alvo':
+            help_text='O oponente descarta até X cartas da mão configurada no simulador, uma vez por invocação.'
+        elif action in EQUIPMENT_ACTIONS:
+            help_text='O efeito se mantém apenas enquanto a carta estiver equipada ao monstro no simulador.'
+        else:
+            help_text='Efeito ativado; mantenha os testes no simulador antes de planejar implementação no PS1.'
+        self.help.configure(text=help_text+' Nenhum efeito é gravado no BIN nesta versão.')
+
     def _submit(self):
-        value = {key:var.get() for key,var in self.vars.items()}
+        entry={key:v.get() for key,v in self.vars.items()}
         try:
-            self.on_save(value)
+            self.on_save(entry)
         except (ModError,ValueError) as exc:
             messagebox.showerror('Efeito inválido',str(exc),parent=self)
             return
         self.destroy()
+
+
+class FieldDialog(tk.Toplevel):
+    """Campo visual de 5 x 5 slots que recalcula auras instantaneamente."""
+    def __init__(self, master, project, drafts, initial_card):
+        super().__init__(master)
+        self.project = project
+        self.drafts = drafts
+        self.title('Simular efeitos contínuos — 5 x 5')
+        self.geometry('960x735')
+        self.minsize(850,680)
+        self.configure(bg=BG)
+        self.transient(master)
+        self.choices = {'— VAZIO —':None}
+        self.display_by_id = {}
+        for cid in sorted(project.cards):
+            card = drafts.get_card(cid)
+            display = f'#{cid:03d} — {card.get("nome") or "(sem nome)"}'[:70]
+            self.choices[display] = cid
+            self.display_by_id[cid] = display
+        opts = list(self.choices)
+        tk.Label(self,text='SIMULADOR DE CAMPO — EFEITOS CONTÍNUOS',bg=BG,fg=TEXT,
+                 font=('Segoe UI',14,'bold')).pack(anchor='w',padx=18,pady=(13,2))
+        tk.Label(self,text='Adicione ou remova monstros. O bônus muda imediatamente; não fica acumulado. '
+                'Somente monstros aliados virados para cima recebem/contam por tipo.',
+                 bg=BG,fg=MUTED,wraplength=890,justify='left').pack(anchor='w',padx=18,pady=(0,8))
+        self.entries=[]
+        holder=tk.Frame(self,bg=BG)
+        holder.pack(fill='both',expand=True,padx=16)
+        for col,side in enumerate(('jogador','adversario')):
+            panel=tk.Frame(holder,bg=SURFACE,padx=10,pady=10)
+            panel.grid(row=0,column=col,sticky='nsew',padx=4)
+            tk.Label(panel,text='SEU CAMPO' if col==0 else 'CAMPO ADVERSÁRIO',bg=SURFACE,
+                     fg=ACCENT,font=('Segoe UI',11,'bold')).pack(anchor='w',pady=(0,10))
+            for slot in range(1,6):
+                row=tk.Frame(panel,bg=SURFACE)
+                row.pack(fill='x',pady=(0,7))
+                tk.Label(row,text=f'{slot}.',bg=SURFACE,fg=TEXT,width=3).pack(side='left')
+                v=tk.StringVar(value='— VAZIO —')
+                c=ttk.Combobox(row,textvariable=v,width=36,values=opts,state='readonly')
+                c.pack(side='left',fill='x',expand=True)
+                face=tk.BooleanVar(value=True)
+                ttk.Checkbutton(row,text='↑',variable=face,command=self._evaluate).pack(side='left',padx=3)
+                state=tk.Label(panel,text='Vazio',bg=SURFACE,fg=MUTED,font=('Segoe UI',9),anchor='w')
+                state.pack(fill='x',padx=(20,0),pady=(0,4))
+                entry=(side,slot,v,face,state)
+                self.entries.append(entry)
+                c.bind('<<ComboboxSelected>>',lambda e:self._evaluate())
+                if col==0 and slot==1 and initial_card in self.display_by_id:
+                    v.set(self.display_by_id[initial_card])
+        holder.columnconfigure(0,weight=1)
+        holder.columnconfigure(1,weight=1)
+        logs=tk.Frame(self,bg=BG)
+        logs.pack(fill='both',expand=True,padx=20,pady=(12,0))
+        tk.Label(logs,text='BÔNUS APLICADOS',bg=BG,fg=TEXT,font=('Segoe UI',10,'bold')).pack(anchor='w')
+        self.log=tk.Text(logs,height=6,wrap='word',bg=SURFACE,fg=TEXT,state='disabled',font=('Consolas',9))
+        self.log.pack(fill='both',expand=True,pady=(6,0))
+        tk.Label(self,text='Simulação local • não executa efeitos no BIN/PS1',bg=BG,fg='#edc47e').pack(anchor='w',padx=20,pady=(4,10))
+        self._evaluate()
+
+    def _evaluate(self):
+        if not self.project:
+            return
+        board=[]
+        for side,slot,var,face,label in self.entries:
+            cid=self.choices.get(var.get())
+            if cid is None:
+                label.configure(text='Vazio',fg=MUTED)
+                continue
+            card=self.drafts.get_card(cid)
+            board.append({'lado':side,'slot':slot,'card_id':cid,'tipo_id':card['tipo_id'],
+                          'ataque':card['ataque'],'defesa':card['defesa'],'face_up':face.get()})
+        try:
+            resolved,events=self.drafts.simulate_field(board)
+        except (ModError,ValueError) as exc:
+            self.log.configure(state='normal')
+            self.log.delete('1.0','end')
+            self.log.insert('end',f'Campo inválido: {exc}')
+            self.log.configure(state='disabled')
+            return
+        mapped={(m['lado'],m['slot']):m for m in resolved}
+        for side,slot,var,face,label in self.entries:
+            m=mapped.get((side,slot))
+            if m:
+                da,dd=m['ataque']-m['ataque_base'],m['defesa']-m['defesa_base']
+                label.configure(text=f'ATK {m["ataque_base"]} → {m["ataque"]} ({da:+})  •  '
+                               f'DEF {m["defesa_base"]} → {m["defesa"]} ({dd:+})',
+                                fg=ACCENT if (da or dd) else MUTED)
+        self.log.configure(state='normal')
+        self.log.delete('1.0','end')
+        if not events:
+            self.log.insert('end','Nenhuma aura ou bônus por tipo ativo nesse campo.\n')
+        for e in events[:80]:
+            self.log.insert('end',f'{e["origem"]} → {e["destino"]}: '
+                             f'{e["acao"]} ({e["quantidade"]} x)  '
+                             f'ATK +{e["ataque"]}, DEF +{e["defesa"]}\n')
+        if len(events)>80:
+            self.log.insert('end',f'... {len(events)-80} aplicações adicionais.')
+        self.log.configure(state='disabled')
 
 
 class Studio(tk.Tk):
@@ -268,20 +469,75 @@ class Studio(tk.Tk):
         self.description.bind('<<Modified>>',self._on_description_modified)
 
     def _effects_tab(self):
-        body=tk.Frame(self.tab_effects,bg=BG,padx=22,pady=13)
-        body.pack(fill='both',expand=True)
+        # O editor de efeitos precisa caber em janelas menores: layout rolável
+        # (não ocultar botões de edição/simulação sob a borda inferior).
+        shell=tk.Frame(self.tab_effects,bg=BG)
+        shell.pack(fill='both',expand=True)
+        scroll=ttk.Scrollbar(shell,orient='vertical')
+        scroll.pack(side='right',fill='y')
+        canvas=tk.Canvas(shell,bg=BG,highlightthickness=0,bd=0,
+                         yscrollcommand=scroll.set)
+        canvas.pack(side='left',fill='both',expand=True)
+        scroll.configure(command=canvas.yview)
+        body=tk.Frame(canvas,bg=BG,padx=22,pady=11)
+        window=canvas.create_window((0,0),anchor='nw',window=body)
+        body.bind('<Configure>',lambda event:canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>',lambda event:canvas.itemconfigure(window,width=event.width))
+        canvas.bind('<Enter>',lambda event:canvas.bind_all('<MouseWheel>',
+            lambda e: canvas.yview_scroll(-1 if e.delta>0 else 1,'units')))
+        canvas.bind('<Leave>',lambda event:canvas.unbind_all('<MouseWheel>'))
         tk.Label(body,text='EFEITOS DAS CARTAS',bg=BG,fg=TEXT,font=('Segoe UI',16,'bold')).pack(anchor='w')
         tk.Label(body,text='Gatilhos e ações para planejar e simular efeitos. NÃO são aplicados no motor do PS1 nesta versão.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),wraplength=780,justify='left').pack(anchor='w',pady=(8,12))
         self.effect_caption=tk.Label(body,text='Escolha uma carta',bg=BG,fg=ACCENT,font=('Segoe UI',12,'bold'))
-        self.effect_caption.pack(anchor='w',pady=(0,12))
+        self.effect_caption.pack(anchor='w',pady=(0,8))
+        quick=tk.LabelFrame(body,text=' HABILIDADES RÁPIDAS — marque e continue editando ',
+                            bg=SURFACE,fg=ACCENT,padx=12,pady=10,font=('Segoe UI',10,'bold'),
+                            highlightthickness=0)
+        quick.pack(fill='x',pady=(0,6))
+        self.quick_vars={}
+        self._loading_quick=False
+        line=tk.Frame(quick,bg=SURFACE);line.pack(fill='x',pady=(0,4))
+        tk.Label(line,text='Ataques por turno:',bg=SURFACE,fg=TEXT).pack(side='left')
+        self.quick_vars['ataques']=tk.IntVar(value=1)
+        for n in (1,2,3):
+            ttk.Radiobutton(line,text=f'{n}x',variable=self.quick_vars['ataques'],
+                            value=n,command=self._on_quick_changed).pack(side='left',padx=(12,0))
+        tk.Label(line,text='   Perde LP a cada ataque:',bg=SURFACE,fg=TEXT).pack(side='left',padx=(22,5))
+        self.quick_vars['custo_lp']=tk.StringVar(value='0')
+        validate=(self.register(lambda proposed: proposed == '' or
+                                (proposed.isdigit() and len(proposed) <= 4)))
+        ttk.Entry(line,width=9,textvariable=self.quick_vars['custo_lp'],
+                  validate='key',validatecommand=(validate,'%P')).pack(side='left')
+        self.quick_vars['custo_lp'].trace_add('write',lambda *_:self._on_quick_changed())
+        rows=[tk.Frame(quick,bg=SURFACE),tk.Frame(quick,bg=SURFACE)]
+        for quick_row in rows: quick_row.pack(fill='x',pady=2)
+        names={
+            'monstro_indestrutivel':'Indestrutível',
+            'monstro_imune_magia':'Imune a mágicas',
+            'monstro_imune_armadilha':'Imune a traps',
+            'dano_perfurante':'Dano perfurante',
+            'nao_bloqueavel':'Não bloqueável',
+            'sem_limite_deck':'Sem limite de cópias',
+        }
+        for index,action in enumerate(BOOLEAN_ACTIONS):
+            v=tk.BooleanVar(value=False)
+            self.quick_vars[action]=v
+            ttk.Checkbutton(rows[index // 3],text=names[action],variable=v,
+                            command=self._on_quick_changed).pack(side='left',padx=(0,18))
+        tk.Label(quick,text='Até 40 cartas no deck; “Sem limite” remove apenas a restrição de 3 cópias. Salve pelo botão no topo.',
+                 bg=SURFACE,fg=MUTED,font=('Segoe UI',9)).pack(anchor='w',pady=(3,0))
         holder=tk.Frame(body,bg=SURFACE)
         holder.pack(fill='both',expand=True)
-        self.effect_tree=ttk.Treeview(holder,columns=('evento','acao','alvo','valor'),show='headings',height=7)
-        for key,label,w in [('evento','Quando',165),('acao','Efeito',185),('alvo','Alvo',170),('valor','Valor',90)]:
+        self.effect_tree=ttk.Treeview(holder,columns=('evento','acao','alvo','tipo','atk','def'),show='headings',height=4)
+        for key,label,w in [('evento','Quando',130),('acao','Efeito',205),('alvo','Alvo',135),
+                                ('tipo','Tipo',75),('atk','ATK',70),('def','DEF',70)]:
             self.effect_tree.heading(key,text=label)
             self.effect_tree.column(key,width=w,stretch=True)
-        self.effect_tree.pack(fill='both',expand=True,padx=1,pady=1)
+        effects_scroll=ttk.Scrollbar(holder,orient='vertical',command=self.effect_tree.yview)
+        self.effect_tree.configure(yscrollcommand=effects_scroll.set)
+        effects_scroll.pack(side='right',fill='y')
+        self.effect_tree.pack(side='left',fill='x',expand=True,padx=1,pady=1)
         buttons=ttk.Frame(body)
         buttons.pack(fill='x',pady=12)
         ttk.Button(buttons,text='+ Adicionar efeito',style='Accent.TButton',command=self.add_effect).pack(side='left')
@@ -296,7 +552,8 @@ class Studio(tk.Tk):
                  values=[f'{x} — {EVENTS[x]}' for x in EVENTS])
         self.sim_combo.current(0)
         self.sim_combo.pack(side='left')
-        ttk.Button(line,text='Simular este gatilho',command=self.simulate).pack(side='left',padx=9)
+        ttk.Button(line,text='Simular gatilho',command=self.simulate).pack(side='left',padx=9)
+        ttk.Button(line,text='Laboratório: campo, decks e equips',style='Accent.TButton',command=self.simulate_field).pack(side='left',padx=5)
         self.sim_result=tk.Label(sim,text='Simulação local: ATK/DEF e LP iniciais. Nenhum duelo é executado.',
                         bg=SURFACE,fg=MUTED,justify='left',anchor='w',font=('Segoe UI',9))
         self.sim_result.pack(fill='x')
@@ -793,17 +1050,45 @@ class Studio(tk.Tk):
         self._refresh_cards()
         self._update_pending_label()
 
-    def _refresh_effects(self):
+    def _on_quick_changed(self):
+        if getattr(self,'_loading_quick',False) or not self.drafts or not self.selected_id:
+            return
+        if self._extract_running:
+            return
+        settings={k:v.get() for k,v in self.quick_vars.items()}
+        try:
+            self.drafts.set_quick_abilities(self.selected_id, settings)
+        except ModError as exc:
+            self._update_status(f'Habilidade inválida: {exc}')
+            return
+        self._refresh_effects(skip_quick=True)
+        self._update_pending_label()
+        self._update_status('Habilidades alteradas. Clique Salvar projeto ou pressione Ctrl+S.')
+
+    def _load_quick_settings(self, effects):
+        self._loading_quick=True
+        try:
+            values=quick_settings(effects)
+            for key,variable in self.quick_vars.items():
+                variable.set(values[key])
+        finally:
+            self._loading_quick=False
+
+    def _refresh_effects(self, *, skip_quick=False):
         for iid in self.effect_tree.get_children():
             self.effect_tree.delete(iid)
         if not self.project or not self.selected_id:
             return
         cid=self.selected_id
         effects=self.drafts.get_effects(cid) if self.drafts else self.project.effects.get(str(cid),[])
+        if not skip_quick:
+            self._load_quick_settings(effects)
         self.effect_caption.configure(text=f'Efeitos de {format_id(cid)} — {len(effects)} cadastrado(s)')
         for i,eff in enumerate(effects):
             self.effect_tree.insert('','end',iid=str(i),values=(caption_key(EVENTS,eff['evento']),
-                caption_key(ACTIONS,eff['acao']),caption_key(TARGETS,eff['alvo']),eff['valor']))
+                caption_key(ACTIONS,eff['acao']),caption_key(TARGETS,eff['alvo']),
+                ('Todos' if eff.get('tipo_id') == -1 else TYPE_NAMES[eff['tipo_id']] if 'tipo_id' in eff and 0 <= eff['tipo_id'] < len(TYPE_NAMES) else '—'),
+                eff['valor'],eff.get('valor_def','—')))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
 
     def add_effect(self):
@@ -836,10 +1121,22 @@ class Studio(tk.Tk):
         self._refresh_project()
         self._update_pending_label()
 
+    def simulate_field(self):
+        if not self.project or not self.selected_id:
+            return
+        self._stage_current()
+        from .lab_gui import AdvancedFieldDialog
+        AdvancedFieldDialog(self,self.project,self.drafts,self.selected_id)
+
     def simulate(self):
         if not self.project or not self.selected_id:
             return
         event=list(EVENTS)[self.sim_combo.current()]
+        if event in ('continuo','equipado','regra_deck','atacar') or any(
+                e.get('evento') == event and e.get('acao') in ONCE_ACTIONS
+                for e in self.drafts.get_effects(self.selected_id)):
+            self.simulate_field()
+            return
         self._stage_current()
         try:
             data,effects=self.drafts.simulate(self.selected_id,event)
@@ -891,7 +1188,7 @@ class Studio(tk.Tk):
                 'FASES DE EXPORTAÇÃO\n'
                 '• Estatísticas: SLUS auxiliar se houver executável vinculado.\n'
                 '• Nomes, cores e descrições: apenas registro e prévia no Studio.\n'
-                '• Efeitos: apenas planejamento e simulação.\n'
+                '• Efeitos: gatilhos e auras de campo apenas em simulação.\n'
                 '• Fusões: imutáveis, com verificação de integridade.\n'
                 '• Imagem BIN/CUE jogável: não gerada nesta versão.\n')
         pane.insert('1.0',txt)
@@ -986,15 +1283,18 @@ class Studio(tk.Tk):
         notes = (release.notes[:1600] + '\n...') if len(release.notes) > 1600 else release.notes
         reply = messagebox.askyesno('Nova versão disponível',
             f'Nova versão: {release.version}\n\n{notes}\n\n'
-            'Instalar agora? Seus projetos e backups serão preservados.',parent=self)
+            'Baixar e instalar automaticamente pelo GitHub?\n'
+            'Não será necessário baixar ZIP manualmente.\n'
+            'Projetos e backups serão preservados.',parent=self)
         if not reply or not self._confirm_switch():
-            self._update_status('Atualização cancelada.')
+            self._update_status('Atualização cancelada pelo usuário.')
             return
         try:
             start_updater(release)
         except (OSError, UpdateError) as exc:
             messagebox.showerror('Não foi possível atualizar',str(exc),parent=self)
             return
+        self._update_status('Atualizador externo iniciado. O editor será reiniciado após instalar.')
         self.destroy()
 
     def _on_close(self):

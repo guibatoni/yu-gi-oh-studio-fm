@@ -1,3 +1,10 @@
+## v0.7.0 — Efeitos contínuos e campo visual
+- Aura para todos os aliados face-up do tipo escolhido (+ATK/+DEF).
+- Bônus para fonte por quantidade de aliados face-up do tipo escolhido.
+- Recalcula na saída/destruição/virada para baixo, soma auras, sem buff persistente.
+- Editor de efeitos expandido e simulador visual 5x5; 43 testes unitários locais.
+- Fusões originais preservadas; efeitos continuam só no Studio, não no PS1.
+
 ## v0.6.2 — GitHub oficial
 - Atualizador agora consulta guibatoni/yu-gi-oh-studio-fm.
 - Publicador clona o repositório existente e envia apenas arquivos de código, evitando histórico divergente.
@@ -56,3 +63,13 @@
 - Indicador de cartas pendentes; rejeição de valores inválidos preserva rascunhos.
 - Compatibilidade com projetos antigos e fusões originais preservadas.
 - 28 testes unitários e verificação gráfica sob tela virtual com dados sintéticos.
+
+## v0.8.0 — Decks, encantamentos, alvos e auras genéricas
+- Implementado motor de simulação com deck, mão, LP e HP experimental de monstro; equipamentos e efeitos passivos; sem mudanças no PS1.
+- Implementado novo laboratório gráfico com campo 5x5, decks e gatilhos explícitos.
+- Suporte a qualquer TIPO e escopos aliados, inimigos ou ambos.
+- Publicação planejada na tag `studio-v0.8.0` do GitHub oficial; verifique o Release.
+
+## v0.9.0
+- Editor de habilidades rápidas por carta e simulação de combate 2x/3x com custo LP e proteção.
+- Regra de cópias no deck (até 40 ao todo) e preservação de projetos.

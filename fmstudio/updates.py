@@ -35,18 +35,18 @@ UPDATER_NAME = 'FM-Mod-Studio-Updater.exe'
 WINDOWS_FILES = frozenset({PROGRAM_NAME, UPDATER_NAME, 'INICIAR.bat', 'LEIA-ME.txt'})
 SOURCE_FILES = frozenset({
     'app.py', 'FM_Mod_Studio.pyw', 'updater_main.py',
-    'fmstudio/__init__.py', 'fmstudio/core.py', 'fmstudio/drafts.py',
+    'fmstudio/__init__.py', 'fmstudio/abilities.py', 'fmstudio/core.py', 'fmstudio/continuous.py', 'fmstudio/duel_engine.py', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
     'fmstudio/disc.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
     'fmstudio/gui.py', 'fmstudio/updates.py',
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
     'PUBLICAR_GITHUB.bat', 'PUBLICAR_GITHUB.ps1', 'LEIA-ME.txt',
     'README.md', 'docs/HISTORICO.md', 'docs/ATUALIZACOES_GITHUB.md',
     'docs/ORIGEM_E_VALIDACAO.md', 'docs/ROADMAP_EFEITOS.md',
-    'docs/MIGRACAO_REPOSITORIO.md',
+    'docs/MIGRACAO_REPOSITORIO.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md',
 })
 SOURCE_REQUIRED = frozenset({
     'app.py', 'updater_main.py', 'fmstudio/__init__.py', 'fmstudio/gui.py',
-    'fmstudio/core.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
+    'fmstudio/core.py', 'fmstudio/abilities.py', 'fmstudio/continuous.py', 'fmstudio/duel_engine.py', 'fmstudio/lab_gui.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
 })
 MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
 MAX_FILE_BYTES = 200 * 1024 * 1024
@@ -101,7 +101,8 @@ def safe_github_asset_url(url: str) -> bool:
 
 def github_request(url: str, timeout: int = 12):
     req = urllib.request.Request(url, headers={
-        'User-Agent': USER_AGENT, 'Accept': 'application/vnd.github+json'})
+        'User-Agent': USER_AGENT, 'Accept': 'application/vnd.github+json',
+        'Cache-Control': 'no-cache'})
     return urllib.request.urlopen(req, timeout=timeout)
 
 
@@ -116,9 +117,9 @@ def read_latest(fetch: Callable | None = None, *, kind: str | None = None) -> Re
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             raise UpdateError(
-                'O repositório ou a primeira versão do FM Studio ainda não foi publicada no GitHub.\n\n'
-                'Para habilitar o botão Atualizar, execute PUBLICAR_GITHUB.bat com Git/GitHub CLI '
-                'e aguarde uma versão aparecer em Releases.\n\n' + REPO_URL) from exc
+                'Nenhuma versão foi encontrada no GitHub Releases.\n\n'
+                'O código e a compilação precisam ser publicados no repositório oficial.\n'
+                'Consulte: ' + REPO_URL + '/releases') from exc
         raise UpdateError(f'GitHub respondeu HTTP {exc.code}.') from exc
     except (ValueError, OSError, TimeoutError, json.JSONDecodeError) as exc:
         raise UpdateError(f'Não foi possível consultar o GitHub: {exc}') from exc
@@ -332,7 +333,9 @@ def run_updater_cli(argv: list[str] | None = None) -> int:
         raise UpdateError('Pacotes da modalidade errada ou não autorizados.')
     if args.kind == 'source' and (not args.python_exe or not Path(args.python_exe).is_file()):
         raise UpdateError('Interpretador Python original não localizado.')
-    folder = Path(args.install_dir)
+    folder = Path(args.install_dir).resolve()
+    if folder == Path(folder.anchor):
+        raise UpdateError('A pasta raiz do disco não é uma instalação válida.')
     with tempfile.TemporaryDirectory(prefix='fmstudio-download-') as temp:
         release = Release(args.version, args.version, '', args.zip_url, args.hash_url, args.kind)
         archive = download_verified_release(release, Path(temp))

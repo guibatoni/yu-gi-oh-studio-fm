@@ -26,3 +26,10 @@ NOVIDADES v0.6.0:
 
 ATUALIZACAO v0.6.2: suporta instalacao automatica em Python e EXE apos publicacao no GitHub Releases.
 Se o repositorio nao existe, rode PUBLICAR_GITHUB.bat.
+
+ATUALIZACAO v0.7.0: Efeitos contínuos (Aura por tipo e Bônus por tipo) e Simular campo 5x5. Somente no simulador, ainda NÃO no motor PS1.
+
+NOVIDADES v0.9.0:
+- Habilidades rapidas 1x/2x/3x, imunidades, indestrutibilidade, perfurante e ataque direto.
+- Custo de X LP a cada ataque; limite de copias configuravel por carta.
+- Combate simulado na aba Laboratorio. Efeitos ainda nao executam no PS1.

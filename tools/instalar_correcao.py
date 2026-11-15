@@ -1,4 +1,4 @@
-"""Aplica a correção v0.6.2 a uma instalação Python anterior do Studio.
+"""Atualiza para v0.9.0 uma instalação Python anterior do Studio.
 
 Usa o pacote Source local com checksum, sem precisar GitHub/Internet.
 A pasta do projeto não é alterada.
@@ -25,19 +25,19 @@ def patch(destination: Path) -> str:
     package = ROOT / SOURCE_BUNDLE_NAME
     manifest = ROOT / SOURCE_SUM_NAME
     if not package.is_file() or not manifest.is_file():
-        raise UpdateError('Pacote de correção ausente. Extraia todo o ZIP v0.6.2.')
+        raise UpdateError('Pacote de correção ausente. Extraia todo o ZIP v0.9.0.')
     sha = hashlib.sha256(package.read_bytes()).hexdigest()
     expected = parse_checksum(manifest.read_text(encoding='ascii'), bundle=SOURCE_BUNDLE_NAME)
     if sha != expected:
         raise UpdateError('Pacote de correção não confere com checksum SHA-256.')
     validate_archive(package, kind='source')
     install_archive(package, dest, kind='source')
-    return f'Studio v0.6.2 instalado em {dest}. Seus projetos não foram modificados.'
+    return f'Studio v0.9.0 instalado em {dest}. Seus projetos não foram modificados.'
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dest', type=Path, help='Pasta do Studio anterior (v0.6.0).')
+    parser.add_argument('--dest', type=Path, help='Pasta de uma instalação Python anterior do Studio.')
     args = parser.parse_args(argv)
     try:
         if args.dest is None:

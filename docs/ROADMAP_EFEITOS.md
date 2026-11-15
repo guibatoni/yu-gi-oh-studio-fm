@@ -27,3 +27,21 @@ Adicionar qualquer efeito a qualquer carta no PS1 original NÃO acontece somente
 - https://github.com/Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled/blob/master/notes/modding-tutorial-evidence.md
 - https://github.com/Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled/blob/master/tools/pc/fm_editor/README.md
 - https://github.com/Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled/blob/master/notes/more-cards.md
+
+## v0.7.0 — Camada contínua do simulador
+- `aura_tipo`: +`valor` ATK e +`valor_def` DEF a aliados face-up do `tipo_id` enquanto fonte permanece face-up no campo.
+- `bonus_por_tipo`: carta-fonte recebe `quantidade_de_aliados_face_up_tipo_id * (valor, valor_def)`.
+- Reavaliação pura do campo, sem repetição/empilhamento indevido ao destruir/invocar. Várias fontes somam efeitos.
+- Contabiliza apenas o próprio campo, exclui oponentes. Fonte conta como um monstro quando tiver o tipo.
+- O comportamento é **somente protótipo em Python**. PS1 exigirá descoberta dos pontos de atualização de campo, UI de ATK/DEF, ciclo de batalha, memória e formas de preservar fusões.
+
+## v0.8.0 — Efeitos baseados em deck e equipamentos
+
+- `bonus_deck_tipo` (contínuo, alvo próprio): count(TIPO no deck completo configurado) × (ATK/DEF).
+- `cura_lp_deck_tipo`, `dano_lp_deck_tipo`, `descartar_alvo`, `dano_monstro_alvo` (efeitos ativados por clique).
+- `equip_imune_armadilha`, `equip_imune_magia_armadilha`, `equip_indestrutivel`, `equip_atk` (passivos do equipamento anexado).
+- `aura_tipo` e `bonus_por_tipo`: `tipo_id=-1` significa todos os tipos; `escopo` define aliados, inimigos ou ambos.
+- Contagem do deck fixo, sem repetir gatilhos na atualização de campo. Configuração de até 40 cartas por lado.
+- Campo de simulação 5×5, com um seletor visual de equipamento por monstro. Dados de projeto antigos seguem compatíveis.
+- **Limitação importante:** criaturas do Forbidden Memories original não possuem HP. Dano a monstro usa resistência experimental igual à DEF-base (mínimo 1) exclusivamente no Studio.
+- **Não há patch jogável** nem efeitos em execução no ePSXe nessa etapa; só o código do simulador foi implementado.

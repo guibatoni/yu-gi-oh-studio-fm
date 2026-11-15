@@ -69,13 +69,13 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(installed_kind(), 'source')
 
     def test_release_source(self):
-        found = read_latest(lambda _: fake_release('studio-v0.6.3',
+        found = read_latest(lambda _: fake_release('studio-v0.9.2',
                                                   (SOURCE_BUNDLE_NAME, SOURCE_SUM_NAME)), kind='source')
         self.assertEqual(found.kind, 'source')
-        self.assertEqual(found.version, 'studio-v0.6.3')
+        self.assertEqual(found.version, 'studio-v0.9.2')
 
     def test_release_windows(self):
-        found = read_latest(lambda _: fake_release('studio-v0.7.0',
+        found = read_latest(lambda _: fake_release('studio-v0.9.2',
                                                   (BUNDLE_NAME, SUM_NAME)), kind='windows')
         self.assertEqual(found.kind, 'windows')
 
@@ -84,12 +84,12 @@ class UpdateTests(unittest.TestCase):
 
     def test_missing_source_bundle_errors(self):
         with self.assertRaisesRegex(UpdateError, 'não possui'):
-            read_latest(lambda _: fake_release('studio-v0.7.0', (BUNDLE_NAME, SUM_NAME)), kind='source')
+            read_latest(lambda _: fake_release('studio-v0.9.2', (BUNDLE_NAME, SUM_NAME)), kind='source')
 
     def test_missing_release_has_explanation(self):
         def err(_):
             raise urllib.error.HTTPError(API, 404, 'not found', {}, None)
-        with self.assertRaisesRegex(UpdateError, 'PUBLICAR_GITHUB.bat'):
+        with self.assertRaisesRegex(UpdateError, 'GitHub Releases'):
             read_latest(err, kind='source')
 
     def test_windows_install_preserves_project(self):

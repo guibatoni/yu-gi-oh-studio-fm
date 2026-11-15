@@ -19,14 +19,52 @@ DEFAULT_NAME_COLOR = '#F1CF6E'  # Cor da prévia do Studio; não altera a ROM.
 FIELDS = ('nome', 'descricao', 'cor_nome', 'ataque', 'defesa', 'tipo_id', 'atributo_id', 'nivel', 'guardian_1_id', 'guardian_2_id')
 NUMERIC = ('ataque', 'defesa', 'tipo_id', 'atributo_id', 'nivel', 'guardian_1_id', 'guardian_2_id')
 EVENTS = {
-    'invocar': 'Ao invocar', 'atacar': 'Ao atacar', 'defender': 'Ao defender',
-    'destruir': 'Ao destruir outro monstro', 'destruido': 'Ao ser destruído',
-    'inicio_turno': 'Início do turno', 'fim_turno': 'Fim do turno',
+    'invocar': 'Ao entrar em campo', 'atacar': 'Ao atacar',
+    'defender': 'Ao defender', 'destruir': 'Ao destruir outro monstro',
+    'destruido': 'Ao ser destruído', 'inicio_turno': 'Início do turno',
+    'fim_turno': 'Fim do turno', 'continuo': 'Enquanto no campo',
+    'equipado': 'Enquanto equipado (encantamento)',
+    'regra_deck': 'Regra de montagem de deck',
 }
-ACTIONS = {'aumentar_atk':'Aumentar ATK', 'reduzir_atk':'Reduzir ATK',
-           'aumentar_def':'Aumentar DEF', 'reduzir_def':'Reduzir DEF',
-           'dano_lp':'Causar dano aos LP', 'cura_lp':'Recuperar LP'}
-TARGETS = {'proprio':'Próprio monstro / jogador', 'inimigo':'Monstro / jogador adversário'}
+ACTIONS = {
+    'aumentar_atk':'Aumentar ATK', 'reduzir_atk':'Reduzir ATK',
+    'aumentar_def':'Aumentar DEF', 'reduzir_def':'Reduzir DEF',
+    'dano_lp':'Causar dano aos LP', 'cura_lp':'Recuperar LP',
+    'aura_tipo':'Aura: concede bônus ao tipo (ou todos)',
+    'bonus_por_tipo':'Recebe bônus por cartas do tipo no campo',
+    'bonus_deck_tipo':'Recebe bônus por cartas do tipo no deck',
+    'cura_lp_deck_tipo':'Recuperar LP por carta do tipo no deck',
+    'dano_lp_deck_tipo':'Causar dano aos LP por carta do tipo no deck',
+    'descartar_alvo':'Ao entrar: adversário descarta X cartas',
+    'dano_monstro_alvo':'Causar dano ao monstro alvo',
+    'equip_imune_armadilha':'Equipamento: imune a armadilhas',
+    'equip_imune_magia_armadilha':'Equipamento: imune a mágicas e armadilhas',
+    'equip_indestrutivel':'Equipamento: indestrutível',
+    'equip_atk':'Equipamento: aumenta ATK',
+    'ataques_multiplos':'Ataca 2x ou 3x por turno',
+    'monstro_indestrutivel':'Indestrutível',
+    'monstro_imune_magia':'Imune a mágicas',
+    'monstro_imune_armadilha':'Imune a armadilhas',
+    'dano_perfurante':'Dano perfurante',
+    'nao_bloqueavel':'Não pode ser bloqueada (dano direto)',
+    'perder_lp_por_ataque':'Controlador perde X LP a cada ataque',
+    'sem_limite_deck':'Sem limite de cópias no deck',
+}
+TARGETS = {
+    'proprio':'Próprio / controlador',
+    'inimigo':'Oponente / LP adversário',
+    'aliados_tipo':'Monstros do tipo escolhido',
+    'monstro_alvo':'Monstro alvo',
+    'monstro_equipado':'Monstro equipado',
+}
+SCOPES = {'aliados':'Apenas aliados', 'inimigos':'Apenas inimigos',
+          'todos':'Ambos os lados'}
+DECK_ACTIONS = {'bonus_deck_tipo','cura_lp_deck_tipo','dano_lp_deck_tipo'}
+ONCE_ACTIONS = {'cura_lp_deck_tipo','dano_lp_deck_tipo','descartar_alvo','dano_monstro_alvo'}
+MONSTER_PASSIVE_ACTIONS = {
+    'ataques_multiplos','monstro_indestrutivel','monstro_imune_magia',
+    'monstro_imune_armadilha','dano_perfurante','nao_bloqueavel',
+}
 
 class ModError(ValueError):
     pass
@@ -97,16 +135,76 @@ def check_card_edit(row: dict):
 
 
 def check_effect(entry: dict):
+    """Valida efeitos versionados, mantendo compatibilidade com projetos v0.7.x."""
+    from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
     event, action, target = entry.get('evento'), entry.get('acao'), entry.get('alvo')
     if event not in EVENTS or action not in ACTIONS or target not in TARGETS:
-        raise ModError('Efeito: evento, ação ou alvo não suportado nesta versão')
-    amount = _bounded_int(entry.get('valor'), 'valor do efeito', 0, 9999)
-    if amount == 0:
-        raise ModError('Valor do efeito precisa ser maior que zero')
-    if action in ('dano_lp','cura_lp') and target not in TARGETS:
-        raise ModError('Alvo de LP inválido')
-    return {'evento':event, 'acao':action, 'alvo':target, 'valor':amount,
-            'observacao':str(entry.get('observacao',''))[:500]}
+        raise ModError('Efeito: evento, ação ou alvo inválidos')
+    note = str(entry.get('observacao',''))[:500]
+    if action in MONSTER_PASSIVE_ACTIONS:
+        if event != 'continuo' or target != 'proprio':
+            raise ModError('Habilidade de criatura exige "Enquanto no campo" e alvo próprio')
+        amount = _bounded_int(entry.get('valor',0), 'valor da habilidade', 0, 3)
+        if action == 'ataques_multiplos' and amount not in (2,3):
+            raise ModError('Ataques múltiplos devem ser 2x ou 3x')
+        if action != 'ataques_multiplos' and amount:
+            raise ModError('Habilidade de proteção/combate não usa valor numérico')
+        return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
+    if action == 'perder_lp_por_ataque':
+        if event != 'atacar' or target != 'proprio':
+            raise ModError('Perda de LP exige evento "Ao atacar" e alvo próprio')
+        amount = _bounded_int(entry.get('valor'), 'custo de LP por ataque',1,9999)
+        return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
+    if action == 'sem_limite_deck':
+        if event != 'regra_deck' or target != 'proprio' or str(entry.get('valor',0)) != '0':
+            raise ModError('Sem limite de cópias é regra de deck sem valor numérico')
+        return {'evento':event,'acao':action,'alvo':target,'valor':0,'observacao':note}
+    if event == 'regra_deck':
+        raise ModError('Evento de deck exclusivo da regra de cópias')
+    if action in EFFECT_ACTIONS:
+        if event != 'continuo':
+            raise ModError('Efeitos de aura/deck precisam do gatilho contínuo')
+        required = 'aliados_tipo' if action == 'aura_tipo' else 'proprio'
+        if target != required:
+            raise ModError(f'Efeito contínuo exige alvo: {required}')
+        atk = _bounded_int(entry.get('valor', 0), 'Bônus ATK', 0, 9999)
+        defense = _bounded_int(entry.get('valor_def', 0), 'Bônus DEF', 0, 9999)
+        if atk == 0 and defense == 0:
+            raise ModError('Bônus contínuo precisa aumentar ATK ou DEF')
+        typ = _bounded_int(entry.get('tipo_id', -1), 'Tipo (-1 para todos)', -1, 23)
+        scope = str(entry.get('escopo','aliados'))
+        if scope not in SCOPES:
+            raise ModError('Escopo inválido')
+        return {'evento':event,'acao':action,'alvo':target,'valor':atk,
+                'valor_def':defense,'tipo_id':typ,'escopo':scope,'observacao':note}
+    if action in EQUIPMENT_ACTIONS:
+        if event != 'equipado' or target != 'monstro_equipado':
+            raise ModError('Equipamentos exigem gatilho "Enquanto equipado" e alvo equipado')
+        amount = _bounded_int(entry.get('valor',0), 'ATK do equipamento', 0, 9999)
+        if action == 'equip_atk' and amount == 0:
+            raise ModError('Equipamento de ATK requer valor maior que zero')
+        if action != 'equip_atk' and amount:
+            raise ModError('Equipamento de proteção não utiliza valor numérico')
+        return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
+    if event in ('continuo','equipado'):
+        raise ModError('Esse efeito requer gatilho de ativação, não contínuo/equipado')
+    if action in ONCE_ACTIONS:
+        if event != 'invocar' and action != 'dano_monstro_alvo':
+            raise ModError('Esse efeito só pode ser acionado ao entrar em campo')
+        correct = {'cura_lp_deck_tipo':'proprio','dano_lp_deck_tipo':'inimigo',
+                   'descartar_alvo':'inimigo','dano_monstro_alvo':'monstro_alvo'}[action]
+        if target != correct:
+            raise ModError('Alvo incompatível com o efeito selecionado')
+        limit = 5 if action == 'descartar_alvo' else 9999
+        amount = _bounded_int(entry.get('valor'), 'valor do efeito', 1, limit)
+        item = {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
+        if action in DECK_ACTIONS:
+            item['tipo_id'] = _bounded_int(entry.get('tipo_id',-1),'Tipo do deck',-1,23)
+        return item
+    if target in ('aliados_tipo','monstro_alvo','monstro_equipado'):
+        raise ModError('Alvo não permitido para efeito comum')
+    amount = _bounded_int(entry.get('valor'), 'valor do efeito', 1, 9999)
+    return {'evento':event, 'acao':action, 'alvo':target, 'valor':amount,'observacao':note}
 
 
 class Project:
@@ -496,8 +594,8 @@ class Project:
         self.save()
 
     def simulate(self, cid: int, event: str, card_override=None, effects_override=None):
-        if event not in EVENTS:
-            raise ModError('Evento desconhecido')
+        if event not in EVENTS or event == 'continuo':
+            raise ModError('Para efeitos contínuos, utilize o simulador de campo')
         stats = card_override if card_override is not None else self.get(cid)
         state = {'ataque':int(stats['ataque']), 'defesa':int(stats['defesa']),
                  'ataque_adversario':1800, 'defesa_adversario':1500,
@@ -521,6 +619,13 @@ class Project:
                 state[key] = max(0,min(99999,state[key] + (value if action=='cura_lp' else -value)))
             applied.append(eff)
         return state, applied
+
+    def simulate_field(self, monsters: list[dict], effects_override: dict | None = None,
+                       *, deck_types: dict | None = None, equipments: list | None = None):
+        """Simula efeitos contínuos; não altera dados nem o BIN do PS1."""
+        from .continuous import resolve_field
+        return resolve_field(monsters, effects_override if effects_override is not None else self.effects,
+                             deck_types=deck_types, equipments=equipments)
 
     def validate(self):
         issues = []

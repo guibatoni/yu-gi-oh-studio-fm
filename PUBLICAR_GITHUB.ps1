@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Continue' # PowerShell 5.1 pode tratar stderr normal de gh/git como NativeCommandError; cada chamada é checada por exit code
 Set-Location -LiteralPath $PSScriptRoot
 $repo = 'guibatoni/yu-gi-oh-studio-fm'
-$tag = 'studio-v0.6.2'
+$tag = 'studio-v0.9.1'
 Write-Host "Yu-Gi-Oh Studio Card FM $tag" -ForegroundColor Cyan
 Write-Host "GitHub: https://github.com/$repo"
 Write-Warning 'O repositório é público. Publicaremos apenas CÓDIGO, sem ROMs, BIOS, dados extraídos, imagens de cartas ou projetos privados.'
@@ -23,15 +23,18 @@ $arquivos = @(
   'README.md', 'LEIA-ME.txt', 'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat',
   'FM_Mod_Studio.pyw', 'app.py', 'updater_main.py', 'CRIAR_EXE_WINDOWS.bat',
   'PUBLICAR_GITHUB.bat', 'PUBLICAR_GITHUB.ps1', 'INSTALAR_CORRECAO_NO_STUDIO_ATUAL.bat',
-  'fmstudio/__init__.py', 'fmstudio/core.py', 'fmstudio/disc.py',
+  'fmstudio/__init__.py', 'fmstudio/abilities.py', 'fmstudio/core.py', 'fmstudio/continuous.py',
+  'fmstudio/duel_engine.py', 'fmstudio/lab_gui.py', 'fmstudio/disc.py',
   'fmstudio/drafts.py', 'fmstudio/gui.py', 'fmstudio/updates.py',
   'fmstudio/deep_extract.py', 'fmstudio/tables.py',
   'tools/package_source.py', 'tools/instalar_correcao.py',
   'tests/test_core.py', 'tests/test_deep_extract.py',
-  'tests/test_drafts.py', 'tests/test_updates.py', 'tests/gui_smoke.py',
+  'tests/test_drafts.py', 'tests/test_updates.py', 'tests/test_continuous.py',
+  'tests/test_advanced_effects.py', 'tests/test_quick_abilities.py', 'tests/gui_quick_smoke.py', 'tests/gui_smoke.py', 'tests/gui_continuous_smoke.py',
+  'tests/gui_advanced_smoke.py',
   'docs/HISTORICO.md', 'docs/ORIGEM_E_VALIDACAO.md',
   'docs/ROADMAP_EFEITOS.md', 'docs/ATUALIZACOES_GITHUB.md',
-  'docs/MIGRACAO_REPOSITORIO.md'
+  'docs/MIGRACAO_REPOSITORIO.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md'
 )
 $temporario = Join-Path $env:TEMP ('fmstudio-publicacao-' + [guid]::NewGuid().ToString('N'))
 try {
@@ -51,7 +54,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Não foi possível preparar os arquivos.' }
     & git -C $temporario diff --cached --quiet
     if ($LASTEXITCODE -eq 1) {
-        & git -C $temporario commit -m 'release: Studio v0.6.2 e atualizador GitHub'
+        & git -C $temporario commit -m 'release: Studio v0.9.1 atualizador automatico'
         if ($LASTEXITCODE -ne 0) { throw 'Commit falhou. Configure git user.name e user.email.' }
         & git -C $temporario push origin HEAD:main
         if ($LASTEXITCODE -ne 0) { throw 'Push falhou. Verifique permissão ou alterações remotas.' }
@@ -69,7 +72,7 @@ try {
     Write-Host "Código enviado: https://github.com/$repo" -ForegroundColor Green
     Write-Host "Build: https://github.com/$repo/actions"
     Write-Host "Releases: https://github.com/$repo/releases"
-    Write-Host 'Aguarde a compilação no GitHub Actions antes de usar Atualizar.' -ForegroundColor Yellow
+    Write-Host 'O novo release aparecera em GitHub Releases apos compilacao bem-sucedida.' -ForegroundColor Yellow
 } finally {
     if (Test-Path -LiteralPath $temporario) {
         Remove-Item -LiteralPath $temporario -Recurse -Force -ErrorAction SilentlyContinue
