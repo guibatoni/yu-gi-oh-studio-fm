@@ -102,6 +102,31 @@ def audit(project) -> dict:
     }
 
 
+def explain_no_writable_changes(project, report: dict) -> str:
+    """Explica por que edições salvas não geraram bytes modificáveis no PS1."""
+    counts = report['contagens']
+    edited = len(project.edits)
+    pending = report['pendente_de_motor']
+    details = '\n'.join('• ' + line for line in pending[:5])
+    if len(pending) > 5:
+        details += f'\n• ... e mais {len(pending) - 5} pendências'
+    if not details:
+        details = '• Nenhuma diferença gravável encontrada nos dados originais.'
+    return (
+        f'O projeto tem {edited} carta(s) com edições salvas, mas nenhuma '
+        'alteração compatível gerou bytes novos para o PS1.\n\n'
+        f'Classes/cores alteradas: {counts["classes_cores"]}\n'
+        f'Efeitos apenas no simulador: {counts["efeitos"]}\n'
+        f'Cartas adicionais: {counts["cartas_extras"]}\n\n'
+        f'PENDÊNCIAS IDENTIFICADAS:\n{details}\n\n'
+        'Para testar uma alteração no ePSXe, escolha uma carta original '
+        '(#001–#722), mude seu ATK ou DEF, clique Salvar projeto e depois '
+        'Gerar jogo BIN/CUE.\n\n'
+        'Raridades, cores de nomes, efeitos, ícones personalizados e cartas '
+        'adicionais ainda não são executados pelo motor do PS1.'
+    )
+
+
 def save_audit(project) -> Path:
     dest=project.folder/'exportacao'/'compatibilidade_ps1.json'
     dest.parent.mkdir(parents=True,exist_ok=True)

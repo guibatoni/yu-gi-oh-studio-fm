@@ -1,3 +1,10 @@
+## v1.1.3 — Diagnóstico PS1 sem mudanças compatíveis
+
+- A geração BIN/CUE agora verifica os campos editados antes de abrir a escolha da imagem.
+- Quando todas as mudanças são apenas raridade/cor/efeitos ou não cabem no banco original, mostra a contagem de pendências e recomenda um teste de ATK/DEF.
+- Salva exportacao/compatibilidade_ps1.json mesmo quando não há modificações graváveis.
+- As cartas existentes e os efeitos do projeto não são alterados automaticamente.
+
 ## v1.1.1 — fluxo de exportação para ePSXe
 
 - Depois de **Exportar alterações**, o Studio pergunta se deseja gerar a cópia BIN/CUE para teste, evitando confundir a exportação dos dados com a imagem jogável.

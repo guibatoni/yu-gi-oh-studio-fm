@@ -1556,6 +1556,16 @@ class Studio(tk.Tk):
         if self.drafts and self.drafts.is_dirty:
             messagebox.showinfo('Salve primeiro', 'Clique Salvar projeto antes de gerar uma cópia de teste.', parent=self)
             return
+        from .ps1_compat import audit, save_audit, explain_no_writable_changes
+        report = audit(self.project)
+        if not report['gravavel_hoje']:
+            dest = save_audit(self.project)
+            messagebox.showwarning(
+                'Nenhuma alteração compatível para gerar o jogo',
+                explain_no_writable_changes(self.project, report)
+                + f'\n\nRelatório salvo em: {dest}', parent=self)
+            self._update_status('Sem mudanças graváveis no PS1: confira compatibilidade_ps1.json.')
+            return
         source = filedialog.askopenfilename(
             title='Selecione seu jogo original BIN/CUE',
             filetypes=[('PlayStation BIN/CUE', '*.bin *.cue'), ('Todos arquivos', '*.*')], parent=self)

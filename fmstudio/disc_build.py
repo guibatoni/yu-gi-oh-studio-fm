@@ -202,8 +202,12 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             written_arts.extend(regions)
 
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
-        raise ModError('Nenhuma alteração gravável no PS1 foi encontrada. '
-                       'Efeitos, cartas extras e cores de nome ainda não estão implementados no motor.')
+        if audit_report is not None:
+            from .ps1_compat import save_audit, explain_no_writable_changes
+            dest = save_audit(project)
+            raise ModError(explain_no_writable_changes(project, audit_report)
+                           + f'\n\nRelatório salvo em: {dest}')
+        raise ModError('Nenhuma diferença binária compatível foi encontrada para gerar o jogo.')
 
     base=output/'teste_ps1';base.mkdir(parents=True,exist_ok=True)
     stamp=datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')
