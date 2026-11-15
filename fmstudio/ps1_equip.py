@@ -177,6 +177,131 @@ def patch_equipment_targets(wa: bytes, additions: dict) -> tuple[bytes, list[dic
     return bytes(output), changed
 
 
+def _validated_replacements(plan) -> dict[int, dict[int, int]]:
+    """Trocas explícitas old_id -> new_id, mantendo comprimento de cada registro."""
+    if not isinstance(plan, dict):
+        raise ModError('Plano de substituição Equip deve ser um objeto.')
+    cleaned = {}
+    for key, mapping in plan.items():
+        try:
+            equip = int(key)
+        except (TypeError, ValueError) as exc:
+            raise ModError('ID de equipamento inválido no plano de troca.') from exc
+        if not 1 <= equip <= CARD_COUNT or not isinstance(mapping, dict):
+            raise ModError('Equip de substituição inválido.')
+        changes = {}
+        for old, new in mapping.items():
+            try:
+                previous, replacement = int(old), int(new)
+            except (TypeError, ValueError) as exc:
+                raise ModError('ID de monstro inválido na substituição.') from exc
+            if not 1 <= previous <= CARD_COUNT or not 1 <= replacement <= CARD_COUNT:
+                raise ModError('Monstros de substituição devem estar entre #001 e #722.')
+            if previous == replacement:
+                raise ModError('O alvo substituto precisa ser diferente do original.')
+            changes[previous] = replacement
+        if len(set(changes.values())) != len(changes):
+            raise ModError('Plano contém destinos duplicados no mesmo equipamento.')
+        cleaned[equip] = changes
+    return cleaned
+
+
+def replace_equipment_targets(wa: bytes, replacements) -> tuple[bytes, list[dict]]:
+    """Troca APENAS u16 de alvo existente. Não move terminador, blocos ou bytes extras."""
+    plan = _validated_replacements(replacements)
+    if not any(plan.values()):
+        return wa, []
+    first_start = WA_TERRAIN_BASE + EQUIP_OFF
+    copies = []
+    for idx in range(TERRAIN_COPIES):
+        pos = first_start + idx * TERRAIN_STRIDE
+        if pos + EQUIP_LEN > len(wa):
+            raise ModError('WA_MRG.MRG truncado na tabela Equip.')
+        copies.append(wa[pos:pos + EQUIP_LEN])
+    if any(copy != copies[0] for copy in copies[1:]):
+        raise ModError('Tabelas Equip diferentes entre os sete terrenos; substituição bloqueada.')
+    records, terminator = _parse_table(copies[0])
+    existing = dict(records)
+    changed_offsets = []
+    entries = []
+    cursor = 0
+    while cursor < terminator - 2:
+        equip, n = struct.unpack_from('<HH', copies[0], cursor)
+        targets = existing[equip]
+        mapping = plan.get(equip, {})
+        for previous, replacement in mapping.items():
+            if previous not in targets:
+                raise ModError(f'Equip #{equip:03d} não permite o monstro #{previous:03d} na base; '
+                               'não há alvo existente que possa ser substituído.')
+            if replacement in targets:
+                raise ModError(f'Equip #{equip:03d} já permite o monstro #{replacement:03d}.')
+        if mapping:
+            if len({mapping.get(monster, monster) for monster in targets}) != len(targets):
+                raise ModError('Troca resultaria em alvos duplicados.')
+            for index, monster in enumerate(targets):
+                if monster in mapping:
+                    new_id = mapping[monster]
+                    changed_offsets.append((cursor + 4 + index * 2, new_id))
+                    entries.append({'equipamento_id': equip,
+                                    'alvo_substituido': monster,
+                                    'novo_alvo': new_id,
+                                    'modo': 'substituir_sem_expandir'})
+        cursor += 4 + n * 2
+    if not set(plan).issubset(existing):
+        missing = sorted(set(plan) - set(existing))[0]
+        raise ModError(f'Equip #{missing:03d} não existe na tabela original.')
+    output = bytearray(wa)
+    for idx in range(TERRAIN_COPIES):
+        start = first_start + idx * TERRAIN_STRIDE
+        for off, new_id in changed_offsets:
+            struct.pack_into('<H', output, start + off, new_id)
+        # Comparação byte a byte: nenhuma mudança fora dos dois bytes por alvo.
+        modified = output[start:start + EQUIP_LEN]
+        expected = bytearray(copies[0])
+        for off, new_id in changed_offsets:
+            struct.pack_into('<H', expected, off, new_id)
+        if modified != expected or modified[terminator:] != copies[0][terminator:]:
+            raise ModError('Verificação falhou: mudança fora dos alvos substituídos.')
+    decoded = dict(_unpack(bytes(output[first_start:first_start + EQUIP_LEN])))
+    for equip, mapping in plan.items():
+        for previous, new_id in mapping.items():
+            if new_id not in decoded[equip] or previous in decoded[equip]:
+                raise ModError('Releitura da tabela após substituição não confere.')
+    return bytes(output), entries
+
+
+def list_origin_equip_targets(project, equip: int) -> list[int]:
+    """Lê a origem real do projeto, verificando hash antes de listar opções de troca."""
+    import json
+    import hashlib
+    from pathlib import Path
+    from .disc import DiscReader, DiscError
+    source = Path(project.metadata.get('base_source') or '')
+    if not source.is_file():
+        raise ModError('BIN de origem não localizado. Reabra o caminho da base original.')
+    expected_path = project.folder / 'base' / 'resumo.json'
+    if not expected_path.is_file():
+        raise ModError('Resumo de origem não localizado. A substituição não é segura.')
+    expected = (json.loads(expected_path.read_text(encoding='utf-8'))
+                .get('source_sha256', {}).get('DATA/WA_MRG.MRG'))
+    if not expected:
+        raise ModError('Hash do WA_MRG de origem ausente.')
+    try:
+        with DiscReader(source) as reader:
+            entries={item.path.upper():item for item in reader.files() if not item.is_dir}
+            if 'DATA/WA_MRG.MRG' not in entries:
+                raise ModError('WA_MRG.MRG não foi encontrado no BIN de origem.')
+            wa = b''.join(reader.read_entry(entries['DATA/WA_MRG.MRG']))
+    except DiscError as exc:
+        raise ModError(f'Falha ao ler disco de origem: {exc}') from exc
+    if hashlib.sha256(wa).hexdigest() != expected:
+        raise ModError('WA_MRG da origem diverge do projeto; substituição bloqueada.')
+    targets = list_equipment_targets(wa).get(equip)
+    if targets is None:
+        raise ModError(f'Equip #{equip:03d} não foi localizado na tabela.')
+    return targets
+
+
 def add_equipment_target(project, equip: int, target: int) -> bool:
     """Registra uma permissão de equipar; o chamador salva o projeto explicitamente."""
     if not (1 <= equip <= CARD_COUNT and 1 <= target <= CARD_COUNT):

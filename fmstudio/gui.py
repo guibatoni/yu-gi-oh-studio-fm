@@ -641,6 +641,7 @@ class Studio(tk.Tk):
         ttk.Button(buttons,text='+ Bônus por carta',command=self.add_specific_effect).pack(side='left',padx=8)
         ttk.Button(buttons,text='Remover efeito selecionado',command=self.remove_effect).pack(side='left',padx=8)
         ttk.Button(buttons,text='PS1: permitir Equip em criatura',command=self.allow_native_equip).pack(side='left',padx=8)
+        ttk.Button(buttons,text='PS1: trocar alvo Equip',command=self.replace_native_equip).pack(side='left',padx=8)
         sim=tk.Frame(body,bg=SURFACE,padx=15,pady=12)
         sim.pack(fill='x')
         tk.Label(sim,text='SIMULADOR DE EFEITOS',bg=SURFACE,fg=TEXT,font=('Segoe UI',10,'bold')).pack(anchor='w')
@@ -1235,6 +1236,74 @@ class Studio(tk.Tk):
                 eff['valor'],eff.get('valor_def','—')))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
 
+    def replace_native_equip(self):
+        """Troca uma permissão existente SEM aumentar a tabela: teste opt-in."""
+        if self._extract_running or not self._ensure_project():
+            return
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro','Salve as alterações pendentes antes do teste.',parent=self)
+            return
+        equip=self.selected_id
+        if not equip or int(self.project.get(equip)['tipo_id'])!=23:
+            messagebox.showinfo('Selecione um Equip',
+                                'Selecione uma carta original do tipo Equip na biblioteca.',parent=self)
+            return
+        from .ps1_equip import list_origin_equip_targets, _validated_replacements
+        try:
+            available=list_origin_equip_targets(self.project,equip)
+            if not available:
+                raise ModError(f'Equip #{equip:03d} não possui alvos para trocar.')
+            preview=', '.join(f'#{i:03d}' for i in available[:18])
+            old=simpledialog.askinteger(
+                'Escolher alvo a retirar',
+                f'Equip #{equip:03d} — alvo(s) permitidos pela origem:\n{preview}'
+                + (' ...' if len(available)>18 else '')
+                + '\n\nInforme o ID de UM monstro que perderá a permissão de Equip '
+                  '(somente no BIN de teste, não na ROM original).',
+                minvalue=1,maxvalue=722,parent=self)
+            if old is None:
+                return
+            if old not in available:
+                raise ModError(f'#{old:03d} não aparece entre os alvos originais desse Equip.')
+            new=simpledialog.askinteger(
+                'Escolher novo monstro',
+                f'Equip #{equip:03d}: substituir o monstro #{old:03d} por qual ID?\n'
+                'Exemplo: Time Wizard = 016.\n'
+                'A tabela não crescerá; é um teste de compatibilidade, não efeito MIPS.',
+                minvalue=1,maxvalue=722,parent=self)
+            if new is None:
+                return
+            if int(self.project.get(new)['tipo_id'])>=20:
+                raise ModError('O novo alvo precisa ser um monstro original.')
+            if new in available:
+                raise ModError('O novo monstro já consta dos alvos originais.')
+            # As adições previamente cadastradas são preservadas no projeto,
+            # mas não entram no build enquanto o modo substituição estiver ativo.
+            current=self.project.metadata.get('ps1_equip_replacements',{})
+            plan={str(k):dict(v) for k,v in _validated_replacements(current).items()}
+            plan.setdefault(str(equip),{})[str(old)]=new
+            _validated_replacements(plan)
+            if not messagebox.askyesno(
+                'Confirmar substituição experimental',
+                f'Equip #{equip:03d}\n'
+                f'RETIRAR permissão do monstro #{old:03d}\n'
+                f'PERMITIR o monstro #{new:03d}\n\n'
+                'O BIN original não será alterado. A tabela manterá o mesmo tamanho.\n'
+                'O modo substituição SUSPENDERÁ as adições de alvos já salvas '
+                '(elas não serão apagadas).\n\n'
+                'Essa mudança ainda depende da rotina do MOD para funcionar no ePSXe. Continuar?',
+                parent=self):
+                return
+            self.project.metadata['ps1_equip_replacements']=plan
+            self.project.metadata['ps1_equip_mode']='substituir'
+            self.project.save()
+            self._refresh_project()
+            self._update_status(f'Equip #{equip:03d}: alvo #{old:03d} -> #{new:03d} '
+                                '(troca sem expandir, modo experimental).')
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Substituição de Equip',str(exc),parent=self)
+
     def allow_native_equip(self):
         """Autoriza monstro a receber Equip original no motor PS1; salva com backup."""
         if self._extract_running or not self._ensure_project():
@@ -1265,6 +1334,7 @@ class Studio(tk.Tk):
             if not add_equipment_target(self.project,equip,monster):
                 messagebox.showinfo('Já cadastrado','Esse alvo já está no plano.',parent=self)
                 return
+            self.project.metadata['ps1_equip_mode']='adicionar'
             self.project.save()
         except (ModError,ValueError,OSError) as exc:
             messagebox.showerror('Equip PS1',str(exc),parent=self)
@@ -1495,7 +1565,9 @@ class Studio(tk.Tk):
                 f'Cartas alteradas e salvas: {len(pr.edits)}\n'
                 f'Cartas com alterações pendentes: {self.drafts.count if self.drafts else 0}\n'
                 f'Efeitos planejados: {effects}\n'
-                f'Alvos de Equip PS1: {sum(len(v) for v in pr.metadata.get("ps1_equip_additions",{}).values())}\n'
+                f'Modo Equip PS1: {pr.metadata.get("ps1_equip_mode","adicionar")}\n'
+                f'Adições de Equip salvas: {sum(len(v) for v in pr.metadata.get("ps1_equip_additions",{}).values())}\n'
+                f'Substituições de Equip salvas: {sum(len(v) for v in pr.metadata.get("ps1_equip_replacements",{}).values())}\n'
                 f'Artes PNG vinculadas: {len(pr.arts)} (somente prévia)\n'
                 f'Extração profunda: {pr.metadata.get("deep_extraction", {}).get("completed", "ainda não realizada")}\n'
                 f'Executável SLUS local: {source}\n\n'
@@ -1648,7 +1720,7 @@ class Studio(tk.Tk):
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
-            f'Equip originais com novos alvos: {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
+            f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
 

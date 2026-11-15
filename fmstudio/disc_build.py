@@ -128,8 +128,15 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             wa_entry=entries.get('DATA/WA_MRG.MRG')
             # WA só é lido quando houver artes vinculadas.
             requested_art={int(k):v for k,v in getattr(project,'arts',{}).items() if int(k)<=722}
-            native_equips=getattr(project,'metadata',{}).get('ps1_equip_additions',{})
-            original_wa=b''.join(reader.read_entry(wa_entry)) if (requested_art or native_equips) and wa_entry else None
+            metadata=getattr(project,'metadata',{})
+            equip_mode=metadata.get('ps1_equip_mode','adicionar')
+            if equip_mode not in ('adicionar','substituir'):
+                raise ModError('Modo de equipamento inválido no projeto.')
+            native_equips=(metadata.get('ps1_equip_additions',{})
+                           if equip_mode=='adicionar' else {})
+            replacements=(metadata.get('ps1_equip_replacements',{})
+                          if equip_mode=='substituir' else {})
+            original_wa=b''.join(reader.read_entry(wa_entry)) if (requested_art or native_equips or replacements) and wa_entry else None
     except DiscError as exc:
         raise ModError(f'Imagem original inválida: {exc}') from exc
 
@@ -205,7 +212,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             written_arts.extend(regions)
 
     native_written=[]
-    if native_equips:
+    if native_equips or replacements:
         if original_wa is None or wa_entry is None:
             raise ModError('DATA/WA_MRG.MRG é necessário para alterar equipamentos.')
         if not requested_art:
@@ -216,10 +223,16 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             if not origin_hash or hashlib.sha256(original_wa).hexdigest()!=origin_hash:
                 raise ModError('WA_MRG.MRG não corresponde à origem do projeto; '
                                'não é seguro alterar equipamentos.')
-        from .ps1_equip import patch_equipment_targets
-        patched_wa,native_written=patch_equipment_targets(
-            patched_wa if patched_wa is not None else original_wa,
-            native_equips)
+        if equip_mode=='substituir':
+            from .ps1_equip import replace_equipment_targets
+            patched_wa,native_written=replace_equipment_targets(
+                patched_wa if patched_wa is not None else original_wa,
+                replacements)
+        else:
+            from .ps1_equip import patch_equipment_targets
+            patched_wa,native_written=patch_equipment_targets(
+                patched_wa if patched_wa is not None else original_wa,
+                native_equips)
 
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
@@ -294,6 +307,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'descricoes_aplicadas':written_descriptions,
                 'artes_aplicadas':written_arts,
                 'equipamentos_ps1_aplicados':native_written,
+                'modo_equip_ps1':equip_mode,
                 'tamanho_bin':stage_bin.stat().st_size,
                 'recursos_pendentes':audit_report['pendente_de_motor'] if audit_report else [],
                 'aviso':'Build parcial de PS1. Habilidades inéditas, cartas extras e raridades ainda não executadas no motor.'}

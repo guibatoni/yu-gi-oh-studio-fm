@@ -1,3 +1,11 @@
+## v1.2.6 — Troca de alvo de Equip sem aumentar o tamanho (experimental)
+
+- MODs com 0 bytes disponíveis na tabela de equipamentos não podem receber alvos novos pelo formato stock sem realocação MIPS.
+- Nova opção **PS1: trocar alvo Equip** seleciona uma permissão existente e a troca por outra, com consentimento explícito e sem alterar o tamanho da tabela.
+- A troca modifica somente um u16 de monstro por cópia (7 terrenos); bytes após o terminador e fusões são preservados.
+- Modo "substituir" suspende adições antigas sem excluí-las; modo "adicionar" continua disponível.
+- O app valida hash de WA da origem antes de listar opções, testa releitura e preserva a ISO original. A compatibilidade no ePSXe ainda não foi confirmada: um MOD pode ignorar a tabela por usar lógica MIPS própria.
+
 ## v1.2.5 — Correção do terminador e preservação de dados adicionais Equip
 
 - Corrigido terminador da tabela Equip de 4 bytes para **u16(0), apenas 2 bytes**, como o código original do PS1 verifica.
