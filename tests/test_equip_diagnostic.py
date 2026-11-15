@@ -16,7 +16,8 @@ class DiagnoseEquipTests(unittest.TestCase):
             root=Path(tmp)
             source=root/'Drop-x15.bin'
             modified=root/'FM_STUDIO_TESTE_Drop-x15.bin'
-            exe=b'PS-X EXE'+bytes(2048)
+            # Inclui a janela MIPS em 0x80019A08 para comparar seu hash.
+            exe=b'PS-X EXE'+bytes(0xA308)
             wa=sample_wa()
             patched,_=patch_equipment_targets(wa,{'650':[1]})
             write_disc(source,exe,wa)
