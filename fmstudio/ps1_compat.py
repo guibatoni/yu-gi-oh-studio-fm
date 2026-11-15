@@ -101,7 +101,9 @@ def audit(project) -> dict:
     traps=project.metadata.get('ps1_trap_thresholds',{})
     terrain=project.metadata.get('ps1_terrain_boosts',{})
     from .ps1_native import patch_trap_thresholds, patch_terrain_boosts
-    if rituals:
+    if rituals and not project.metadata.get('ps1_rituals_enabled',False):
+        blocked.append(f'{len(rituals)} receita(s) de Ritual suspensa(s) no projeto; nenhuma será gravada no BIN')
+    if rituals and project.metadata.get('ps1_rituals_enabled',False):
         counts['rituais_ps1']=len(rituals)
         if known and wa_pinned:
             supported.append(f'{len(rituals)} receita(s) de Ritual na tabela PS1 original')

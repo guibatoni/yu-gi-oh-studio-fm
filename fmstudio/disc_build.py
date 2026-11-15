@@ -136,7 +136,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                            if equip_mode=='adicionar' else {})
             replacements=(metadata.get('ps1_equip_replacements',{})
                           if equip_mode=='substituir' else {})
-            native_rituals=metadata.get('ps1_ritual_recipes',{})
+            # Rituais em pausa a pedido do usuário. Guardamos planos anteriores
+            # no projeto, mas não os escrevemos no BIN sem reativação explícita.
+            native_rituals=(metadata.get('ps1_ritual_recipes',{})
+                            if metadata.get('ps1_rituals_enabled',False) else {})
             native_traps=metadata.get('ps1_trap_thresholds',{})
             native_terrain=metadata.get('ps1_terrain_boosts',{})
             original_wa=b''.join(reader.read_entry(wa_entry)) if (requested_art or native_equips or replacements or native_rituals) and wa_entry else None
