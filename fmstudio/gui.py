@@ -688,6 +688,9 @@ class Studio(tk.Tk):
         ttk.Button(buttons,text='Compatibilidade PS1',command=self.audit_ps1).pack(side='left',padx=8)
         ttk.Button(buttons,text='Gerar BIN/CUE de teste',command=self.build_disc).pack(side='left',padx=8)
         ttk.Button(buttons,text='Verificar BIN/CUE',command=self.verify_disc).pack(side='left',padx=8)
+        diagnostic=ttk.Frame(body)
+        diagnostic.pack(fill='x',pady=(0,6))
+        ttk.Button(diagnostic,text='Diagnosticar Equip no BIN/CUE',command=self.diagnose_equip).pack(side='left')
         tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Efeitos inéditos ainda não são interpretados pelo jogo.\n'
                  'A cópia de teste permite atributos, textos, artes e alvos de Equip stock. Efeitos inéditos NÃO funcionam no PS1.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),justify='left',wraplength=750).pack(anchor='w',pady=(8,0))
@@ -1648,6 +1651,40 @@ class Studio(tk.Tk):
             f'Equip originais com novos alvos: {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
+
+    def diagnose_equip(self):
+        if self._extract_running or not self._ensure_project():
+            return
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro', 'Clique Salvar projeto antes do diagnóstico.', parent=self)
+            return
+        target=self.project.folder/'exportacao'/'teste_ps1'
+        path=filedialog.askopenfilename(
+            title='Escolha o BIN/CUE gerado para testar o Equip',
+            initialdir=str(target if target.is_dir() else self.project.folder),
+            filetypes=[('Discos de PlayStation','*.bin *.cue'),('Todos','*.*')],
+            parent=self)
+        if not path:
+            return
+        try:
+            from .ps1_equip import diagnose_equipment_project, describe_equip_diagnostic
+            import json
+            report=diagnose_equipment_project(self.project,Path(path))
+            folder=self.project.folder/'exportacao'
+            folder.mkdir(parents=True,exist_ok=True)
+            dest=folder/'diagnostico_equip_ps1.json'
+            dest.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',
+                            encoding='utf-8')
+            desc=describe_equip_diagnostic(report) + f'\n\nRelatório salvo em: {dest}'
+            if (not report['sete_tabelas_iguais'] or
+                any(row['resultado']=='NAO_GRAVADO' for row in report['comparacoes'])):
+                messagebox.showwarning('Equip não gravado corretamente',desc,parent=self)
+            else:
+                messagebox.showinfo('Equip presente no BIN — falta validar no jogo',desc,parent=self)
+            self._update_status('Diagnóstico Equip salvo: '+str(dest))
+        except (OSError,ModError,ValueError,DiscError) as exc:
+            messagebox.showerror('Diagnóstico do Equip',str(exc),parent=self)
 
     def verify_disc(self):
         if self._extract_running or not self._ensure_project():

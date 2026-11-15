@@ -1,3 +1,11 @@
+## v1.2.4 — Diagnóstico da falha de Equip no PS1
+
+- Novo botão Projeto / Exportação > Diagnosticar Equip no BIN/CUE.
+- Releitura independente das sete tabelas Equip da imagem escolhida e comparação com o projeto e com a imagem de origem.
+- O relatório distingue "não gravado", "já existia" e "adicionado à tabela". Registra SHA-256 da área Duel_CheckEquip para futura comparação com uma imagem retail.
+- Alerta que MODs com rotina Duel_CheckEquip alterada podem ignorar a tabela nativa; não apresenta a compatibilidade como efeito validado em emulador.
+- Nenhuma mudança nos valores de ATK/DEF, nas fusões ou no BIN original.
+
 ## v1.2.2 — Reutilizar ISOs de teste sem acumular duplicatas
 
 - O BIN de teste passa a ter nome estável derivado do nome do BIN de origem, com sufixo identificador para evitar colisões por caracteres semelhantes e nomes longos.

@@ -133,3 +133,119 @@ def add_equipment_target(project, equip: int, target: int) -> bool:
     plan[equip] = targets
     project.metadata[META_KEY] = {str(key): value for key, value in plan.items()}
     return True
+
+
+
+def inspect_equips_on_disc(path, plan):
+    """Lê SLUS e as sete tabelas de Equip do BIN/CUE informado (somente leitura)."""
+    from pathlib import Path
+    import hashlib
+    from .disc import DiscReader, DiscError
+    from .tables import EXE_DELTA
+    source = Path(path)
+    try:
+        with DiscReader(source) as reader:
+            file_map = {item.path.upper(): item for item in reader.files()
+                        if not item.is_dir}
+            if 'SLUS_014.11' not in file_map or 'DATA/WA_MRG.MRG' not in file_map:
+                raise ModError('O BIN/CUE não possui SLUS_014.11 e WA_MRG.MRG.')
+            slus=b''.join(reader.read_entry(file_map['SLUS_014.11']))
+            wa=b''.join(reader.read_entry(file_map['DATA/WA_MRG.MRG']))
+            resolved=str(reader.path.resolve())
+    except DiscError as exc:
+        raise ModError('Não foi possível ler BIN/CUE: '+str(exc)) from exc
+
+    copies=[]
+    for index in range(TERRAIN_COPIES):
+        pos=WA_TERRAIN_BASE+index*TERRAIN_STRIDE+EQUIP_OFF
+        if pos+EQUIP_LEN > len(wa):
+            raise ModError('WA_MRG.MRG truncado na tabela Equip da cópia '+str(index))
+        copy=wa[pos:pos+EQUIP_LEN]
+        _unpack(copy)  # garante que cada cópia seja legível
+        copies.append(copy)
+    tables_same=all(copy==copies[0] for copy in copies[1:])
+    targets=dict(_unpack(copies[0]))
+    hook_offset=0x80019A08-EXE_DELTA  # Duel_CheckEquip, área conhecida
+    hook=slus[hook_offset:hook_offset+0x58] if len(slus)>=hook_offset+0x58 else b''
+    return {
+        'imagem':resolved,
+        'sha256_slus':hashlib.sha256(slus).hexdigest(),
+        'sha256_rotina_equip':hashlib.sha256(hook).hexdigest() if hook else None,
+        'sete_tabelas_iguais':tables_same,
+        'tabelas':[hashlib.sha256(copy).hexdigest() for copy in copies],
+        'alvos':{str(equip):{str(monster):monster in targets.get(equip,[])
+                          for monster in wanted}
+                 for equip,wanted in plan.items()}
+    }
+
+
+def diagnose_equipment_project(project, image):
+    """Compara a lista de alvos planejados ao BIN de teste e à origem, se acessível.
+
+    A verificação é dos dados, NÃO de execução no ePSXe. A rotina MIPS de
+    Duel_CheckEquip pode ter sido modificada por um MOD.
+    """
+    from pathlib import Path
+    plan=_validated_plan(project.metadata.get(META_KEY,{}))
+    if not plan:
+        raise ModError('Nenhuma permissão PS1 de Equip cadastrada. '
+                       'Na aba Efeitos, selecione Equip e autorize um monstro.')
+    result=inspect_equips_on_disc(image,plan)
+    base_path=Path(project.metadata.get('base_source') or '')
+    original=None
+    if base_path.is_file():
+        try:
+            original=inspect_equips_on_disc(base_path,plan)
+        except (ModError, OSError):
+            original=None
+    result['imagem_origem']=original['imagem'] if original else None
+    result['comparacoes']=[]
+    for equip,monsters in sorted(plan.items()):
+        for monster in monsters:
+            after=result['alvos'][str(equip)][str(monster)]
+            before=original['alvos'][str(equip)][str(monster)] if original else None
+            if not after:
+                verdict='NAO_GRAVADO'
+            elif before is True:
+                verdict='JA_EXISTIA_NA_ORIGEM'
+            elif before is False:
+                verdict='ADICIONADO_A_TABELA'
+            else:
+                verdict='PRESENTE_SEM_BASE_COMPARAVEL'
+            result['comparacoes'].append({
+                'equipamento_id':equip, 'monstro_id':monster,
+                'origem_permitia':before, 'bin_permite':after, 'resultado':verdict
+            })
+    result['codigo_equip_igual_a_origem']=(
+        original['sha256_rotina_equip']==result['sha256_rotina_equip']
+        if original and original['sha256_rotina_equip'] and result['sha256_rotina_equip']
+        else None
+    )
+    result['aviso']=(
+        'A presença do par na tabela não prova execução no PS1. Alguns MODs '
+        'alteram Duel_CheckEquip por código MIPS/bitmaps; compare com uma '
+        'imagem original não modificada para diagnosticar esse caso.'
+    )
+    return result
+
+
+def describe_equip_diagnostic(report):
+    lines=['Imagem verificada:', report['imagem'], '',
+           'Sete tabelas idênticas: '+('SIM' if report['sete_tabelas_iguais'] else 'NÃO')]
+    for row in report['comparacoes']:
+        result={
+            'NAO_GRAVADO':'NÃO GRAVADO no BIN selecionado',
+            'JA_EXISTIA_NA_ORIGEM':'já existia na origem (nenhuma permissão nova)',
+            'ADICIONADO_A_TABELA':'adicionado à tabela do BIN',
+            'PRESENTE_SEM_BASE_COMPARAVEL':'presente no BIN (origem não localizada)',
+        }[row['resultado']]
+        lines.append(f"Equip #{row['equipamento_id']:03d} → "
+                     f"Monstro #{row['monstro_id']:03d}: {result}")
+    lines.append('')
+    lines.append('Rotina de equip idêntica à imagem base: '
+                 + ('SIM' if report['codigo_equip_igual_a_origem'] is True
+                    else 'NÃO' if report['codigo_equip_igual_a_origem'] is False
+                    else 'NÃO FOI POSSÍVEL COMPARAR'))
+    lines.append('')
+    lines.append(report['aviso'])
+    return '\n'.join(lines)
