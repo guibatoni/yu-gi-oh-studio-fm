@@ -1,3 +1,48 @@
+## v1.4.0 — Preparação de efeitos MIPS sem falsos positivos
+
+**Estado:** aura, cemitério, imunidades, indestrutibilidade, ataques 2x/3x,
+perfuração, ataque direto com monstros inimigos e limites de cópias POR CARTA
+funcionam no simulador, mas ainda NÃO como novas rotinas MIPS gravadas no PS1.
+
+### Endereços de referência da recompilação do SLUS_014.11
+
+| Objetivo | Rotina | RAM |
+| --- | --- | --- |
+| Recalcular bônus contínuos | Duel_CalcCardStats | 0x800170C8 |
+| Remoção de campo | DuelCard_RemoveFromField | 0x80024954 |
+| Já agiu no turno | DuelCard_CanActThisTurn | 0x8001700C |
+| ATK da batalha | Duel_CalcBattleAttack | 0x8001EF1C |
+| Resultado do combate | DuelScene_UpdateBattle | 0x8001F55C |
+| Seleção de ataque/campo | DuelScene_UpdateFieldActions | 0x8001D670 |
+| Colocar/equipar cartas | DuelScene_UpdateCardPlacement | 0x80019D18 |
+| Cópias por ID no construtor | BuildDeck_UpdateChestPaneInput | 0x800336F0 |
+
+Esses locais correspondem ao SLUS original; MODs podem realocar ou
+redirecionar funções. O Studio calcula hashes das regiões presentes no
+executável de cada projeto e indica entradas com saltos, sem tratá-los
+automaticamente como hooks seguros.
+
+### Sequência técnica
+
+1. Aura e cemitério: contagem dinâmica por tipo/lado, detectar envio ao
+   cemitério e atualizar ATK/DEF sem acumular bônus duplicados. Distinguir
+   destruição, fusão, retorno e descarte, inclusive mudanças fora de batalha.
+2. Imunidades/indestrutibilidade: interceptar resolução de magia, trap e
+   resultado de batalha em ambos os lados; imunidade não é só preservar HP.
+3. 2x/3x ataques: contador por criatura/turno, reset, seleção repetida e
+   reprodução de ataques, preservando trocas de slot e fusões.
+4. Perfuração/negação de bloqueio: seleção de alvo e cálculo de dano em defesa
+   ou direto apesar do campo adversário.
+5. Deck: alteração global de cópias 1–40 com comparação MIPS específica.
+   Limites diferentes por ID exigem uma nova tabela no runtime; capacidade
+   física maior que 40 exige rever mais estruturas de armazenamento.
+
+Nenhum novo handler de duelo foi injetado no BIN nesta versão. A ferramenta
+de diagnóstico gera exportacao/diagnostico_motor_efeitos_mips.json para
+fundamentar os próximos patches, sem copiar ou publicar a ROM.
+
+---
+
 # Roadmap de efeitos sem quebrar o PS1
 
 ## Fase inicial — concluída no editor

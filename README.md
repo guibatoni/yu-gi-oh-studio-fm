@@ -1,3 +1,20 @@
+# Studio FM v1.4.0 — Preparação do motor de efeitos inéditos (MIPS)
+
+**Prioridade: habilidades inéditas, não rituais.** A aba Efeitos destaca auras, bônus por cemitério, imunidades, indestrutibilidade, ataques múltiplos, dano perfurante e ataque direto mesmo com monstros adversários. Esses presets seguem configuráveis e simuláveis; ainda NÃO são novas rotinas executáveis no PS1.
+
+**Novidades desta versão:**
+- Laboratório MIPS gera perfil do SLUS vinculado com hashes SHA-256 de funções de atributos, combate, destruição, ações de campo e deck.
+- Limites personalizados de **1–40 cópias por carta no simulador**, além do modo ∞ (até 40 do mesmo ID em um deck físico de 40).
+- Limite GLOBAL de cópias de 1–40 no PS1, experimental e gravável no SLUS apenas quando uma única comparação MIPS reconhecível é encontrada. Sem validação real em ePSXe ainda.
+- Edição de rituais, traps e terrenos retirada da interface Efeitos enquanto focamos habilidades novas. Planos de Ritual anteriores permanecem salvos e sua exportação está suspensa.
+- Equip, ATK/DEF, backup e BIN/CUE de teste reaproveitado por nome da origem continuam disponíveis.
+
+**Limitações:** o deck físico do PS1 tem 40 cartas. Aumentar essa capacidade exige rever buffers, menus, memória card e interface. O patch global de cópias não habilita regras diferentes por carta no console e não altera regras especiais de Exodia. Todas as habilidades inéditas de duelo ainda precisam de hooks/eventos MIPS comprovados.
+
+**Diagnóstico:** abra projeto com imagem original importada, vá a Efeitos > Diagnosticar motor MIPS. É gerado exportacao/diagnostico_motor_efeitos_mips.json. Isso não altera o jogo.
+
+---
+
 # Yu-Gi-Oh Studio FM v1.3.0 — Efeitos nativos PS1
 
 **Efeitos exportáveis para BIN/CUE, sem criar novos handlers MIPS:** compatibilidade de equipamentos (já validada no ePSXe pelo usuário), receitas dos rituais originais (3 tributos + resultado), limiares das seis armadilhas de ataque (#681–#686) e bônus de terrenos para 20 tipos originais nos seis campos. Os três últimos recursos foram testados com imagens sintéticas, mas ainda precisam de validação no emulador.

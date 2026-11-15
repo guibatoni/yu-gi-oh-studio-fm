@@ -1,3 +1,19 @@
+## v1.4.0 — Motor de habilidades inéditas e deck experimental
+
+- Confirmado no ePSXe: alteração ATK/DEF e compatibilidade de Equip no Drop X15.
+- Simulador apenas: auras, cemitério por tipo, imunidades, indestrutibilidade,
+  ataques 2x/3x, perfuração, ataque direto mesmo com campo inimigo e limites
+  individuais de cópias de 1–40.
+- Experimental no BIN: limite GLOBAL de cópias por ID 1–40, somente quando
+  há uma comparação MIPS única slti/sltiu <3 seguida de branch. Não modifica
+  o tamanho físico de 40 cartas, nem regras especiais de Exodia; sem teste real.
+- Rituais: controles ocultos nesta etapa. Planos anteriores preservados e
+  não exportados sem ativação explícita pela configuração ps1_rituals_enabled.
+- Diagnóstico MIPS: analisa regiões e hashes e lista efeitos cadastrados;
+  não instala handlers de habilidades.
+
+---
+
 ## v1.3.0 — Efeitos nativos adicionais
 
 O Studio pode gravar diretamente alguns efeitos existentes no motor de Forbidden Memories:

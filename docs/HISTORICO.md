@@ -1,3 +1,19 @@
+## v1.4.0 — Prioridade aos efeitos inéditos e relatório MIPS
+
+- Ferramenta Diagnosticar motor MIPS: mapeamento e hashes das regiões de cálculo,
+  batalha, remoção, ação por turno e regras do deck.
+- Limites de 1–40 cópias por ID no simulador (∞ significa 40), retrocompatível
+  com projetos anteriores.
+- Patch MIPS opcional e experimental para limite GLOBAL de cópias no PS1.
+  Aplica apenas a comparação slti/sltiu com imediato 3, branch próximo e
+  candidato único; recusa entrada redirecionada e candidatos ambíguos.
+- Controles de Ritual, Trap e terreno retirados da tela Efeitos por enquanto;
+  receitas Ritual anteriores não são apagadas nem gravadas no BIN sem opt-in.
+- Testes de scanner MIPS, alteração de instrução, BIN/CUE sintético e limites
+  individuais do simulador. Teste real de deck no ePSXe ainda pendente.
+- Auras, cemitério, proteções, ataques múltiplos, perfuração e ataque direto
+  continuam sem handlers MIPS no PS1, apesar de funcionarem no simulador.
+
 ## v1.3.0 — Mais efeitos nativos graváveis em BIN/CUE PS1
 
 - Ritual: altera três tributos e o resultado de um Ritual original em sete tabelas, sem aumentar registros ou tocar nas fusões.
