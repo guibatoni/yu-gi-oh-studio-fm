@@ -583,7 +583,7 @@ class Studio(tk.Tk):
             lambda e: canvas.yview_scroll(-1 if e.delta>0 else 1,'units')))
         canvas.bind('<Leave>',lambda event:canvas.unbind_all('<MouseWheel>'))
         tk.Label(body,text='EFEITOS DAS CARTAS',bg=BG,fg=TEXT,font=('Segoe UI',16,'bold')).pack(anchor='w')
-        tk.Label(body,text='Gatilhos personalizados continuam simulados. Apenas a compatibilidade de Equip original pode ser gravada no PS1 nesta versão.',
+        tk.Label(body,text='Efeitos inéditos: simulação e diagnóstico MIPS do PS1. Equip está validado; outros efeitos exigem hooks no duelo.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),wraplength=780,justify='left').pack(anchor='w',pady=(8,12))
         self.effect_caption=tk.Label(body,text='Escolha uma carta',bg=BG,fg=ACCENT,font=('Segoe UI',12,'bold'))
         self.effect_caption.pack(anchor='w',pady=(0,8))
@@ -606,6 +606,16 @@ class Studio(tk.Tk):
         ttk.Entry(line,width=9,textvariable=self.quick_vars['custo_lp'],
                   validate='key',validatecommand=(validate,'%P')).pack(side='left')
         self.quick_vars['custo_lp'].trace_add('write',lambda *_:self._on_quick_changed())
+        copies=tk.Frame(quick,bg=SURFACE)
+        copies.pack(fill='x',pady=4)
+        tk.Label(copies,text='Cópias da carta no deck (1–40):',bg=SURFACE,fg=TEXT).pack(side='left')
+        self.quick_vars['limite_copias']=tk.StringVar(value='3')
+        check_copies=(self.register(lambda value: value=='' or (value.isdigit() and len(value)<=2)))
+        ttk.Entry(copies,width=5,textvariable=self.quick_vars['limite_copias'],
+                  validate='key',validatecommand=(check_copies,'%P')).pack(side='left',padx=7)
+        self.quick_vars['limite_copias'].trace_add('write',lambda *_:self._on_quick_changed())
+        tk.Label(copies,text='∞ = até 40 cópias dentro do deck; mudança por carta somente no simulador.',
+                 bg=SURFACE,fg=MUTED).pack(side='left',padx=(10,0))
         rows=[tk.Frame(quick,bg=SURFACE) for _ in range(3)]
         for quick_row in rows: quick_row.pack(fill='x',pady=2)
         names={
@@ -622,7 +632,7 @@ class Studio(tk.Tk):
             self.quick_vars[action]=v
             ttk.Checkbutton(rows[index // 3],text=names[action],variable=v,
                             command=self._on_quick_changed).pack(side='left',padx=(0,18))
-        tk.Label(quick,text='Até 40 cartas no deck; “Sem limite” remove apenas a restrição de 3 cópias. Salve pelo botão no topo.',
+        tk.Label(quick,text='Deck do PS1 continua com 40 cartas. Limite individual funciona no simulador; limite global MIPS é experimental.',
                  bg=SURFACE,fg=MUTED,font=('Segoe UI',9)).pack(anchor='w',pady=(3,0))
         holder=tk.Frame(body,bg=SURFACE)
         holder.pack(fill='both',expand=True)
@@ -645,14 +655,13 @@ class Studio(tk.Tk):
         ttk.Button(buttons,text='PS1: usar adições automáticas',command=self.activate_equip_additions).pack(side='left',padx=8)
         native=tk.Frame(body,bg=SURFACE,padx=12,pady=8)
         native.pack(fill='x',pady=(2,8))
-        tk.Label(native,text='EFEITOS NATIVOS DO PS1 (BIN/CUE EXPERIMENTAL)',
+        tk.Label(native,text='LABORATÓRIO DE EFEITOS INÉDITOS — PLAYSTATION 1',
                  bg=SURFACE,fg=ACCENT,font=('Segoe UI',9,'bold')).pack(anchor='w',pady=(0,5))
         row_native=ttk.Frame(native)
         row_native.pack(fill='x')
-        ttk.Button(row_native,text='Configurar Ritual',command=self.configure_native_ritual).pack(side='left')
-        ttk.Button(row_native,text='Limiar de armadilha',command=self.configure_native_trap).pack(side='left',padx=8)
-        ttk.Button(row_native,text='Bônus de terreno por tipo',command=self.configure_native_terrain).pack(side='left',padx=8)
-        tk.Label(native,text='Esses recursos reutilizam regras existentes. Cemitério, auras inéditas, imunidades e múltiplos ataques ainda precisam de MIPS.',
+        ttk.Button(row_native,text='Diagnosticar motor MIPS',command=self.diagnose_effect_engine).pack(side='left')
+        ttk.Button(row_native,text='Limite global de cópias no PS1',command=self.configure_ps1_deck_limit).pack(side='left',padx=8)
+        tk.Label(native,text='Rituais retirados desta tela por enquanto. O diagnóstico identifica locais de cálculo de bônus, cemitério, proteção, combate e deck; não injeta habilidades não validadas.',
                  bg=SURFACE,fg=MUTED,wraplength=940,justify='left').pack(anchor='w',pady=(5,0))
         sim=tk.Frame(body,bg=SURFACE,padx=15,pady=12)
         sim.pack(fill='x')
@@ -1248,6 +1257,66 @@ class Studio(tk.Tk):
                 eff['valor'],eff.get('valor_def','—')))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
 
+    def diagnose_effect_engine(self):
+        """Auditoria MIPS somente leitura, sem modificar ou revelar a ROM."""
+        if not self._ready_native_effect():
+            return
+        try:
+            from .ps1_effects_lab import save_project_effect_analysis, analyze_project_effects
+            report=analyze_project_effects(self.project)
+            dest=save_project_effect_analysis(self.project)
+            ready=sum(s.get('status')=='regiao_encontrada_sem_hook_validado'
+                      for s in report['funcoes_encontradas'].values())
+            groups=', '.join(f'{key}: {len(entries)}' for key,entries
+                             in report['grupos_programados_no_studio'].items())
+            deck=report['perfil_limite_global_deck']
+            msg=(f'Funções MIPS encontradas: {ready}/{len(report["funcoes_encontradas"])}\n'
+                 f'Efeitos cadastrados: {groups}\n'
+                 f'Limite global de cópias: {deck["status"]}\n\n'
+                 'Os endereços são referências do PS1 original; MODs podem usar hooks.\n'
+                 'Nenhum efeito inédito foi instalado no BIN somente por gerar este relatório.\n\n'
+                 f'Relatório salvo em:\n{dest}')
+            messagebox.showinfo('Diagnóstico do motor MIPS',msg,parent=self)
+            self._update_status('Diagnóstico MIPS salvo: '+str(dest))
+        except (OSError,ModError,ValueError) as exc:
+            messagebox.showerror('Diagnóstico MIPS',str(exc),parent=self)
+
+    def configure_ps1_deck_limit(self):
+        """Configuração GLOBAL opcional; não substitui limites por carta na GUI."""
+        if not self._ready_native_effect():
+            return
+        from .ps1_effects_lab import deck_global_patch_probe
+        exe=self.project.folder/'base'/'source_SLUS_014.11'
+        if not exe.is_file():
+            messagebox.showerror('SLUS ausente','Importe a mesma imagem original utilizada neste projeto.',parent=self)
+            return
+        current=int(self.project.metadata.get('ps1_deck_global_limit',3))
+        n=simpledialog.askinteger('Limite global no PS1',
+             'Número máximo de cópias de qualquer carta no deck (1–40).\n'
+             '3 = regra original; 40 = todas as 40 cartas podem ser iguais.\n'
+             'Não aumenta o deck físico além de 40 e NÃO implementa limites diferentes por carta.\n'
+             'A modificação MIPS é experimental e depende da assinatura do SLUS.',
+             initialvalue=current,minvalue=1,maxvalue=40,parent=self)
+        if n is None:
+            return
+        try:
+            status=deck_global_patch_probe(exe.read_bytes(),n)
+            if n!=3 and status['status']!='candidato_unico_experimental':
+                raise ModError(status['motivo'])
+            if not messagebox.askyesno('Confirmar mudança de regra MIPS',
+                f'Limite global: {n} cópias de cada carta (deck físico de 40).\n'
+                'Esta é uma alteração experimental do código MIPS e precisa de teste no ePSXe.\n'
+                'O BIN original não será modificado.\n'
+                'Continuar?',
+                parent=self):
+                return
+            self.project.metadata['ps1_deck_global_limit']=n
+            self.project.save()
+            self._refresh_project()
+            self._update_status(f'Limite global MIPS registrado: {n} cópias por ID.')
+        except (OSError,ModError,ValueError) as exc:
+            messagebox.showerror('Limite global de deck PS1',str(exc),parent=self)
+
     def _ready_native_effect(self):
         if self._extract_running or not self._ensure_project():
             return False
@@ -1758,6 +1827,7 @@ class Studio(tk.Tk):
                 f'Receitas Ritual PS1: {len(pr.metadata.get("ps1_ritual_recipes",{}))}\n'
                 f'Limiar Trap PS1: {len(pr.metadata.get("ps1_trap_thresholds",{}))}\n'
                 f'Bônus terreno PS1: {len(pr.metadata.get("ps1_terrain_boosts",{}))}\n'
+                f'Limite global deck MIPS: {pr.metadata.get("ps1_deck_global_limit",3)} cópias\n'
                 f'Artes PNG vinculadas: {len(pr.arts)} (somente prévia)\n'
                 f'Extração profunda: {pr.metadata.get("deep_extraction", {}).get("completed", "ainda não realizada")}\n'
                 f'Executável SLUS local: {source}\n\n'
@@ -1915,6 +1985,7 @@ class Studio(tk.Tk):
             f'Rituais: {len(manifest.get("rituais_ps1_aplicados",[]))}; '
             f'Armadilhas: {len(manifest.get("armadilhas_ps1_aplicadas",[]))}; '
             f'Terrenos: {len(manifest.get("terrenos_ps1_aplicados",[]))}.\n'
+            f'Regra de deck MIPS: {len(manifest.get("limite_global_copias_ps1_aplicado",[]))} patch(es).\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
 
