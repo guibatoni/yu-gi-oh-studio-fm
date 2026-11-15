@@ -162,7 +162,7 @@ def patch_equipment_targets(wa: bytes, additions: dict) -> tuple[bytes, list[dic
     growth = len(encoded) - end
     if growth > free_space:
         raise ModError(
-            'Tabela Equip sem preenchimento livre suficiente '
+            'Tabela Equip com espaço livre insuficiente '
             f'({free_space} byte(s) livres, {growth} necessário(s)). '
             f'Terminador u16 em 0x{end-2:X}; '
             f'próximo dado protegido em 0x{first_extra:X}. '
