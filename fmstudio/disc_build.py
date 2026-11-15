@@ -7,6 +7,8 @@ Não implementa efeitos, textos, novas cartas ou fusões no motor de PS1.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
+import tempfile
 import hashlib
 import json
 from pathlib import Path
@@ -227,53 +229,124 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                            + f'\n\nRelatório salvo em: {dest}')
         raise ModError('Nenhuma diferença binária compatível foi encontrada para gerar o jogo.')
 
-    base=output/'teste_ps1';base.mkdir(parents=True,exist_ok=True)
-    stamp=datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')
-    bin_file=base/f'FM_STUDIO_TESTE_{stamp}.bin';cue_file=bin_file.with_suffix('.cue')
-    meta_file=bin_file.with_suffix('.json');temp=bin_file.with_suffix('.bin.tmp')
-    if original_bin in (bin_file.resolve(),temp.resolve()):
-        raise ModError('Jamais sobrescrever a imagem original.')
+    base=output/'teste_ps1'
+    base.mkdir(parents=True,exist_ok=True)
+
+    # Mesmo nome de BIN de origem => mesmo arquivo de teste. O digest impede
+    # colisões se dois nomes diferentes só variam em maiúsculas/caracteres
+    # removidos pelo Windows (inclusive quando o nome precisa ser encurtado).
+    safe_name=re.sub(r'[^A-Za-z0-9À-ÿ()\[\] .,_+-]', '_', original_bin.stem)
+    safe_name=safe_name.strip(' .')[:96].rstrip(' .') or 'JOGO'
+    name_id=hashlib.sha256(original_bin.name.encode('utf-8')).hexdigest()[:10]
+    bin_file=base/f'FM_STUDIO_TESTE_{safe_name}_{name_id}.bin'
+    cue_file=bin_file.with_suffix('.cue')
+    meta_file=bin_file.with_suffix('.json')
+    target_paths=(bin_file,cue_file,meta_file)
+    if source_image in target_paths or original_bin in target_paths:
+        raise ModError('A imagem original não pode ser usada como arquivo de saída.')
+    if any(target.is_symlink() for target in target_paths):
+        raise ModError('Destino de teste contém atalho/link simbólico; substituição bloqueada.')
+    if any(target.is_dir() for target in target_paths):
+        raise ModError('Destino de teste é uma pasta, não um arquivo.')
+    replacing=bin_file.exists()
     changed=[]
-    try:
-        with original_bin.open('rb') as src,temp.open('wb') as dst:
-            shutil.copyfileobj(src,dst,8*1024*1024)
-        if temp.stat().st_size!=original_bin.stat().st_size:
-            raise ModError('Cópia do disco incompleta.')
-        with temp.open('r+b') as out:
+
+    # Montagem e validação ocorrem em uma pasta temporária. Um erro de leitura
+    # ou patch jamais apaga a última ISO de teste que funcionava.
+    with tempfile.TemporaryDirectory(prefix='.fmstudio_build_',dir=base) as work:
+        workspace=Path(work)
+        stage_bin=workspace/bin_file.name
+        stage_cue=workspace/cue_file.name
+        stage_meta=workspace/meta_file.name
+        with original_bin.open('rb') as origin,stage_bin.open('wb') as dest:
+            shutil.copyfileobj(origin,dest,8*1024*1024)
+        if stage_bin.stat().st_size!=original_bin.stat().st_size:
+            raise ModError('Cópia do disco incompleta. BIN anterior preservado.')
+
+        with stage_bin.open('r+b') as out:
             changed+=_write_file_patches(out,exe,original_exe,patched_exe)
             if patched_wa is not None and patched_wa!=original_wa:
                 changed+=_write_file_patches(out,wa_entry,original_wa,patched_wa)
-        temp.replace(bin_file)
-        # Reabrir imagem e comparar a extração ISO9660 com os bytes esperados.
-        with DiscReader(bin_file) as verify:
+
+        # A releitura confere o SLUS e, quando necessário, o arquivo WA gravado.
+        with DiscReader(stage_bin) as verify:
             files={e.path.upper():e for e in verify.files() if not e.is_dir}
             if b''.join(verify.read_entry(files['SLUS_014.11']))!=patched_exe:
                 raise ModError('SLUS não corresponde após reempacotamento.')
             if patched_wa is not None and b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))!=patched_wa:
-                raise ModError('Artes em WA não correspondem após reempacotamento.')
-        cue_file.write_text(f'FILE "{bin_file.name}" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n',encoding='ascii')
-        status='PS1_PARCIAL_ATRIBUTOS_TEXTOS_ARTES'
-        result={'formato':'MODE2/2352','status':status,'bin':str(bin_file),'cue':str(cue_file),
+                raise ModError('WA_MRG não corresponde após reempacotamento.')
+
+        stage_cue.write_text(
+            f'FILE "{bin_file.name}" BINARY\n'
+            '  TRACK 01 MODE2/2352\n'
+            '    INDEX 01 00:00:00\n',
+            encoding='ascii'
+        )
+        result={'formato':'MODE2/2352','status':'PS1_PARCIAL_ATRIBUTOS_TEXTOS_ARTES',
+                'bin':str(bin_file),'cue':str(cue_file),
+                'nome_iso_origem':original_bin.name,
+                'acao_arquivo':'substituido' if replacing else 'criado',
+                'gerado_em':datetime.now(timezone.utc).isoformat(timespec='seconds'),
                 'sha256_slus_original':hashlib.sha256(original_exe).hexdigest(),
                 'sha256_slus_modificado':hashlib.sha256(patched_exe).hexdigest(),
                 'setores_modificados':len(changed),'lbas':sorted(changed),
-                'nomes_aplicados':written_names,'descricoes_aplicadas':written_descriptions,'artes_aplicadas':written_arts,
+                'nomes_aplicados':written_names,
+                'descricoes_aplicadas':written_descriptions,
+                'artes_aplicadas':written_arts,
                 'equipamentos_ps1_aplicados':native_written,
-                 'tamanho_bin':bin_file.stat().st_size,
+                'tamanho_bin':stage_bin.stat().st_size,
                 'recursos_pendentes':audit_report['pendente_de_motor'] if audit_report else [],
-                'aviso':'Cópia experimental. Atributos, textos curtos, artes e alvos de equipamentos originais. NÃO inclui auras, imunidades, efeitos inéditos, cartas extras ou raridades no PS1.'}
-        if hasattr(project, 'edits') and hasattr(project, 'cards') and hasattr(project, 'get'):
+                'aviso':'Build parcial de PS1. Habilidades inéditas, cartas extras e raridades ainda não executadas no motor.'}
+
+        if hasattr(project,'edits') and hasattr(project,'cards') and hasattr(project,'get'):
             from .disc_verify import verify_image_stats
-            verification = verify_image_stats(project, bin_file)
-            if verification['divergentes']:
-                raise ModError('BIN gerado diverge das alterações numéricas do projeto. '
-                               'O arquivo inválido não será mantido.')
-            result['verificacao_atributos'] = verification
-        meta_file.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
-        if audit_report:
-            (output/'compatibilidade_ps1.json').write_text(json.dumps(audit_report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-        return result
-    except Exception:
-        temp.unlink(missing_ok=True);bin_file.unlink(missing_ok=True)
-        cue_file.unlink(missing_ok=True);meta_file.unlink(missing_ok=True)
-        raise
+            checked=verify_image_stats(project,stage_bin)
+            if checked['divergentes']:
+                raise ModError('BIN de teste diverge dos atributos do projeto. '
+                               'A cópia anterior foi preservada.')
+            checked['imagem']=str(bin_file)
+            result['verificacao_atributos']=checked
+        stage_meta.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+
+        # CUE e manifesto são pequenos: preservamos cópias deles para rollback.
+        # O BIN novo só substitui o antigo no ÚLTIMO passo, via replace atômico
+        # no mesmo volume. Se o ePSXe mantiver o BIN travado, não perdemos a
+        # última versão de teste.
+        sidecars=((cue_file,stage_cue),(meta_file,stage_meta))
+        old_sidecars={}
+        for dest,_ in sidecars:
+            backup=workspace/(dest.name+'.anterior')
+            if dest.exists():
+                shutil.copy2(dest,backup)
+                old_sidecars[dest]=backup
+            else:
+                old_sidecars[dest]=None
+
+        installed=[]
+        try:
+            for dest,prepared in sidecars:
+                prepared.replace(dest)
+                installed.append(dest)
+            stage_bin.replace(bin_file)
+        except OSError as exc:
+            rollback_failures=[]
+            for dest in reversed(installed):
+                try:
+                    backup=old_sidecars[dest]
+                    if backup is not None:
+                        backup.replace(dest)
+                    else:
+                        dest.unlink(missing_ok=True)
+                except OSError as rollback_error:
+                    rollback_failures.append(str(rollback_error))
+            if rollback_failures:
+                raise ModError('Falha ao substituir o BIN e restaurar arquivos auxiliares: '
+                               + '; '.join(rollback_failures)) from exc
+            raise ModError('Não foi possível substituir a imagem de teste. Feche o '
+                           'jogo no ePSXe e tente novamente. A imagem anterior foi preservada.') from exc
+
+    if audit_report:
+        (output/'compatibilidade_ps1.json').write_text(
+            json.dumps(audit_report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8'
+        )
+    return result
