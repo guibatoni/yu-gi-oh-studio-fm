@@ -682,9 +682,10 @@ class Studio(tk.Tk):
         buttons.pack(fill='x',pady=14)
         ttk.Button(buttons,text='Verificar integridade',command=self.verify).pack(side='left')
         ttk.Button(buttons,text='Exportar propostas e SLUS auxiliar',style='Accent.TButton',command=self.export).pack(side='left',padx=8)
-        ttk.Button(buttons,text='Gerar BIN/CUE de teste (estatísticas)',command=self.build_disc).pack(side='left',padx=8)
+        ttk.Button(buttons,text='Compatibilidade PS1',command=self.audit_ps1).pack(side='left',padx=8)
+        ttk.Button(buttons,text='Gerar BIN/CUE de teste',command=self.build_disc).pack(side='left',padx=8)
         tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Os efeitos ainda não são interpretados pelo jogo.\n'
-                 'Gerar BIN/CUE de teste aplica apenas atributos de cartas existentes; habilidades novas NÃO funcionam no PS1.',
+                 'A cópia de teste permite atributos, textos curtos e artes com paleta original. Efeitos novos NÃO funcionam no PS1.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),justify='left',wraplength=750).pack(anchor='w',pady=(8,0))
 
     def _extract_tab(self):
@@ -1501,6 +1502,33 @@ class Studio(tk.Tk):
             'Fusões preservadas. O arquivo BIN/CUE jogável ainda não foi gerado; novos efeitos são somente simulações.')
         self._update_status('Exportação concluída (ainda NÃO jogável no ePSXe): '+str(folder))
 
+    def audit_ps1(self):
+        if self._extract_running or not self._ensure_project():
+            return
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro','Clique Salvar projeto antes da auditoria PS1.',parent=self)
+            return
+        try:
+            from .ps1_compat import audit, save_audit
+            report=audit(self.project)
+            dest=save_audit(self.project)
+        except (OSError,ValueError,ModError) as exc:
+            messagebox.showerror('Auditoria PS1',str(exc),parent=self)
+            return
+        counts=report['contagens']
+        pending=report['pendente_de_motor']
+        summary=(f'SLUS verificado: {"SIM" if report["slus_conferido"] else "NÃO"}\n'
+                 f'Estatísticas: {counts["estatisticas"]}; nomes curtos: {counts["nomes"]}; '
+                 f'descrições curtas: {counts["descricoes"]}; artes: {counts["artes"]}\n'
+                 f'Efeitos ainda sem motor PS1: {counts["efeitos"]}\n'
+                 f'Cartas adicionais: {counts["cartas_extras"]}\n'
+                 f'Pendências: {len(pending)}\n\n'
+                 + ('\n'.join(pending[:7]) if pending else 'Nenhuma pendência identificada.')
+                 + f'\n\nRelatório: {dest}')
+        messagebox.showinfo('Compatibilidade de conteúdo com PS1',summary,parent=self)
+        self._update_status(f'Auditoria PS1: {len(pending)} pendências no projeto.')
+
     def build_disc(self):
         if self._extract_running or not self._ensure_project():
             return
@@ -1513,10 +1541,13 @@ class Studio(tk.Tk):
             filetypes=[('PlayStation BIN/CUE', '*.bin *.cue'), ('Todos arquivos', '*.*')], parent=self)
         if not source:
             return
+        from .ps1_compat import audit
+        report=audit(self.project)
+        pending=report['pendente_de_motor']
         question = ('Será criada uma NOVA cópia do disco, sem modificar o original.\n\n'
-                    'Apenas atributos de cartas existentes podem ser gravados no SLUS.\n'
-                    'Cemitério, ataques no primeiro turno e auras ainda não funcionam no PS1.\n\n'
-                    'Continuar?')
+                    'Compatível para teste: estatísticas, textos curtos e artes em paleta original.\n'
+                    f'PENDÊNCIAS DE MOTOR: {len(pending)}. Novos efeitos, cartas extras e cores de nomes NÃO serão aplicados.\n\n'
+                    + ('\n'.join(pending[:3]) + '\n\n' if pending else '') + 'Gerar somente a cópia parcial de teste?')
         if not messagebox.askyesno('Gerar cópia de teste', question, parent=self):
             return
         try:
@@ -1529,7 +1560,9 @@ class Studio(tk.Tk):
             f'BIN: {manifest["bin"]}\nCUE: {manifest["cue"]}\n'
             f'Setores modificados: {manifest["setores_modificados"]}\n\n'
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
-            'Os efeitos permanecem somente no Studio.', parent=self)
+            f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
+            f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
+            'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status('Cópia BIN/CUE de teste criada em exportacao/teste_ps1.')
 
     def check_updates(self):

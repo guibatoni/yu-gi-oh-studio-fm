@@ -1,3 +1,10 @@
+## v1.1.0 — BIN/CUE parcial: atributos, textos curtos e artes
+- Novo relatório de compatibilidade por projeto, com recursos de motor pendentes explicitados.
+- Grava nomes e descrições que cabem no espaço original e usam glifos/códigos F8 nativos.
+- Regrava arte 102×96 e miniatura 40×32 das cartas existentes com paleta original.
+- Altera apenas setores ISO9660 conhecidos; EDC/ECC refeito, hashes e releitura verificados.
+- Todos os recursos que dependem de MIPS (cartas extras, God, efeitos, novos ícones) permanecem somente no Studio.
+
 ## v1.0.2 — Raridades/classes e cores automáticas do nome
 - Criaturas: Comum (cinza claro), Incomum (branco), Rara (amarelo), Épica (roxo), Lendária (vermelho), Deus (azul-marinho).
 - Magic (verde), Trap (rosa), Equip (azul) e tipo God (azul-marinho) têm cor automática pela categoria.

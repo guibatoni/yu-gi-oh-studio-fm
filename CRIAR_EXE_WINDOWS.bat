@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-python -m pip install --upgrade pyinstaller
+python -m pip install --upgrade pyinstaller pillow
 if errorlevel 1 goto :erro
 python -m PyInstaller --noconfirm --clean --onefile --windowed --name "FM-Mod-Studio" app.py
 if errorlevel 1 goto :erro

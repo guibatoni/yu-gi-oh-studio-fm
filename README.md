@@ -23,11 +23,11 @@ A cada commit novo na branch `main`, o workflow de Windows compila e publica o R
 
 **Não há patch jogável de efeitos no PS1 nesta versão:** os efeitos funcionam no simulador do editor.
 
-# Yu-Gi-Oh Studio Card FM v1.0.3 — Editor visual de Forbidden Memories (PS1)
+# Yu-Gi-Oh Studio Card FM v1.1.0 — Exportação experimental para PS1
 
-Editor gráfico para **Windows**, em português, para criar projetos de MOD de *Yu-Gi-Oh! Forbidden Memories* sem alterar sua imagem original. Desenvolvido em Python/Tkinter e sem dependências externas para executar.
+Editor gráfico Windows para criar MODs de *Yu-Gi-Oh! Forbidden Memories*. **Status real:** o Studio mantém um simulador para habilidades novas. A v1.1.0 amplia a geração BIN/CUE parcial para incluir **atributos, nomes curtos, descrições curtas com ícones e cores nativos, artes e miniaturas** de cartas #1..#722, com validação de origem. Isso **não** implementa as habilidades customizadas nem cartas #723+ no motor do PS1. Veja `docs/COMPAT_PS1.md`.
 
-**Status real:** editor funcional. A v1.0.3 gera cópia BIN/CUE experimental somente de estatísticas (não de efeitos). Estatísticas podem ser exportadas em uma cópia auxiliar do `SLUS_014.11`; os efeitos personalizados são **planejados e simulados no editor**, não executados pelo motor de PS1. Nomes/descrições também são metadados até termos o encoder de texto do jogo. Esta distinção é intencional para evitar corromper sua imagem X15.
+O app usa Python/Tkinter para interface. A gravação de artes na cópia de disco requer **Pillow**, incluído no executável Windows criado pelo GitHub Actions. Se estiver executando via Python, instale com `python -m pip install pillow` quando for gerar artes.
 
 ## Abrir o aplicativo
 
@@ -39,9 +39,9 @@ Editor gráfico para **Windows**, em português, para criar projetos de MOD de *
    `D:\Downloads\FM_Original_PS1_v0.1.0_Kit_Desenvolvimento\analysis\tabelas`
 
    Precisa conter `cartas.csv` e `fusoes.csv`. A importação leva também outras tabelas presentes na mesma pasta. Se preferir, use **Importar BIN / CUE** e selecione sua cópia do jogo; o aplicativo fará a extração diretamente.
-5. Clique nas cartas e edite livremente. **Não aparece mais pergunta de salvamento ao trocar de carta.** Os valores ficam pendentes na memória, inclusive se você visitar outras abas. Escolha uma cor em **Cor do nome** para colorir a prévia e a biblioteca. Ao terminar, clique em **Salvar projeto** (ou `Ctrl+S`) para gravar todas as cartas e efeitos de uma vez com backup.
+5. Clique nas cartas e edite livremente. **Não aparece mais pergunta de salvamento ao trocar de carta.** Os valores ficam pendentes na memória, inclusive se você visitar outras abas. Escolha uma classe de **Raridade** para colorir a prévia e a biblioteca (não modifica o renderizador do PS1). Ao terminar, clique em **Salvar projeto** (ou `Ctrl+S`) para gravar todas as cartas e efeitos de uma vez com backup.
 6. Na aba **Efeitos**, selecione **+ Adicionar efeito**. Exemplo: `Ao invocar` → `Aumentar ATK` → `Próprio monstro` → `500`; experimente no **Simulador**.
-7. Opcionalmente, use **Importar arte PNG (prévia)** para associar uma imagem local à carta. Ela não será gravada no PS1.
+7. Opcionalmente, use **Importar arte PNG (prévia)** para associar uma imagem local à carta. Ela poderá ser gravada em uma cópia BIN/CUE experimental, desde que a origem WA_MRG.MRG esteja validada e a carta esteja entre #1 e #722.
 8. Na aba **Fusões originais**, veja as fusões relacionadas à carta. As receitas são **somente leitura** e preservadas com verificação de hash.
 9. Use **Salvar projeto** antes de **Exportar alterações**. Abra a pasta `exportacao/` criada dentro de seu projeto.
 
@@ -55,17 +55,17 @@ Antes de permitir alterações binárias, o programa verifica todos os 722 regis
 
 ### O que é editável hoje
 
-| Recurso | Estado na v1.0.3 |
+| Recurso | Estado na v1.1.0 |
 |---|---|
 | Buscar as 722 cartas | Funcional por número e nome personalizado |
 | ATK / DEF | Editável, valida múltiplos de 10 e pode gerar SLUS auxiliar |
 | Tipo / atributo / nível / estrelas guardiãs | Editáveis, exportáveis em SLUS auxiliar |
-| Nome / descrição / cor do nome | Editável como metadado; cor em prévia e biblioteca, **sem gravação no jogo** |
-| Arte PNG | Importação e prévia local; **sem gravação no jogo** |
+| Nome / descrição / cor do nome | Nomes e descrições **curtos** graváveis sob guarda de slot e fonte original; classe/cor de nome continuam só no Studio |
+| Arte PNG | Gravável em BIN/CUE de teste para #1..#722, usando paleta original e WA hash verificado |
 | Eventos/efeitos | Edição pendente até salvar, simulação local; **sem execução no jogo** |
 | Fusões | Consultáveis, preservadas; **não editáveis** |
 | Importar `.BIN/.CUE` ou CSVs | Funcional para estrutura alvo `SLUS-01411`, sujeita a modificação X15 |
-| Exportar BIN/CUE para teste de estatísticas | **Experimental v1.0.3; depende de validar no ePSXe real** |
+| Exportar BIN/CUE de teste | **Experimental v1.1.0: atributos, textos curtos e artes; depende de validar no ePSXe real** |
 | Gerar EXE Windows | Script fornecido; o ZIP **não contém EXE pré-compilado** |
 
 ### O que há na pasta `exportacao/`
@@ -215,3 +215,12 @@ python .\tools\gerar_bin_teste.py --projeto "D:\MeusMods\MeuMod" --bin "D:\Roms\
 ```
 
 **Importante:** o gerador nunca modifica nem distribui a ROM original.
+
+
+## v1.1.0 — Compatibilidade experimental do BIN/CUE
+
+- O botão **Compatibilidade PS1** produz `exportacao/compatibilidade_ps1.json`, com uma matriz de recursos suportados e pendências de motor.
+- O botão **Gerar BIN/CUE de teste** pode alterar, com proteções, estatísticas, nomes/descrições curtos e imagens de cartas originais.
+- O motor PS1 não foi expandido: novas cartas, God, auras, imunidades, ataques múltiplos, ícones personalizados, raridades e demais habilidades continuam apenas no editor e laboratório.
+- As fusões permanecem imutáveis e a imagem original nunca é sobrescrita.
+- Consulte `docs/COMPAT_PS1.md` antes de testar qualquer imagem no ePSXe.

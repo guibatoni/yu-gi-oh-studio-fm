@@ -83,100 +83,167 @@ def regenerate_form1(sector: bytes) -> bytes:
     return bytes(out)
 
 
-def build_test_disc(project, source_image: Path) -> dict:
-    """Copia o BIN original, altera só o executável e verifica o resultado.
+def _write_file_patches(out, entry, original: bytes, patched: bytes) -> list[int]:
+    """Atualiza arquivo ISO9660 in-place; tamanho e bytes-base devem coincidir."""
+    if len(original) != entry.size or len(patched) != entry.size:
+        raise ModError(f'{entry.path}: alteração de tamanho não é permitida.')
+    changed=[]
+    for i in range((entry.size + PAYLOAD-1)//PAYLOAD):
+        start=i*PAYLOAD
+        before=original[start:start+PAYLOAD]
+        after=patched[start:start+PAYLOAD]
+        if before == after: continue
+        lba=entry.extent+i
+        out.seek(lba*RAW_SECTOR)
+        raw=out.read(RAW_SECTOR)
+        if len(raw)!=RAW_SECTOR or raw[24:24+len(before)]!=before:
+            raise ModError(f'{entry.path} não coincide com bytes extraídos no LBA {lba}.')
+        fixed=bytearray(raw)
+        fixed[24:24+len(after)]=after
+        out.seek(lba*RAW_SECTOR)
+        out.write(regenerate_form1(bytes(fixed)))
+        changed.append(lba)
+    return changed
 
-    Não executa se o executável de origem diferir daquele importado no projeto.
-    O usuário pode selecionar .cue com uma única trilha MODE2/2352.
+
+def build_test_disc(project, source_image: Path, *, require_complete: bool=False) -> dict:
+    """Cópia segura de BIN com atributos e, quando compatíveis, nomes e imagens.
+
+    Para exigir todos os efeitos e cartas extras, use require_complete=True. Isso
+    bloqueará construções parciais ao invés de publicar uma imagem enganosa.
     """
-    source_image = Path(source_image).resolve()
+    source_image=Path(source_image).resolve()
     try:
         with DiscReader(source_image) as reader:
-            if reader.mode != 'MODE2/2352':
-                raise ModError('Para preservar XA, use a imagem original MODE2/2352 (.bin/.cue).')
-            original_bin = reader.path.resolve()
-            entries = [v for v in reader.files() if not v.is_dir and v.path.upper() == 'SLUS_014.11']
-            if len(entries) != 1:
-                raise ModError('SLUS_014.11 não encontrado ou duplicado na imagem.')
-            exe = entries[0]
-            original_exe = b''.join(reader.read_entry(exe))
+            if reader.mode!='MODE2/2352':
+                raise ModError('Use BIN/CUE original MODE2/2352 para preservar XA/MDEC.')
+            original_bin=reader.path.resolve()
+            entries={e.path.upper():e for e in reader.files() if not e.is_dir}
+            exe=entries.get('SLUS_014.11')
+            if exe is None:
+                raise ModError('SLUS_014.11 não encontrado na imagem.')
+            original_exe=b''.join(reader.read_entry(exe))
+            wa_entry=entries.get('DATA/WA_MRG.MRG')
+            # WA só é lido quando houver artes vinculadas.
+            requested_art={int(k):v for k,v in getattr(project,'arts',{}).items() if int(k)<=722}
+            original_wa=b''.join(reader.read_entry(wa_entry)) if requested_art and wa_entry else None
     except DiscError as exc:
         raise ModError(f'Imagem original inválida: {exc}') from exc
 
-    expected = project.metadata.get('base_sha256', {}).get('slus')
-    if not expected or hashlib.sha256(original_exe).hexdigest() != expected:
-        raise ModError('O SLUS do disco informado não corresponde à base salva no projeto. '
-                       'Selecione exatamente o BIN/CUE utilizado para extrair os dados.')
-    output, manifest = project.export()
-    if not manifest.get('slus_modificado_sha256'):
-        raise ModError('Não há alteração de estatísticas compatível com o PS1. '
-                       'Para testar a geração do BIN, modifique ATK/DEF de uma carta original e salve.')
-    patched_exe = (output / 'build_local' / 'SLUS_014.11').read_bytes()
-    if len(patched_exe) != exe.size or len(original_exe) != exe.size:
-        raise ModError('O executável mudou de tamanho; não é seguro substituir setores.')
-    if hashlib.sha256(patched_exe).hexdigest() != manifest['slus_modificado_sha256']:
-        raise ModError('O hash do executável modificado não corresponde ao manifesto.')
-    if patched_exe == original_exe:
-        raise ModError('Nenhuma diferença foi aplicada ao executável.')
+    expected=getattr(project,'metadata',{}).get('base_sha256',{}).get('slus')
+    if not expected or hashlib.sha256(original_exe).hexdigest()!=expected:
+        raise ModError('SLUS da imagem não corresponde ao executável vinculado ao projeto.')
 
-    base = output / 'teste_ps1'
-    base.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')
-    bin_file = base / f'FM_STUDIO_TESTE_{stamp}.bin'
-    cue_file = bin_file.with_suffix('.cue')
-    meta_file = bin_file.with_suffix('.json')
-    temp = bin_file.with_suffix('.bin.tmp')
-    if original_bin == bin_file.resolve() or original_bin == temp.resolve():
-        raise ModError('Não é permitido substituir o arquivo original.')
-    changed_sectors = []
-    total_sectors = (exe.size + PAYLOAD - 1) // PAYLOAD
+    audit_report=None
+    if hasattr(project,'edits') and hasattr(project,'new_cards'):
+        from .ps1_compat import audit
+        audit_report=audit(project)
+        if require_complete and audit_report['pendente_de_motor']:
+            raise ModError('Build completo bloqueado: recursos ainda sem suporte PS1. Consulte compatibilidade_ps1.json.')
+
+    output, manifest=project.export()
+    source_patched=(output/'build_local'/'SLUS_014.11')
+    if manifest.get('slus_modificado_sha256') and source_patched.is_file():
+        patched_exe=source_patched.read_bytes()
+        if hashlib.sha256(patched_exe).hexdigest()!=manifest['slus_modificado_sha256']:
+            raise ModError('Executável exportado não coincide com o manifesto SHA-256.')
+    else:
+        patched_exe=original_exe
+    if len(patched_exe)!=exe.size:
+        raise ModError('Executável mudou de tamanho; gravação de disco bloqueada.')
+    written_names=[];written_descriptions=[]
+    if hasattr(project,'edits'):
+        from .ps1_content import patch_names
+        edits={int(cid):project.get(int(cid)).get('nome','') for cid,rows in project.edits.items()
+               if 'nome' in rows and int(cid)<=722}
+        # Nomes que não cabem ficam apenas no projeto; cada tentativa gera
+        # relatório separado sem gravar parcialmente uma string inválida.
+        for cid,name in sorted(edits.items()):
+            try:
+                patched_exe,items=patch_names(patched_exe,{cid:name})
+                written_names.extend(items)
+            except ModError:
+                continue
+
+    if hasattr(project,'edits'):
+        from .ps1_content import patch_descriptions
+        texts={int(cid):project.get(int(cid)).get('descricao','') for cid,rows in project.edits.items()
+               if 'descricao' in rows and int(cid)<=722}
+        catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
+        for cid,desc in sorted(texts.items()):
+            try:
+                patched_exe,items=patch_descriptions(patched_exe,{cid:desc},catalog)
+                written_descriptions.extend(items)
+            except ModError:
+                continue
+
+    written_arts=[]
+    patched_wa=None
+    if requested_art:
+        if original_wa is None or wa_entry is None:
+            raise ModError('DATA/WA_MRG.MRG não encontrado para aplicar artes.')
+        provenance=project.folder/'base'/'resumo.json'
+        from_original=''
+        if provenance.is_file():
+            from_original=(json.loads(provenance.read_text(encoding='utf-8')).get('source_sha256') or {}).get('DATA/WA_MRG.MRG','')
+        if not from_original or hashlib.sha256(original_wa).hexdigest()!=from_original:
+            raise ModError('Artes não podem ser gravadas: hash de WA_MRG.MRG ausente ou divergente. '
+                           'Reimporte os dados da mesma imagem para fixar a origem.')
+        from .ps1_content import patch_card_art
+        patched_wa=original_wa
+        for cid,rel in sorted(requested_art.items()):
+            # Só aceita o caminho cadastrado no projeto; evita leitura externa.
+            path=(project.folder/rel).resolve()
+            if not path.is_relative_to(project.folder.resolve()):
+                raise ModError('Referência de arte fora da pasta do projeto.')
+            if not path.is_file():
+                raise ModError(f'PNG não encontrado para carta #{cid}: {path.name}')
+            patched_wa,regions=patch_card_art(patched_wa,cid,path)
+            written_arts.extend(regions)
+
+    if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
+        raise ModError('Nenhuma alteração gravável no PS1 foi encontrada. '
+                       'Efeitos, cartas extras e cores de nome ainda não estão implementados no motor.')
+
+    base=output/'teste_ps1';base.mkdir(parents=True,exist_ok=True)
+    stamp=datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')
+    bin_file=base/f'FM_STUDIO_TESTE_{stamp}.bin';cue_file=bin_file.with_suffix('.cue')
+    meta_file=bin_file.with_suffix('.json');temp=bin_file.with_suffix('.bin.tmp')
+    if original_bin in (bin_file.resolve(),temp.resolve()):
+        raise ModError('Jamais sobrescrever a imagem original.')
+    changed=[]
     try:
-        with original_bin.open('rb') as src, temp.open('wb') as dst:
-            shutil.copyfileobj(src, dst, 8 * 1024 * 1024)
-        if temp.stat().st_size != original_bin.stat().st_size:
-            raise ModError('Cópia do disco incompleta; a imagem de saída foi descartada.')
+        with original_bin.open('rb') as src,temp.open('wb') as dst:
+            shutil.copyfileobj(src,dst,8*1024*1024)
+        if temp.stat().st_size!=original_bin.stat().st_size:
+            raise ModError('Cópia do disco incompleta.')
         with temp.open('r+b') as out:
-            for i in range(total_sectors):
-                start = i * PAYLOAD
-                length = min(PAYLOAD, exe.size - start)
-                previous = original_exe[start:start+length]
-                current = patched_exe[start:start+length]
-                if previous == current:
-                    continue
-                lba = exe.extent + i
-                out.seek(lba * RAW_SECTOR)
-                raw = out.read(RAW_SECTOR)
-                if len(raw) != RAW_SECTOR or raw[24:24+length] != previous:
-                    raise ModError(f'Setor de origem LBA {lba} não coincide com o executável extraído.')
-                if raw[18] & 0x20:
-                    raise ModError('Encontrado Form2 dentro de SLUS; cópia abortada.')
-                updated = bytearray(raw)
-                updated[24:24+length] = current
-                updated = regenerate_form1(updated)
-                out.seek(lba * RAW_SECTOR)
-                out.write(updated)
-                changed_sectors.append(lba)
+            changed+=_write_file_patches(out,exe,original_exe,patched_exe)
+            if patched_wa is not None and patched_wa!=original_wa:
+                changed+=_write_file_patches(out,wa_entry,original_wa,patched_wa)
         temp.replace(bin_file)
-        # Releitura independente usando o mesmo leitor de arquivos ISO9660.
+        # Reabrir imagem e comparar a extração ISO9660 com os bytes esperados.
         with DiscReader(bin_file) as verify:
-            files = [e for e in verify.files() if not e.is_dir and e.path.upper() == 'SLUS_014.11']
-            if len(files) != 1 or b''.join(verify.read_entry(files[0])) != patched_exe:
-                raise ModError('Verificação após construção falhou; disco de teste descartado.')
-        cue_file.write_text(f'FILE "{bin_file.name}" BINARY\n'
-                            '  TRACK 01 MODE2/2352\n'
-                            '    INDEX 01 00:00:00\n', encoding='ascii')
-        result = {'formato':'MODE2/2352', 'status':'ESTATISTICAS_PS1_SOMENTE',
-                  'bin':str(bin_file), 'cue':str(cue_file),
-                  'sha256_slus_original':hashlib.sha256(original_exe).hexdigest(),
-                  'sha256_slus_modificado':hashlib.sha256(patched_exe).hexdigest(),
-                  'setores_modificados':len(changed_sectors), 'lbas':changed_sectors,
-                  'tamanho_bin':bin_file.stat().st_size,
-                  'aviso':'Habilidades, auras, cemitério, ícones, cores, nomes e cartas extras NÃO executam no PS1.'}
-        meta_file.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding='utf-8')
+            files={e.path.upper():e for e in verify.files() if not e.is_dir}
+            if b''.join(verify.read_entry(files['SLUS_014.11']))!=patched_exe:
+                raise ModError('SLUS não corresponde após reempacotamento.')
+            if patched_wa is not None and b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))!=patched_wa:
+                raise ModError('Artes em WA não correspondem após reempacotamento.')
+        cue_file.write_text(f'FILE "{bin_file.name}" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n',encoding='ascii')
+        status='PS1_PARCIAL_ATRIBUTOS_TEXTOS_ARTES'
+        result={'formato':'MODE2/2352','status':status,'bin':str(bin_file),'cue':str(cue_file),
+                'sha256_slus_original':hashlib.sha256(original_exe).hexdigest(),
+                'sha256_slus_modificado':hashlib.sha256(patched_exe).hexdigest(),
+                'setores_modificados':len(changed),'lbas':sorted(changed),
+                'nomes_aplicados':written_names,'descricoes_aplicadas':written_descriptions,'artes_aplicadas':written_arts,
+                'tamanho_bin':bin_file.stat().st_size,
+                'recursos_pendentes':audit_report['pendente_de_motor'] if audit_report else [],
+                'aviso':'Cópia experimental. Apenas atributos, textos curtos originais e artes de paleta fixa. NÃO inclui novos efeitos, cartas extras, fontes personalizadas nem raridades no PS1.'}
+        meta_file.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+        if audit_report:
+            (output/'compatibilidade_ps1.json').write_text(json.dumps(audit_report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         return result
     except Exception:
-        temp.unlink(missing_ok=True)
-        bin_file.unlink(missing_ok=True)
-        cue_file.unlink(missing_ok=True)
-        meta_file.unlink(missing_ok=True)
+        temp.unlink(missing_ok=True);bin_file.unlink(missing_ok=True)
+        cue_file.unlink(missing_ok=True);meta_file.unlink(missing_ok=True)
         raise

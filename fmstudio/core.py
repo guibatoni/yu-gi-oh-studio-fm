@@ -432,6 +432,16 @@ class Project:
             expected=(summary.get('source_sha256') or {}).get('DATA/WA_MRG.MRG')
             if expected and expected.lower()!=hashlib.sha256(wa).hexdigest():
                 raise ModError('WA_MRG.MRG diferente do arquivo usado para extrair as tabelas. Imagem não misturada.')
+            if not expected and self.fusions:
+                # Projeto importado de CSV: só associar hash do WA se as
+                # receitas da imagem candidata forem IDÊNTICAS às do projeto.
+                live,_warnings=decode_all(slus,wa)
+                columns=('material_1','material_2','resultado','possivel_glitch')
+                imported=sorted(tuple(str(row.get(key,'')) for key in columns) for row in self.fusions)
+                extracted=sorted(tuple(str(row.get(key,'')) for key in columns) for row in live['fusoes'])
+                if imported!=extracted:
+                    raise ModError('WA_MRG.MRG da imagem diverge das fusões originais do projeto. '
+                                   'Importação bloqueada para evitar misturar MODs.')
         if progress:progress('Decodificando nomes, descrições, diálogos e demais textos...')
         results,warnings=extract_texts(slus)
         base=self.folder/'base'
@@ -490,6 +500,17 @@ class Project:
             stats['enriquecimento_cartas']=enrichment
             (target/'relatorio_completo.json').write_text(json.dumps(stats,ensure_ascii=False,indent=2),encoding='utf-8')
             self._load_base()
+            # A extração completa verificou SLUS e WA; registrar a origem
+            # mesmo quando o projeto veio inicialmente de CSVs sem hashes.
+            summary_file=base/'resumo.json'
+            summary=json.loads(summary_file.read_text(encoding='utf-8')) if summary_file.exists() else {}
+            hashes=summary.setdefault('source_sha256',{})
+            hashes['SLUS_014.11']=hashlib.sha256(slus).hexdigest()
+            hashes['DATA/WA_MRG.MRG']=hashlib.sha256(wa).hexdigest()
+            _write_json_atomic(summary_file,summary)
+            original_slus=base/'source_SLUS_014.11'
+            if not original_slus.exists():original_slus.write_bytes(slus)
+            self.metadata['base_sha256']['slus']=hashes['SLUS_014.11']
             self.metadata['base_sha256']['cartas']=sha256(base/'cartas.csv')
             self.metadata['deep_extraction']={'completed':_timestamp(),'results_path':str(target),
                 'names':metrics['nomes_cartas'],'descriptions':metrics['descricoes_cartas'],
