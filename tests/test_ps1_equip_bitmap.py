@@ -64,7 +64,7 @@ class EquipBitmapTests(unittest.TestCase):
     def test_legacy_extension_fails_but_bitmap_addition_preserves_other_bytes(self):
         exe, wa = fake_exe(), fake_wa()
         with self.assertRaisesRegex(ModError, 'insuficiente'):
-            patch_equipment_targets(wa, {str(EQUIP_ID): [MONSTER]})
+            patch_equipment_targets(wa, {'650': [7]})
         layout = inspect_bitmap_equips(exe, wa, {str(EQUIP_ID):[MONSTER]})
         self.assertEqual(layout['offset_equip'], BITMAP_OFFSET)
         patched, entries = patch_bitmap_equips(exe, wa, {str(EQUIP_ID):[MONSTER]})
