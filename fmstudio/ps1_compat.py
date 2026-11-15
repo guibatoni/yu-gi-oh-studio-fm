@@ -25,7 +25,8 @@ def audit(project) -> dict:
         except (ValueError,OSError):
             pass
     counts={'estatisticas':0,'nomes':0,'artes':0,'efeitos':0,'cartas_extras':len(project.new_cards),
-            'descricoes':0,'classes_cores':0,'icones_especiais':0,'equipamentos_ps1':0,'equip_substituicoes':0}
+            'descricoes':0,'classes_cores':0,'icones_especiais':0,'equipamentos_ps1':0,'equip_substituicoes':0,
+            'rituais_ps1':0,'armadilhas_ps1':0,'terrenos_ps1':0}
     blocked=[]; supported=[]
     for key,edits in sorted(project.edits.items(),key=lambda item:int(item[0])):
         cid=int(key); current=project.get(cid)
@@ -96,6 +97,36 @@ def audit(project) -> dict:
                 supported.append(f'{counts["equipamentos_ps1"]} alvo(s) de Equip a testar (bitmap MIPS automático se identificado; senão tabela stock)')
             else:
                 blocked.append('Equipamentos PS1: importe BIN/CUE para registrar hashes SLUS e WA_MRG.')
+    rituals=project.metadata.get('ps1_ritual_recipes',{})
+    traps=project.metadata.get('ps1_trap_thresholds',{})
+    terrain=project.metadata.get('ps1_terrain_boosts',{})
+    from .ps1_native import patch_trap_thresholds, patch_terrain_boosts
+    if rituals:
+        counts['rituais_ps1']=len(rituals)
+        if known and wa_pinned:
+            supported.append(f'{len(rituals)} receita(s) de Ritual na tabela PS1 original')
+        else:
+            blocked.append('Rituais: SLUS e WA_MRG de origem precisam estar verificados')
+    if traps:
+        counts['armadilhas_ps1']=len(traps)
+        if known:
+            try:
+                patch_trap_thresholds(exe,traps)
+                supported.append(f'{len(traps)} limiar(es) de Trap original de ataque')
+            except ModError as exc:
+                blocked.append(f'Armadilhas PS1: {exc}')
+        else:
+            blocked.append('Armadilhas: SLUS original precisa ser verificado')
+    if terrain:
+        counts['terrenos_ps1']=len(terrain)
+        if known:
+            try:
+                patch_terrain_boosts(exe,terrain)
+                supported.append(f'{len(terrain)} bônus de campo por tipo na tabela PS1')
+            except ModError as exc:
+                blocked.append(f'Campo PS1: {exc}')
+        else:
+            blocked.append('Campos: SLUS original precisa ser verificado')
     for key,items in project.effects.items():
         if items:
             counts['efeitos']+=len(items)
@@ -117,12 +148,15 @@ def audit(project) -> dict:
         'tipo_god':'PENDENTE_MIPS_UI',
         'buffs_auras_cemiterio':'PENDENTE_MIPS_EVENTOS',
         'equipamentos_imunidades':'PENDENTE_MIPS_REGRAS; alvos de Equip stock podem ser gravados',
+        'rituais_tres_tributos_originais':'gravavel_na_tabela_WA_SEM_NOVOS_IDS',
+        'armadilhas_ataque_681_686':'gravavel_no_SLUS_SE_TABELA_RETAIL',
+        'bonus_terreno_tipo':'gravavel_no_SLUS_SE_TABELA_RETAIL',
         'ataque_2x_3x_piercing_haste':'PENDENTE_MIPS_COMBATE',
         'decks_e_regras_de_copias':'PENDENTE_MIPS_DECKBUILDER',
         'descarte_e_dano_a_monstros':'PENDENTE_NOVAS_REGRAS',
       },
       'pendente_de_motor':blocked,
-      'observacao':'BIN/CUE gerado é build parcial, NUNCA valida efeitos ou novas cartas como jogáveis.',
+      'observacao':'BIN/CUE gerado implementa algumas regras nativas (Equip, Ritual, Trap e terreno); efeitos personalizados inéditos e novas cartas seguem somente no Studio até patch MIPS comprovado.',
     }
 
 
