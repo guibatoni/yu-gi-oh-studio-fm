@@ -14,6 +14,7 @@ from .tables import TYPE_NAMES, ATTR_NAMES, STAR_NAMES
 from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
 from .abilities import QUICK_ACTIONS, BOOLEAN_ACTIONS, quick_settings
 from . import __version__
+from .rarities import RARITIES, DEFAULT_RARITY, name_style, rarity_options
 from .expanded import display_name, bonus_description, resolve_references
 from .richtext import NATIVE_ICONS, CUSTOM_ICONS, TEXT_COLORS, tokens
 from .updates import read_latest, start_updater, UpdateError
@@ -489,6 +490,8 @@ class Studio(tk.Tk):
         self.preview.pack(side='left',anchor='n',padx=(0,22))
         self.preview.create_rectangle(7,7,251,303,outline='#e0b962',width=3)
         self.preview_name=self.preview.create_text(129,35,text='NENHUMA CARTA',fill='#f1cf6e',font=('Segoe UI',12,'bold'),width=222)
+        self.preview_name_plate=self.preview.create_rectangle(13,13,244,57,fill='#EAF0FA',outline='',state='hidden')
+        self.preview.tag_lower(self.preview_name_plate,self.preview_name)
         self.preview.create_rectangle(22,64,236,202,fill='#111928',outline='#796d59')
         self.art_placeholder = self.preview.create_text(129,134,text='ARTE DA CARTA\n(NÃO IMPORTADA)',fill='#7589a9',font=('Segoe UI',10),justify='center')
         self.art_image = self.preview.create_image(129,134,image=None)
@@ -516,14 +519,22 @@ class Studio(tk.Tk):
         self._form_entry(right,'Guardian Star 2','guardian_2_id',3,kind='star')
         color_line = tk.Frame(form,bg=BG)
         color_line.pack(fill='x',pady=(10,0))
+        # cor_nome permanece no esquema para compatibilidade com projetos antigos;
+        # o usuário agora seleciona uma classe, nunca digita uma cor RGB.
         self.vars['cor_nome'] = tk.StringVar(value=DEFAULT_NAME_COLOR)
-        tk.Label(color_line,text='Cor do nome:',bg=BG,fg=TEXT).pack(side='left',padx=(0,8))
-        self.color_sample = tk.Label(color_line,text='   ■   ',bg=BG,fg=DEFAULT_NAME_COLOR,font=('Segoe UI',13,'bold'))
+        self.vars['raridade'] = tk.StringVar(value=f'{DEFAULT_RARITY} — {RARITIES[DEFAULT_RARITY][0]}')
+        tk.Label(color_line,text='Raridade:',bg=BG,fg=TEXT).pack(side='left',padx=(0,8))
+        self.rarity_combo=ttk.Combobox(color_line,values=rarity_options(),
+                                      textvariable=self.vars['raridade'],state='readonly',width=22)
+        self.rarity_combo.pack(side='left',padx=(0,8))
+        self.color_sample=tk.Label(color_line,text='  ■  ',bg=BG,fg=RARITIES[DEFAULT_RARITY][1],
+                                   font=('Segoe UI',13,'bold'))
         self.color_sample.pack(side='left')
-        ttk.Button(color_line,text='Escolher cor',command=self.choose_name_color).pack(side='left',padx=(6,5))
-        ttk.Button(color_line,text='Cor padrão',command=lambda:self.vars['cor_nome'].set(DEFAULT_NAME_COLOR)).pack(side='left')
-        tk.Label(form,text='A cor aparece na prévia e na biblioteca; ainda não é aplicada no PS1.',
-                 bg=BG,fg=MUTED,font=('Segoe UI',9),wraplength=465,justify='left').pack(anchor='w',pady=(4,0))
+        self.class_caption=tk.Label(form,text='Classe: Comum',bg=BG,fg=MUTED,font=('Segoe UI',9))
+        self.class_caption.pack(anchor='w',pady=(5,0))
+        tk.Label(form,text='Magic: verde • Trap: rosa • Equip: azul • God: azul-marinho. '
+                           'A escolha vale para nomes no Studio; o PS1 ainda não foi modificado.',
+                 bg=BG,fg=MUTED,font=('Segoe UI',9),wraplength=465,justify='left').pack(anchor='w',pady=(3,0))
         ttk.Button(form,text='Importar arte PNG (prévia)',command=self.import_art).pack(anchor='w',pady=(9,0))
         tk.Label(body,text='Descrição com ícones, cores e referências a outras cartas (prévia no Studio)',bg=BG,fg=TEXT,font=('Segoe UI',10)).pack(anchor='w',pady=(12,3))
         desc_tools=ttk.Frame(body)
@@ -545,6 +556,8 @@ class Studio(tk.Tk):
         tk.Label(buttons,text='Troque de carta livremente • Ctrl+S salva tudo',bg=BG,fg=MUTED,font=('Segoe UI',9)).pack(side='right')
         for variable in self.vars.values():
             variable.trace_add('write',lambda *_: self._on_card_field_input())
+        for key in ('raridade','tipo_id'):
+            self.vars[key].trace_add('write',lambda *_: self._on_class_changed())
         self.description.bind('<<Modified>>',self._on_description_modified)
 
     def _effects_tab(self):
@@ -944,20 +957,48 @@ class Studio(tk.Tk):
             self.pending_label.configure(text=(f'● {count} carta(s) pendente(s) • clique Salvar projeto'
                 if count else '✓ Todas as edições salvas'),fg=('#edc47e' if count else ACCENT))
 
+    def _current_name_style(self):
+        try:
+            typ=int(self.vars['tipo_id'].get().split(' — ',1)[0])
+            rarity=self.vars['raridade'].get().split(' — ',1)[0]
+            return name_style({'tipo_id':typ,'raridade':rarity})
+        except (ValueError,KeyError):
+            return name_style({'tipo_id':0,'raridade':DEFAULT_RARITY})
+
+    def _apply_name_color_preview(self):
+        label,color,kind=self._current_name_style()
+        self.color_sample.configure(fg=color,bg='#ECF1FA' if kind=='deus' else BG)
+        self.class_caption.configure(text=f'Classe: {label}  •  {color}',fg=MUTED)
+        # O azul-marinho não fica legível no fundo escuro do cartão.
+        self.preview.itemconfigure(self.preview_name_plate,state='normal' if kind=='deus' else 'hidden')
+        self.preview.itemconfigure(self.preview_name,
+            text=(self.vars['nome'].get() or format_id(self.selected_id))[:42].upper(),fill=color)
+        self.rarity_combo.configure(state='disabled' if kind in ('trap','magica','equip') or
+                                    int(self.vars['tipo_id'].get().split(' — ',1)[0])==24
+                                    else 'readonly')
+        return label,color,kind
+
+    def _on_class_changed(self):
+        if self._loading or not self.drafts or not self.selected_id:
+            return
+        _label,color,_kind=self._current_name_style()
+        # O campo legado fica sincronizado quando a classe/tipo for alterado.
+        if self.vars['cor_nome'].get() != color:
+            self.vars['cor_nome'].set(color)
+        self._on_card_field_input()
+
     def _on_card_field_input(self):
         if self._loading or not self.drafts or not self.selected_id:
             return
         self._stage_current()
-        color=self.vars['cor_nome'].get()
-        self.color_sample.configure(fg=color if re.fullmatch(r'#[0-9a-fA-F]{6}',color) else DEFAULT_NAME_COLOR)
-        self.preview.itemconfigure(self.preview_name,text=(self.vars['nome'].get() or format_id(self.selected_id))[:42].upper(),
-                                   fill=color if re.fullmatch(r'#[0-9a-fA-F]{6}',color) else DEFAULT_NAME_COLOR)
+        _label,color,kind=self._apply_name_color_preview()
         # Atualização leve da linha (sem recriar a Treeview durante digitação).
         iid=str(self.selected_id)
         if self.tree.exists(iid):
             row=self.drafts.get_card(self.selected_id)
-            tag=f'nome_cor_{color.upper().lstrip("#")}' if re.fullmatch(r'#[0-9a-fA-F]{6}',color) else 'sem_cor'
-            if tag!='sem_cor':self.tree.tag_configure(tag,foreground=color)
+            tag=f'classe_{kind}'
+            self.tree.tag_configure(tag,foreground=color,
+                                    background='#EAF0FA' if kind=='deus' else SURFACE)
             self.tree.item(iid,values=(f'{self.selected_id:03d}',
                  (row.get('nome') or '(nome não extraído)') + (' •' if self.selected_id in self.drafts.cards else ''),
                  row.get('ataque',''),row.get('defesa','')),tags=(tag,))
@@ -969,19 +1010,13 @@ class Studio(tk.Tk):
             self._on_card_field_input()
             self.render_description()
 
-    def choose_name_color(self):
-        if not self.project or not self.selected_id:
-            return
-        current=self.vars['cor_nome'].get()
-        chosen=colorchooser.askcolor(color=current,title='Escolher cor do nome',parent=self)[1]
-        if chosen:
-            self.vars['cor_nome'].set(chosen.upper())
-
     def _collect_form(self):
         data={}
         for key in FIELDS:
             if key=='descricao':
                 data[key]=self.description.get('1.0','end-1c')
+            elif key=='raridade':
+                data[key]=self.vars[key].get().split(' — ',1)[0]
             elif key in ('tipo_id','atributo_id','guardian_1_id','guardian_2_id'):
                 data[key]=self.vars[key].get().split(' — ',1)[0]
             else:
@@ -1003,10 +1038,10 @@ class Studio(tk.Tk):
             if q and q not in f'{cid:03d}' and q not in title.lower() and q not in f'#{cid:03d}':
                 continue
             flag=' •' if self.drafts and cid in self.drafts.cards else (' ✎' if str(cid) in self.project.edits else '')
-            color=c.get('cor_nome',DEFAULT_NAME_COLOR)
-            tag=f'nome_cor_{str(color).upper().lstrip("#")}'
-            if re.fullmatch(r'#[0-9A-Fa-f]{6}',str(color)):
-                self.tree.tag_configure(tag, foreground=color)
+            _label,color,kind=name_style(c)
+            tag=f'classe_{kind}'
+            self.tree.tag_configure(tag,foreground=color,
+                                    background='#EAF0FA' if kind=='deus' else SURFACE)
             self.tree.insert('','end',iid=str(cid),values=(f'{cid:03d}',title+flag,c['ataque'],c['defesa']),tags=(tag,))
             count+=1
         self.count_label.configure(text=f'{count} cartas exibidas  •  {len(self.project.cards)} carregadas')
@@ -1033,7 +1068,10 @@ class Studio(tk.Tk):
         c=self.drafts.get_card(self.selected_id) if self.drafts else self.project.get(self.selected_id)
         self._loading=True
         for key in FIELDS:
-            if key=='descricao':
+            if key=='raridade':
+                rarity=c.get(key,DEFAULT_RARITY)
+                self.vars[key].set(f'{rarity} — {RARITIES[rarity][0]}')
+            elif key=='descricao':
                 self.description.delete('1.0','end')
                 self.description.insert('1.0',c.get(key,'') or '')
             elif key in ('tipo_id','atributo_id','guardian_1_id','guardian_2_id'):
@@ -1043,8 +1081,7 @@ class Studio(tk.Tk):
                 self.vars[key].set(str(c.get(key,'') or ''))
         self.description.edit_modified(False)
         self._loading=False
-        color=c.get('cor_nome',DEFAULT_NAME_COLOR)
-        self.color_sample.configure(fg=color)
+        _label,color,_kind=self._apply_name_color_preview()
         ident=format_id(self.selected_id)
         self.selected_caption.configure(text=f'{ident}  {c.get("nome") or "Nome ainda não extraído"}')
         self.preview.itemconfigure(self.preview_name,text=(c.get('nome') or ident)[:42].upper(),fill=color)

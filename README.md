@@ -162,3 +162,11 @@ O kit inclui testes automatizados com **dados totalmente sintéticos**. Dados da
 ### Migração especial do atualizador Python v0.6.x/v0.7.0 para v0.8.0
 
 Os atualizadores antigos possuem listas de segurança de arquivos permitidos que **não incluem** os dois novos módulos `fmstudio/duel_engine.py` e `fmstudio/lab_gui.py`; por isso a atualização automática pelo botão pode rejeitar este salto com "conteúdo inesperado". Essa é uma proteção, não corrompimento. **Faça a primeira instalação v0.8.0 localmente:** feche a versão antiga, extraia a v0.8.0 numa pasta separada e execute `INSTALAR_CORRECAO_NO_STUDIO_ATUAL.bat`; selecione a pasta anterior que contém `app.py`. O instalador copia os módulos novos e preserva `projetos/` e `backups/`. A partir da v0.8.0 o whitelist já inclui os novos módulos para futuras atualizações. Em instalações EXE não se aplica essa limitação de nomes de módulos porque os novos módulos vêm dentro do executável.
+
+## Classes de cartas (v1.0.2)
+
+No editor de cartas, selecione **Raridade** para monstros. A classe do nome é automática:
+Comum cinza claro; Incomum branca; Rara amarela; Épica roxa; Lendária vermelha; Deus azul-marinho.
+Quando o tipo é Magic, Trap, Equip ou God, a categoria tem precedência e a cor fica, respectivamente, verde, rosa, azul ou azul-marinho.
+No projeto o campo `raridade` é persistido; o campo `cor_nome` antigo é mantido por compatibilidade.
+A saída `classes_cartas.json` permite usar a classificação nos futuros patches, mas ainda não altera o texto do jogo PS1.

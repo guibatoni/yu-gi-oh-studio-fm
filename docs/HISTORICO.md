@@ -1,3 +1,11 @@
+## v1.0.2 — Raridades/classes e cores automáticas do nome
+- Criaturas: Comum (cinza claro), Incomum (branco), Rara (amarelo), Épica (roxo), Lendária (vermelho), Deus (azul-marinho).
+- Magic (verde), Trap (rosa), Equip (azul) e tipo God (azul-marinho) têm cor automática pela categoria.
+- Seletor de raridade substitui os botões de cor livre; biblioteca e prévia apresentam a mesma classe.
+- Projetos antigos mantêm `cor_nome` legado nos dados, e a nova classe `raridade` é salva com Ctrl+S.
+- Para legibilidade do azul-marinho, a classe Deus tem fundo claro na lista e no nome da prévia.
+- Metadados exportados em `classes_cartas.json`. Não aplica cores ao executável PS1 nem altera fusões.
+
 ## v1.0.1 — Correção do atualizador Python
 - Reconhecimento de novos módulos e ícones de fonte, mantendo rejeição de arquivos ROM, traversal e pastas do usuário.
 - Script de migração sem ZIP manual compatível com ícones em assets/icons.

@@ -4,7 +4,7 @@ Dados ficam só na memória até salvar(). Em caso de erro de validação ou IO
 nenhum rascunho é apagado. A imagem de PS1 permanece intocada.
 """
 from __future__ import annotations
-from .core import Project, FIELDS, NUMERIC, check_card_edit, check_effect, DEFAULT_NAME_COLOR
+from .core import Project, FIELDS, NUMERIC, check_card_edit, check_effect, DEFAULT_NAME_COLOR, DEFAULT_RARITY
 
 
 def same_card(a: dict, b: dict) -> bool:
@@ -60,6 +60,7 @@ class DraftSession:
         baseline.setdefault('nome', '')
         baseline.setdefault('descricao', '')
         baseline.setdefault('cor_nome', DEFAULT_NAME_COLOR)
+        baseline.setdefault('raridade', DEFAULT_RARITY)
         self.stage_card(cid, baseline)
 
     def get_effects(self, cid: int) -> list[dict]:

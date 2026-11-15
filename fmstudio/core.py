@@ -13,10 +13,11 @@ from pathlib import Path
 from .tables import (CARD_COUNT, EXE_DELTA, LEVEL_ADDR, STATS_ADDR, decode_all,
                      sha256, TYPE_NAMES, ATTR_NAMES, STAR_NAMES)
 from .disc import DiscReader, DiscError
+from .rarities import DEFAULT_RARITY, validate_rarity, name_style
 
 SCHEMA_VERSION = 1
 DEFAULT_NAME_COLOR = '#F1CF6E'  # Cor da prévia do Studio; não altera a ROM.
-FIELDS = ('nome', 'descricao', 'cor_nome', 'ataque', 'defesa', 'tipo_id', 'atributo_id', 'nivel', 'guardian_1_id', 'guardian_2_id')
+FIELDS = ('nome', 'descricao', 'cor_nome', 'raridade', 'ataque', 'defesa', 'tipo_id', 'atributo_id', 'nivel', 'guardian_1_id', 'guardian_2_id')
 NUMERIC = ('ataque', 'defesa', 'tipo_id', 'atributo_id', 'nivel', 'guardian_1_id', 'guardian_2_id')
 EVENTS = {
     'invocar': 'Ao entrar em campo', 'atacar': 'Ao atacar',
@@ -118,6 +119,11 @@ def check_card_edit(row: dict):
             if not re.fullmatch(r'#[0-9A-F]{6}', color):
                 raise ModError('cor_nome: escolha uma cor RGB válida (#RRGGBB)')
             cleaned[key] = color
+        elif key == 'raridade':
+            try:
+                cleaned[key] = validate_rarity(val)
+            except ValueError as exc:
+                raise ModError(str(exc)) from exc
         elif key in ('nome', 'descricao'):
             if len(str(val)) > (100 if key == 'nome' else 2000):
                 raise ModError(f'{key}: texto muito longo')
@@ -529,6 +535,7 @@ class Project:
         base.setdefault('nome', '')
         base.setdefault('descricao', '')
         base.setdefault('cor_nome', DEFAULT_NAME_COLOR)
+        base.setdefault('raridade', DEFAULT_RARITY)
         base.update(self.edits.get(str(cid),{}))
         return base
 
@@ -543,6 +550,7 @@ class Project:
         card = dict(source)
         card.update({'id':cid, 'nome':name or f'Nova carta {cid}',
                      'descricao':'', 'cor_nome':DEFAULT_NAME_COLOR,
+                     'raridade':DEFAULT_RARITY,
                      'modelo_base_id': int(copy_from), 'virtual':True})
         self.cards[cid] = card
         self.new_cards[str(cid)] = card
@@ -560,6 +568,7 @@ class Project:
         clean = check_card_edit(fields)
         baseline = dict(self.cards[cid])
         baseline.setdefault('cor_nome', DEFAULT_NAME_COLOR)
+        baseline.setdefault('raridade', DEFAULT_RARITY)
         diff = {}
         for k, v in clean.items():
             if k in NUMERIC:
@@ -587,6 +596,7 @@ class Project:
             cleaned = check_card_edit(values)
             base = dict(self.cards[cid])
             base.setdefault('cor_nome', DEFAULT_NAME_COLOR)
+            base.setdefault('raridade', DEFAULT_RARITY)
             diff = {k: v for k, v in cleaned.items()
                     if (int(base[k]) != v if k in NUMERIC else base.get(k, '') != v)}
             if diff:
@@ -713,6 +723,12 @@ class Project:
             if str(cid) in self.edits:
                 changes.append({'id':cid, **self.edits[str(cid)]})
         _write_json_atomic(output/'alteracoes_cartas.json', changes)
+        _write_json_atomic(output/'classes_cartas.json', {
+            str(cid): {'raridade': self.get(cid).get('raridade', DEFAULT_RARITY),
+                       'classe': name_style(self.get(cid))[0],
+                       'cor_nome': name_style(self.get(cid))[1]}
+            for cid in sorted(self.cards)
+        })
         _write_json_atomic(output/'novas_cartas.json',
                            {'status':'EDITOR_APENAS_SEM_SUPORTE_PS1', 'cartas':{str(k):self.get(int(k)) for k in self.new_cards}})
         from .richtext import native_text_only
@@ -734,7 +750,7 @@ class Project:
                     'fusoes':'ORIGINAIS_PRESERVADAS', 'cartas_editadas':len(changes),
                     'efeitos_planejados':sum(map(len,self.effects.values())),
                     'alerta':'Efeitos e textos NÃO foram implementados no motor PS1 nesta versão',
-                    'patch_jogavel':False, 'arquivos': ['alteracoes_cartas.json','novas_cartas.json','textos_e_codigos.json','efeitos_planejados.json','artes_referencia.json'],
+                    'patch_jogavel':False, 'arquivos': ['alteracoes_cartas.json','novas_cartas.json','classes_cartas.json','textos_e_codigos.json','efeitos_planejados.json','artes_referencia.json'],
                     'cartas_virtuais':len(self.new_cards), 'tipo_god_status':'EDITOR_ONLY'}
         source = self.folder/'base'/'source_SLUS_014.11'
         if source.exists() and any(row['id'] <= CARD_COUNT and any(k in NUMERIC for k in row) for row in changes):
