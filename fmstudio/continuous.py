@@ -7,7 +7,7 @@ Equipamentos permanecem anexos ao slot: status não persistem após remoção.
 from __future__ import annotations
 from collections import Counter
 
-EFFECT_ACTIONS = {'aura_tipo', 'bonus_por_tipo', 'bonus_deck_tipo', 'bonus_por_carta_id'}
+EFFECT_ACTIONS = {'aura_tipo', 'bonus_por_tipo', 'bonus_deck_tipo', 'bonus_por_carta_id', 'bonus_cemiterio_tipo'}
 EQUIPMENT_ACTIONS = {'equip_imune_armadilha', 'equip_imune_magia_armadilha',
                      'equip_indestrutivel', 'equip_atk'}
 MAX_MONSTERS_PER_SIDE = 5
@@ -18,7 +18,8 @@ SIDES = ('jogador', 'adversario')
 def resolve_field(monsters: list[dict], effects_by_card: dict, *,
                   deck_types: dict[str, Counter] | None = None,
                   equipments: list[dict] | None = None,
-                  deck_cards: dict[str, list[int]] | None = None) -> tuple[list[dict], list[dict]]:
+                  deck_cards: dict[str, list[int]] | None = None,
+                  cemetery_types: dict[str, Counter] | None = None) -> tuple[list[dict], list[dict]]:
     """Devolve novas cópias com bônus e proteções; não modifica o tabuleiro fornecido.
 
     `deck_types` é a contagem de TIPOS no deck completo configurado (incluindo
@@ -52,12 +53,14 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             'ataque_base':attack, 'defesa_base':defense,
             'ataque':attack, 'defesa':defense, 'face_up':face,
             'imune_armadilha':False, 'imune_magia':False, 'indestrutivel':False,
-            'ataques_max':1, 'perfurante':False, 'nao_bloqueavel':False})
+            'ataques_max':1, 'perfurante':False, 'nao_bloqueavel':False,
+            'ataque_primeiro_turno':False})
     index = {(m['lado'],m['slot']): m for m in field}
     counts = Counter((m['lado'],m['tipo_id']) for m in field if m['face_up'])
     by_side = Counter(m['lado'] for m in field if m['face_up'])
     deck_types = deck_types or {}
     deck_cards = deck_cards or {}
+    cemetery_types = cemetery_types or {}
     events = []
 
     def effect_set(cid):
@@ -89,11 +92,13 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
         for i, raw in enumerate(effect_set(source['card_id'])):
             action = raw.get('acao')
             if raw.get('evento') == 'continuo' and action in (
-                'ataques_multiplos', 'monstro_indestrutivel', 'monstro_imune_magia',
+                'ataques_multiplos', 'ataque_primeiro_turno', 'monstro_indestrutivel', 'monstro_imune_magia',
                 'monstro_imune_armadilha', 'dano_perfurante', 'nao_bloqueavel'):
                 eff = check_effect(raw)
                 if action == 'ataques_multiplos':
                     source['ataques_max'] = max(source['ataques_max'], eff['valor'])
+                elif action == 'ataque_primeiro_turno':
+                    source['ataque_primeiro_turno'] = True
                 elif action == 'monstro_indestrutivel':
                     source['indestrutivel'] = True
                 elif action == 'monstro_imune_magia':
@@ -121,6 +126,16 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
                      if eff.get('origem_contagem') == 'campo' else
                      sum(1 for sd in sides for cid in deck_cards.get(sd,[]) if cid == ref))
                 add_bonus(source,source,eff,n,i)
+            elif eff['acao'] == 'bonus_cemiterio_tipo':
+                typ = eff['tipo_id']
+                scope = eff.get('escopo','aliados')
+                sides = ([source['lado']] if scope == 'aliados' else
+                         [s for s in SIDES if s != source['lado']] if scope == 'inimigos'
+                         else list(SIDES))
+                n = sum(sum(cemetery_types.get(s, Counter()).values()) if typ == -1
+                        else cemetery_types.get(s, Counter()).get(typ, 0)
+                        for s in sides)
+                add_bonus(source, source, eff, n, i)
             elif eff['acao'] == 'aura_tipo':
                 targets = [m for m in field if matching(m,source,eff)]
                 for target in targets:

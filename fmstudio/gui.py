@@ -130,7 +130,7 @@ class EffectDialog(tk.Toplevel):
         if key=='acao' and action=='descartar_alvo':
             self.vars['valor'].set('1')
         required={
-            'aura_tipo':'aliados_tipo', 'bonus_por_tipo':'proprio', 'bonus_deck_tipo':'proprio',
+            'aura_tipo':'aliados_tipo', 'bonus_por_tipo':'proprio', 'bonus_deck_tipo':'proprio', 'bonus_cemiterio_tipo':'proprio',
             'cura_lp_deck_tipo':'proprio', 'dano_lp_deck_tipo':'inimigo',
             'descartar_alvo':'inimigo','dano_monstro_alvo':'monstro_alvo',
             'equip_imune_armadilha':'monstro_equipado',
@@ -155,7 +155,9 @@ class EffectDialog(tk.Toplevel):
         elif self.vars['valor'].get()=='0' and not continuous:
             self.vars['valor'].set('500' if action!='descartar_alvo' else '1')
         self.value_entry.configure(state='disabled' if protection else 'normal')
-        if action=='bonus_deck_tipo':
+        if action=='bonus_cemiterio_tipo':
+            help_text='Bônus contínuo: +X ATK e +Y DEF por cada carta do TIPO no cemitério. Atualiza quando cartas morrem ou saem do cemitério.'
+        elif action=='bonus_deck_tipo':
             help_text='Bônus contínuo X vezes o número de cartas do tipo no deck configurado (máximo 40). Não acumula a cada turno.'
         elif action in EFFECT_ACTIONS:
             help_text='Auras são recalculadas ao mudar o campo. "Todos os tipos" inclui qualquer criatura; posição e lado dependem do escopo.'
@@ -602,7 +604,7 @@ class Studio(tk.Tk):
         ttk.Entry(line,width=9,textvariable=self.quick_vars['custo_lp'],
                   validate='key',validatecommand=(validate,'%P')).pack(side='left')
         self.quick_vars['custo_lp'].trace_add('write',lambda *_:self._on_quick_changed())
-        rows=[tk.Frame(quick,bg=SURFACE),tk.Frame(quick,bg=SURFACE)]
+        rows=[tk.Frame(quick,bg=SURFACE) for _ in range(3)]
         for quick_row in rows: quick_row.pack(fill='x',pady=2)
         names={
             'monstro_indestrutivel':'Indestrutível',
@@ -611,6 +613,7 @@ class Studio(tk.Tk):
             'dano_perfurante':'Dano perfurante',
             'nao_bloqueavel':'Não bloqueável',
             'sem_limite_deck':'Sem limite de cópias',
+            'ataque_primeiro_turno':'Ataca no 1º turno',
         }
         for index,action in enumerate(BOOLEAN_ACTIONS):
             v=tk.BooleanVar(value=False)
@@ -679,8 +682,9 @@ class Studio(tk.Tk):
         buttons.pack(fill='x',pady=14)
         ttk.Button(buttons,text='Verificar integridade',command=self.verify).pack(side='left')
         ttk.Button(buttons,text='Exportar propostas e SLUS auxiliar',style='Accent.TButton',command=self.export).pack(side='left',padx=8)
+        ttk.Button(buttons,text='Gerar BIN/CUE de teste (estatísticas)',command=self.build_disc).pack(side='left',padx=8)
         tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Os efeitos ainda não são interpretados pelo jogo.\n'
-                 'Esta versão exporta os dados; a montagem segura do disco e o patch de efeitos serão desenvolvidos depois.',
+                 'Gerar BIN/CUE de teste aplica apenas atributos de cartas existentes; habilidades novas NÃO funcionam no PS1.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),justify='left',wraplength=750).pack(anchor='w',pady=(8,0))
 
     def _extract_tab(self):
@@ -1496,6 +1500,37 @@ class Studio(tk.Tk):
             f'Efeitos planejados: {manifest["efeitos_planejados"]}\n\n'
             'Fusões preservadas. O arquivo BIN/CUE jogável ainda não foi gerado; novos efeitos são somente simulações.')
         self._update_status('Exportação concluída (ainda NÃO jogável no ePSXe): '+str(folder))
+
+    def build_disc(self):
+        if self._extract_running or not self._ensure_project():
+            return
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro', 'Clique Salvar projeto antes de gerar uma cópia de teste.', parent=self)
+            return
+        source = filedialog.askopenfilename(
+            title='Selecione seu jogo original BIN/CUE',
+            filetypes=[('PlayStation BIN/CUE', '*.bin *.cue'), ('Todos arquivos', '*.*')], parent=self)
+        if not source:
+            return
+        question = ('Será criada uma NOVA cópia do disco, sem modificar o original.\n\n'
+                    'Apenas atributos de cartas existentes podem ser gravados no SLUS.\n'
+                    'Cemitério, ataques no primeiro turno e auras ainda não funcionam no PS1.\n\n'
+                    'Continuar?')
+        if not messagebox.askyesno('Gerar cópia de teste', question, parent=self):
+            return
+        try:
+            from .disc_build import build_test_disc
+            manifest = build_test_disc(self.project, Path(source))
+        except (OSError, ValueError, ModError) as exc:
+            messagebox.showerror('Não foi possível gerar BIN/CUE', str(exc), parent=self)
+            return
+        messagebox.showinfo('BIN/CUE de teste gerado',
+            f'BIN: {manifest["bin"]}\nCUE: {manifest["cue"]}\n'
+            f'Setores modificados: {manifest["setores_modificados"]}\n\n'
+            'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
+            'Os efeitos permanecem somente no Studio.', parent=self)
+        self._update_status('Cópia BIN/CUE de teste criada em exportacao/teste_ps1.')
 
     def check_updates(self):
         """Consulta GitHub Releases fora da thread da interface."""

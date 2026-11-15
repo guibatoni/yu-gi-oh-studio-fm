@@ -8,11 +8,11 @@ from __future__ import annotations
 QUICK_ACTIONS = frozenset({
     'ataques_multiplos', 'monstro_indestrutivel', 'monstro_imune_magia',
     'monstro_imune_armadilha', 'dano_perfurante', 'nao_bloqueavel',
-    'perder_lp_por_ataque', 'sem_limite_deck',
+    'perder_lp_por_ataque', 'sem_limite_deck', 'ataque_primeiro_turno',
 })
 BOOLEAN_ACTIONS = (
     'monstro_indestrutivel', 'monstro_imune_magia', 'monstro_imune_armadilha',
-    'dano_perfurante', 'nao_bloqueavel', 'sem_limite_deck',
+    'dano_perfurante', 'nao_bloqueavel', 'sem_limite_deck', 'ataque_primeiro_turno',
 )
 
 

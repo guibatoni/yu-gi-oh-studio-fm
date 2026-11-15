@@ -21,7 +21,7 @@ class AdvancedFieldDialog(tk.Toplevel):
         cards={cid:drafts.get_card(cid) for cid in project.cards}
         effects={str(cid):drafts.get_effects(cid) for cid in project.cards
                  if drafts.get_effects(cid)}
-        self.lab=DuelLab(cards,effects)
+        self.lab=DuelLab(cards,effects,summoning_delay=True)
         self.choices={'— VAZIO —':None}
         self.by_id={}
         for cid,c in sorted(cards.items()):
@@ -32,6 +32,8 @@ class AdvancedFieldDialog(tk.Toplevel):
         self.entries=[]
         self.deck_vars={}
         self.hand_vars={}
+        self.cemetery_vars={}
+        self._last_cemetery={side:'' for side in ('jogador','adversario')}
         self._last_hand={side:'' for side in ('jogador','adversario')}
         self.lp_label={}
         self.logs=[]
@@ -109,6 +111,15 @@ class AdvancedFieldDialog(tk.Toplevel):
             self.lp_label[side].pack(side='left',padx=10)
             d.trace_add('write',lambda *_:self.evaluate())
             h.trace_add('write',lambda *_:self.evaluate())
+        grave_panel=tk.Frame(host,bg=SURFACE,padx=12,pady=8)
+        grave_panel.pack(fill='x',pady=6)
+        tk.Label(grave_panel,text='CEMITÉRIOS (IDs, ex.: 1, 1, 16x2)',bg=SURFACE,fg=ACCENT).pack(anchor='w')
+        for side,label in (('jogador','Meu cemitério'),('adversario','Cemitério rival')):
+            row=tk.Frame(grave_panel,bg=SURFACE);row.pack(fill='x',pady=2)
+            tk.Label(row,text=label,bg=SURFACE,fg=TEXT,width=17,anchor='w').pack(side='left')
+            var=tk.StringVar();self.cemetery_vars[side]=var
+            ttk.Entry(row,textvariable=var,width=85).pack(side='left',fill='x',expand=True)
+        ttk.Button(grave_panel,text='Aplicar cemitério',command=self.apply_graveyards).pack(anchor='e')
         controls=tk.Frame(host,bg=BG)
         controls.pack(fill='x',pady=15)
         tk.Label(controls,text='Origem',bg=BG,fg=TEXT).pack(side='left')
@@ -132,7 +143,7 @@ class AdvancedFieldDialog(tk.Toplevel):
         actions=tk.Frame(host,bg=BG)
         actions.pack(fill='x')
         ttk.Button(actions,text='Aplicar gatilho uma vez',style='Accent.TButton',command=self.trigger).pack(side='left',padx=(0,10))
-        ttk.Button(actions,text='Remover monstro alvo',command=self.remove_target).pack(side='left',padx=5)
+        ttk.Button(actions,text='Destruir alvo → cemitério',command=self.remove_target).pack(side='left',padx=5)
         ttk.Button(actions,text='Reiniciar LP e mãos',command=self.reset_state).pack(side='left',padx=5)
         battle=tk.Frame(host,bg=BG)
         battle.pack(fill='x',pady=(9,0))
@@ -207,6 +218,7 @@ class AdvancedFieldDialog(tk.Toplevel):
             if m['perfurante']: protection.append('perfurante')
             if m['nao_bloqueavel']: protection.append('não bloqueável')
             if m['ataques_max']>1: protection.append(f'{m["ataques_max"]} ataques')
+            if m.get('ataque_primeiro_turno'): protection.append('ataca no 1º turno')
             self_hp=max(1,int(m['defesa_base']))-self.lab.damage.get((entry['side'],entry['slot'],m['card_id']),0)
             text=f'ATK {m["ataque"]} ({da:+}) · DEF {m["defesa"]} ({dd:+}) · HP* {self_hp} '
             if protection:
@@ -215,6 +227,7 @@ class AdvancedFieldDialog(tk.Toplevel):
         for side in self.lp_label:
             self.lp_label[side].configure(text=f'LP {self.lab.lp[side]} / mão {len(self.lab.hands[side])}')
         lines=[f'Bônus / proteções aplicados: {len(events)}.']
+        lines.append('Cemitério: '+' | '.join(f'{s}: {len(self.lab.graveyards[s])}' for s in ('jogador','adversario')))
         for event in events[:12]:
             lines.append(f'{event["origem"]} → {event["destino"]}: {event["acao"]}, '
                          f'ATK {event["ataque"]:+}, DEF {event["defesa"]:+}, x{event["quantidade"]}')
@@ -283,10 +296,20 @@ class AdvancedFieldDialog(tk.Toplevel):
         self.logs.append(f'Novo turno: ataques de {side} reiniciados')
         self.evaluate()
 
+    def apply_graveyards(self):
+        try:
+            values={side:parse_card_ids(var.get(),maximum=300)
+                    for side,var in self.cemetery_vars.items()}
+            for side,ids in values.items():self.lab.set_graveyard(side,ids)
+            self.logs.append('Cemitérios configurados. Auras recalculadas.')
+            self.evaluate()
+        except (ValueError,ModError) as exc:
+            messagebox.showerror('Cemitério',str(exc),parent=self)
+
     def remove_target(self):
         side,slot=self.slot_options[self.target.get()]
         self.lab.remove(side,slot)
-        self.logs.append(f'Monstro removido: {side} slot {slot}')
+        self.logs.append(f'Monstro enviado ao cemitério: {side} slot {slot}')
         self._clear_removed()
         self.evaluate()
 

@@ -42,7 +42,7 @@ class NewFeaturesTests(unittest.TestCase):
         self.assertIn('{f8 0A 00}',compiled)
         self.assertTrue(any('ícone personalizado' in x for x in warn))
         self.assertEqual(NATIVE_ICONS['Fairy'],8)
-        self.assertEqual(len(CUSTOM_ICONS),9)
+        self.assertEqual(len(CUSTOM_ICONS),10)
 
     def test_custom_assets_are_16px(self):
         folder=Path(__file__).resolve().parents[1]/'assets'/'icons'

@@ -23,11 +23,11 @@ A cada commit novo na branch `main`, o workflow de Windows compila e publica o R
 
 **Não há patch jogável de efeitos no PS1 nesta versão:** os efeitos funcionam no simulador do editor.
 
-# Yu-Gi-Oh Studio Card FM v0.9.0 — Editor visual de Forbidden Memories (PS1)
+# Yu-Gi-Oh Studio Card FM v1.0.3 — Editor visual de Forbidden Memories (PS1)
 
 Editor gráfico para **Windows**, em português, para criar projetos de MOD de *Yu-Gi-Oh! Forbidden Memories* sem alterar sua imagem original. Desenvolvido em Python/Tkinter e sem dependências externas para executar.
 
-**Status real:** aplicativo editor funcional, porém **ainda NÃO produz um BIN/CUE jogável**. Estatísticas podem ser exportadas em uma cópia auxiliar do `SLUS_014.11`; os efeitos personalizados são **planejados e simulados no editor**, não executados pelo motor de PS1. Nomes/descrições também são metadados até termos o encoder de texto do jogo. Esta distinção é intencional para evitar corromper sua imagem X15.
+**Status real:** editor funcional. A v1.0.3 gera cópia BIN/CUE experimental somente de estatísticas (não de efeitos). Estatísticas podem ser exportadas em uma cópia auxiliar do `SLUS_014.11`; os efeitos personalizados são **planejados e simulados no editor**, não executados pelo motor de PS1. Nomes/descrições também são metadados até termos o encoder de texto do jogo. Esta distinção é intencional para evitar corromper sua imagem X15.
 
 ## Abrir o aplicativo
 
@@ -55,7 +55,7 @@ Antes de permitir alterações binárias, o programa verifica todos os 722 regis
 
 ### O que é editável hoje
 
-| Recurso | Estado na v0.9.0 |
+| Recurso | Estado na v1.0.3 |
 |---|---|
 | Buscar as 722 cartas | Funcional por número e nome personalizado |
 | ATK / DEF | Editável, valida múltiplos de 10 e pode gerar SLUS auxiliar |
@@ -65,7 +65,7 @@ Antes de permitir alterações binárias, o programa verifica todos os 722 regis
 | Eventos/efeitos | Edição pendente até salvar, simulação local; **sem execução no jogo** |
 | Fusões | Consultáveis, preservadas; **não editáveis** |
 | Importar `.BIN/.CUE` ou CSVs | Funcional para estrutura alvo `SLUS-01411`, sujeita a modificação X15 |
-| Exportar BIN/CUE jogável | **Não implementado** |
+| Exportar BIN/CUE para teste de estatísticas | **Experimental v1.0.3; depende de validar no ePSXe real** |
 | Gerar EXE Windows | Script fornecido; o ZIP **não contém EXE pré-compilado** |
 
 ### O que há na pasta `exportacao/`
@@ -75,7 +75,7 @@ Antes de permitir alterações binárias, o programa verifica todos os 722 regis
 - `artes_referencia.json` — relação das imagens PNG vinculadas, somente como referência visual.
 - `manifesto.json` — resumo da exportação e aviso de compatibilidade.
 - `mudancas_binarias.json` — **apenas se** houve alterações numéricas e SLUS foi vinculado, com offsets e bytes antes/depois.
-- `build_local/SLUS_014.11` — **apenas se** houve alterações numéricas e SLUS foi vinculado. Cópia local para posterior repack do disco; **não é imagem jogável** e não deve ser distribuída como jogo.
+- `build_local/SLUS_014.11` — **apenas se** houve alterações numéricas e SLUS foi vinculado. Cópia isolada do executável; **não é imagem jogável**. Para testar estatísticas, use o botão **Gerar BIN/CUE de teste** em Projeto / Exportação. Não distribua ROMs.
 
 ### Novidades v0.9.0 — Habilidades rápidas das criaturas
 
@@ -170,3 +170,48 @@ Comum cinza claro; Incomum branca; Rara amarela; Épica roxa; Lendária vermelha
 Quando o tipo é Magic, Trap, Equip ou God, a categoria tem precedência e a cor fica, respectivamente, verde, rosa, azul ou azul-marinho.
 No projeto o campo `raridade` é persistido; o campo `cor_nome` antigo é mantido por compatibilidade.
 A saída `classes_cartas.json` permite usar a classificação nos futuros patches, mas ainda não altera o texto do jogo PS1.
+
+## v1.0.3 — Cemitério e primeira cópia BIN/CUE de teste
+
+**Bônus por cemitério:** na aba **Efeitos** escolha `Enquanto no campo` →
+`Recebe ATK/DEF por tipo no cemitério`. Informe X ATK, Y DEF, tipo e escopo.
+Abra `Laboratório: campo, decks e equips`, use o campo `CEMITÉRIOS` para digitar
+IDs ou clique `Destruir alvo → cemitério` para observar o bônus **dinamicamente**.
+Um monstro já invocado recebe bônus quando outro do tipo escolhido morre;
+se a carta sair do cemitério, a quantidade diminui. Nenhum valor-base é alterado.
+
+**Ataca no primeiro turno:** em `Habilidades rápidas`, marque
+`Ataca no 1º turno`. Ícone `ataque_primeiro_turno.png` disponível em
+`Inserir ícone` para a descrição `{icon:ataque_primeiro_turno}`. A opção age
+no simulador e pode coexistir com 2x/3x. O jogo clássico tem suas próprias
+regras de ataque: **a habilidade ainda não altera o PS1**.
+
+### Construir uma imagem jogável de teste (somente estatísticas)
+
+1. Abra seu projeto que foi **importado do BIN/CUE** ou que possui um
+   `SLUS_014.11` vinculado e compatível.
+2. Escolha uma carta **original** (#001–#722), altere apenas ATK/DEF,
+   nível, atributo ou outro dado numérico suportado e clique `Salvar projeto`.
+3. Na aba `Projeto / Exportação`, clique `Gerar BIN/CUE de teste (estatísticas)`.
+4. Selecione o **mesmo BIN/CUE que foi importado**. O Studio compara o SHA-256
+   do SLUS de origem com o salvo na base antes de copiar.
+5. Após a geração, procure em `<seu-projeto>/exportacao/teste_ps1/` por
+   `FM_STUDIO_TESTE_....bin`, `.cue` e `.json` (registro do que mudou).
+6. No ePSXe selecione `File / Run ISO` e abra o **BIN** gerado (ou o CUE se
+   sua versão do emulador permitir). Confira o ATK/DEF da carta alterada,
+   duelos, fusões e gravação de progresso. Guarde sempre o jogo original.
+
+Não transforme BIN MODE2/2352 em ISO2048 com um editor genérico: ele pode
+perder o áudio XA/STR. O par BIN/CUE **já é uma imagem de CD jogável**. Esta
+função grava somente estatísticas suportadas, não o interpretador de auras,
+cemitério, ícones, God ou cartas extras. Ainda não validamos uma imagem real
+no ePSXe; o teste do programa foi feito com setores sintéticos. Um CUE
+multifaixas ou um jogo cujo executável diverge da base é recusado.
+
+Também é possível gerar a cópia pelo PowerShell, na pasta do aplicativo:
+
+```powershell
+python .\tools\gerar_bin_teste.py --projeto "D:\MeusMods\MeuMod" --bin "D:\Roms\Yu-Gi-Oh Original.bin"
+```
+
+**Importante:** o gerador nunca modifica nem distribui a ROM original.

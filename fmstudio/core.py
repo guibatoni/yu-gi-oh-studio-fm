@@ -51,6 +51,8 @@ ACTIONS = {
     'perder_lp_por_ataque':'Controlador perde X LP a cada ataque',
     'sem_limite_deck':'Sem limite de cópias no deck',
     'bonus_por_carta_id':'Recebe ATK/DEF por carta específica',
+    'bonus_cemiterio_tipo':'Recebe ATK/DEF por tipo no cemitério',
+    'ataque_primeiro_turno':'Ataca no turno de invocação',
 }
 TARGETS = {
     'proprio':'Próprio / controlador',
@@ -64,7 +66,7 @@ SCOPES = {'aliados':'Apenas aliados', 'inimigos':'Apenas inimigos',
 DECK_ACTIONS = {'bonus_deck_tipo','cura_lp_deck_tipo','dano_lp_deck_tipo'}
 ONCE_ACTIONS = {'cura_lp_deck_tipo','dano_lp_deck_tipo','descartar_alvo','dano_monstro_alvo'}
 MONSTER_PASSIVE_ACTIONS = {
-    'ataques_multiplos','monstro_indestrutivel','monstro_imune_magia',
+    'ataques_multiplos','ataque_primeiro_turno','monstro_indestrutivel','monstro_imune_magia',
     'monstro_imune_armadilha','dano_perfurante','nao_bloqueavel',
 }
 

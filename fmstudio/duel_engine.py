@@ -45,12 +45,16 @@ class DuelLab:
     `cards`: registros {id: {tipo_id, defesa...}}, `effects`: por ID da carta.
     Qualquer evento só é aplicado quando trigger() é explicitamente invocado.
     """
-    def __init__(self, cards: dict, effects: dict):
+    def __init__(self, cards: dict, effects: dict, *, summoning_delay: bool = False):
         self.cards = cards
         self.effects = effects
         self.monsters: list[dict] = []
         self.equipments: list[dict] = []
         self.decks = {side: [] for side in SIDES}
+        self.graveyards = {side: [] for side in SIDES}
+        self.summoning_delay = summoning_delay
+        self.turns = {side: 0 for side in SIDES}
+        self.summoned_turn = {}  # (lado, slot, ID) -> turno em que entrou
         self.hands = {side: [] for side in SIDES}
         self.lp = {side: 8000 for side in SIDES}
         self.damage = {}  # (side,slot,card_id) => dano simulado permanente
@@ -85,21 +89,37 @@ class DuelLab:
             self.card(cid)
         self.hands[side] = list(ids)
 
+    def set_graveyard(self, side: str, ids: list[int]):
+        if side not in SIDES or len(ids) > 300:
+            raise ModError('Cemitério: lado inválido ou mais de 300 cartas')
+        for cid in ids: self.card(cid)
+        self.graveyards[side] = list(ids)
+
+    def graveyard_type_counts(self):
+        return {side: Counter(int(self.card(cid)['tipo_id']) for cid in ids)
+                for side, ids in self.graveyards.items()}
+
     def type_counts(self):
         return {side: Counter(int(self.card(cid)['tipo_id']) for cid in ids)
                 for side, ids in self.decks.items()}
 
     def set_field(self, monsters: list[dict], equipments: list[dict] | None = None):
         # Resolve/valida tudo antes de substituir; se falhar, mantém o estado.
-        resolve_field(monsters,self.effects,deck_types=self.type_counts(),equipments=equipments or [],deck_cards=self.decks)
+        resolve_field(monsters,self.effects,deck_types=self.type_counts(),equipments=equipments or [],
+                      deck_cards=self.decks,cemetery_types=self.graveyard_type_counts())
         new_keys={(m['lado'],int(m['slot']),int(m['card_id'])) for m in monsters}
         self.damage={key:v for key,v in self.damage.items() if key in new_keys}
+        self.summoned_turn={key:v for key,v in self.summoned_turn.items() if key in new_keys}
+        for key in new_keys:
+            self.summoned_turn.setdefault(key,self.turns[key[0]])
         self.attacks_used={key:v for key,v in self.attacks_used.items() if key in new_keys}
         self.monsters=deepcopy(monsters)
         self.equipments=deepcopy(equipments or [])
 
     def resolve(self):
-        return resolve_field(self.monsters,self.effects,deck_types=self.type_counts(),equipments=self.equipments,deck_cards=self.decks)
+        return resolve_field(self.monsters,self.effects,deck_types=self.type_counts(),
+                             equipments=self.equipments,deck_cards=self.decks,
+                             cemetery_types=self.graveyard_type_counts())
 
     def get(self, side: str, slot: int):
         for monster in self.monsters:
@@ -113,7 +133,9 @@ class DuelLab:
             return False
         self.monsters=[m for m in self.monsters if m is not monster]
         self.equipments=[e for e in self.equipments if not (e['lado']==side and int(e['slot'])==int(slot))]
+        self.graveyards[side].append(int(monster['card_id']))
         self.damage.pop((side,int(slot),int(monster['card_id'])),None)
+        self.summoned_turn.pop((side,int(slot),int(monster['card_id'])),None)
         self.attacks_used.pop((side,int(slot),int(monster['card_id'])),None)
         return True
 
@@ -122,6 +144,7 @@ class DuelLab:
         if side not in SIDES:
             raise ModError('Turno: lado inválido')
         self.attacks_used={key:v for key,v in self.attacks_used.items() if key[0] != side}
+        self.turns[side] += 1
         self.logs.append({'acao':'novo_turno','lado':side})
 
     def attack(self, side: str, slot: int, *, target_slot: int | None = None,
@@ -144,6 +167,9 @@ class DuelLab:
         key=(side,int(slot),int(source['card_id']))
         used=self.attacks_used.get(key,0)
         maximum=attacker['ataques_max']
+        if (self.summoning_delay and self.summoned_turn.get(key)==self.turns[side]
+                and not attacker['ataque_primeiro_turno']):
+            raise ModError('Este monstro foi invocado neste turno e não possui Ataca no 1º turno')
         if used >= maximum:
             raise ModError(f'Combate: limite de {maximum} ataque(s) por turno atingido; inicie novo turno')
         cost=0

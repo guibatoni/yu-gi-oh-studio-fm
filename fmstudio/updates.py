@@ -39,7 +39,8 @@ SOURCE_FILES = frozenset({
     'assets/icons/perfurar.png', 'assets/icons/ataque_2x.png', 'assets/icons/ataque_3x.png',
     'assets/icons/nao_bloqueavel.png', 'assets/icons/infinito.png', 'assets/icons/anti_trap.png',
     'assets/icons/anti_magia.png', 'assets/icons/indestrutivel.png', 'assets/icons/god.png',
-    'assets/icons/atlas_16x16.png', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
+    'assets/icons/atlas_16x16.png', 'assets/icons/ataque_primeiro_turno.png',
+    'fmstudio/disc_build.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
     'fmstudio/disc.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
     'fmstudio/gui.py', 'fmstudio/updates.py',
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
@@ -54,7 +55,8 @@ SOURCE_REQUIRED = frozenset({
     'assets/icons/perfurar.png', 'assets/icons/ataque_2x.png', 'assets/icons/ataque_3x.png',
     'assets/icons/nao_bloqueavel.png', 'assets/icons/infinito.png', 'assets/icons/anti_trap.png',
     'assets/icons/anti_magia.png', 'assets/icons/indestrutivel.png', 'assets/icons/god.png',
-    'assets/icons/atlas_16x16.png', 'fmstudio/lab_gui.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
+    'assets/icons/atlas_16x16.png', 'assets/icons/ataque_primeiro_turno.png',
+    'fmstudio/disc_build.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
 })
 MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
 MAX_FILE_BYTES = 200 * 1024 * 1024

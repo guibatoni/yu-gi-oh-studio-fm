@@ -94,3 +94,14 @@
 ## v0.9.0
 - Editor de habilidades rápidas por carta e simulação de combate 2x/3x com custo LP e proteção.
 - Regra de cópias no deck (até 40 ao todo) e preservação de projetos.
+
+## v1.0.3 — Cemitério, ataque no primeiro turno e teste BIN/CUE
+
+- Novo efeito contínuo `bonus_cemiterio_tipo`: ATK/DEF por carta de tipo selecionado no cemitério, recalculado a cada destruição/remoção ou mudança da pilha, escopos aliados/inimigos/ambos.
+- Cemitério separado para cada jogador no Laboratório; botão para aplicar IDs e destruição de monstros envia-os automaticamente à pilha.
+- Habilidade rápida `ataque_primeiro_turno` com ícone de bota alada (16×16 indexado). O laboratório diferencia criaturas recém-invocadas de criaturas prontas para atacar; o PS1 ainda não interpreta essa habilidade.
+- Primeira construção experimental de **BIN/CUE MODE2/2352** de teste, preservando inteiramente a imagem-base e XA/STR. Substitui somente setores do SLUS de MESMO TAMANHO, recalcula EDC/ECC e lê a cópia para verificar.
+- Apenas estatísticas de cartas já existentes e compatíveis com o PS1 são gravadas. Nenhuma modificação ao motor dos efeitos, textos, ícones, God, cartas acima de 722 ou fusões é aplicada.
+- Hash SHA-256 da base importada é obrigatório: o disco deve ser exatamente o da importação; nunca sobrescreve a imagem original.
+- Rotina CD-ROM Mode2/Form1 baseada na descrição pública de PSX-SPX: https://psx-spx.consoledev.net/dev/ps1/cdr/cdromformat/
+- Construção testada com **setores sintéticos**; a compatibilidade do BIN gerado no ePSXe ainda depende de teste com a imagem legítima do usuário.
