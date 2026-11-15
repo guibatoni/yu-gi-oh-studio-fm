@@ -126,7 +126,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             wa_entry=entries.get('DATA/WA_MRG.MRG')
             # WA só é lido quando houver artes vinculadas.
             requested_art={int(k):v for k,v in getattr(project,'arts',{}).items() if int(k)<=722}
-            original_wa=b''.join(reader.read_entry(wa_entry)) if requested_art and wa_entry else None
+            native_equips=getattr(project,'metadata',{}).get('ps1_equip_additions',{})
+            original_wa=b''.join(reader.read_entry(wa_entry)) if (requested_art or native_equips) and wa_entry else None
     except DiscError as exc:
         raise ModError(f'Imagem original inválida: {exc}') from exc
 
@@ -201,6 +202,23 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             patched_wa,regions=patch_card_art(patched_wa,cid,path)
             written_arts.extend(regions)
 
+    native_written=[]
+    if native_equips:
+        if original_wa is None or wa_entry is None:
+            raise ModError('DATA/WA_MRG.MRG é necessário para alterar equipamentos.')
+        if not requested_art:
+            provenance=project.folder/'base'/'resumo.json'
+            origin_hash=''
+            if provenance.is_file():
+                origin_hash=(json.loads(provenance.read_text(encoding='utf-8')).get('source_sha256') or {}).get('DATA/WA_MRG.MRG','')
+            if not origin_hash or hashlib.sha256(original_wa).hexdigest()!=origin_hash:
+                raise ModError('WA_MRG.MRG não corresponde à origem do projeto; '
+                               'não é seguro alterar equipamentos.')
+        from .ps1_equip import patch_equipment_targets
+        patched_wa,native_written=patch_equipment_targets(
+            patched_wa if patched_wa is not None else original_wa,
+            native_equips)
+
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
             from .ps1_compat import save_audit, explain_no_writable_changes
@@ -240,9 +258,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'sha256_slus_modificado':hashlib.sha256(patched_exe).hexdigest(),
                 'setores_modificados':len(changed),'lbas':sorted(changed),
                 'nomes_aplicados':written_names,'descricoes_aplicadas':written_descriptions,'artes_aplicadas':written_arts,
-                'tamanho_bin':bin_file.stat().st_size,
+                'equipamentos_ps1_aplicados':native_written,
+                 'tamanho_bin':bin_file.stat().st_size,
                 'recursos_pendentes':audit_report['pendente_de_motor'] if audit_report else [],
-                'aviso':'Cópia experimental. Apenas atributos, textos curtos originais e artes de paleta fixa. NÃO inclui novos efeitos, cartas extras, fontes personalizadas nem raridades no PS1.'}
+                'aviso':'Cópia experimental. Atributos, textos curtos, artes e alvos de equipamentos originais. NÃO inclui auras, imunidades, efeitos inéditos, cartas extras ou raridades no PS1.'}
         if hasattr(project, 'edits') and hasattr(project, 'cards') and hasattr(project, 'get'):
             from .disc_verify import verify_image_stats
             verification = verify_image_stats(project, bin_file)
