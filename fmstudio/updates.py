@@ -41,7 +41,7 @@ SOURCE_FILES = frozenset({
     'assets/icons/anti_magia.png', 'assets/icons/indestrutivel.png', 'assets/icons/god.png',
     'assets/icons/atlas_16x16.png', 'assets/icons/ataque_primeiro_turno.png',
     'fmstudio/disc_build.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
-    'fmstudio/disc.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
+    'fmstudio/disc.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_effects_lab.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
     'fmstudio/gui.py', 'fmstudio/updates.py',
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
     'PUBLICAR_GITHUB.bat', 'PUBLICAR_GITHUB.ps1', 'LEIA-ME.txt',
@@ -56,7 +56,7 @@ SOURCE_REQUIRED = frozenset({
     'assets/icons/nao_bloqueavel.png', 'assets/icons/infinito.png', 'assets/icons/anti_trap.png',
     'assets/icons/anti_magia.png', 'assets/icons/indestrutivel.png', 'assets/icons/god.png',
     'assets/icons/atlas_16x16.png', 'assets/icons/ataque_primeiro_turno.png',
-    'fmstudio/disc_build.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
+    'fmstudio/disc_build.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_effects_lab.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
 })
 MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
 MAX_FILE_BYTES = 200 * 1024 * 1024
