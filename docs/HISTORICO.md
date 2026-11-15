@@ -1,3 +1,11 @@
+## v1.2.0 — Primeira alteração de efeito nativo do PS1: Equip
+
+- Na aba Efeitos, selecione carta Equip original e use **PS1: permitir Equip em criatura**.
+- O aplicativo adiciona o monstro selecionado às permissões de equipar daquela carta, mantendo seu bônus original do jogo.
+- As sete cópias do bloco de equipamentos em WA_MRG.MRG são regravadas com tamanho fixo, hash de origem, validação de estrutura e preservação das fusões.
+- Auras, cemitério, imunidades, dano perfurante, ataques múltiplos e outras habilidades inéditas seguem no simulador; ainda exigem patches MIPS para o ePSXe.
+- Não altera a ROM original.
+
 ## v1.1.4 — Verificação de ATK/DEF no BIN
 
 - Aba Projeto/Exportação tem botão Verificar BIN/CUE para ler do disco selecionado ATK/DEF e demais atributos das cartas editadas.

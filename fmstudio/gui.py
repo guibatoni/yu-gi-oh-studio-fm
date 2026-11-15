@@ -640,6 +640,7 @@ class Studio(tk.Tk):
         ttk.Button(buttons,text='+ Adicionar efeito',style='Accent.TButton',command=self.add_effect).pack(side='left')
         ttk.Button(buttons,text='+ Bônus por carta',command=self.add_specific_effect).pack(side='left',padx=8)
         ttk.Button(buttons,text='Remover efeito selecionado',command=self.remove_effect).pack(side='left',padx=8)
+        ttk.Button(buttons,text='PS1: permitir Equip em criatura',command=self.allow_native_equip).pack(side='left',padx=8)
         sim=tk.Frame(body,bg=SURFACE,padx=15,pady=12)
         sim.pack(fill='x')
         tk.Label(sim,text='SIMULADOR DE EFEITOS',bg=SURFACE,fg=TEXT,font=('Segoe UI',10,'bold')).pack(anchor='w')
@@ -1231,6 +1232,44 @@ class Studio(tk.Tk):
                 eff['valor'],eff.get('valor_def','—')))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
 
+    def allow_native_equip(self):
+        """Autoriza monstro a receber Equip original no motor PS1; salva com backup."""
+        if self._extract_running or not self._ensure_project():
+            return
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro',
+                                'Salve as cartas pendentes antes de autorizar um Equip PS1.',parent=self)
+            return
+        if not self.selected_id:
+            return
+        equip=self.selected_id
+        if int(self.project.get(equip)['tipo_id'])!=23:
+            messagebox.showinfo('Selecione um Equip',
+                                'Escolha primeiro uma carta original do tipo Equip.',
+                                parent=self)
+            return
+        monster=simpledialog.askinteger(
+            'Equip original do PS1',
+            f'#{equip:03d} — {self.project.get(equip).get("nome","")}\n\n'
+            'Informe o ID (#001–#722) do monstro que poderá usar esse Equip.\n'
+            'O efeito é o bônus original do equipamento, não uma aura personalizada.',
+            minvalue=1,maxvalue=722,parent=self)
+        if monster is None:
+            return
+        from .ps1_equip import add_equipment_target
+        try:
+            if not add_equipment_target(self.project,equip,monster):
+                messagebox.showinfo('Já cadastrado','Esse alvo já está no plano.',parent=self)
+                return
+            self.project.save()
+        except (ModError,ValueError,OSError) as exc:
+            messagebox.showerror('Equip PS1',str(exc),parent=self)
+            return
+        self._refresh_project()
+        self._update_status(f'Equip #{equip:03d} permite monstro #{monster:03d} '
+                            'na próxima cópia BIN/CUE de teste.')
+
     def add_effect(self):
         if self._extract_running:
             messagebox.showinfo("Extração em andamento","Conclua a extração antes de editar, importar ou trocar de projeto.",parent=self)
@@ -1453,6 +1492,7 @@ class Studio(tk.Tk):
                 f'Cartas alteradas e salvas: {len(pr.edits)}\n'
                 f'Cartas com alterações pendentes: {self.drafts.count if self.drafts else 0}\n'
                 f'Efeitos planejados: {effects}\n'
+                f'Alvos de Equip PS1: {sum(len(v) for v in pr.metadata.get("ps1_equip_additions",{}).values())}\n'
                 f'Artes PNG vinculadas: {len(pr.arts)} (somente prévia)\n'
                 f'Extração profunda: {pr.metadata.get("deep_extraction", {}).get("completed", "ainda não realizada")}\n'
                 f'Executável SLUS local: {source}\n\n'
@@ -1593,6 +1633,7 @@ class Studio(tk.Tk):
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
+            f'Equip originais com novos alvos: {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status('Cópia BIN/CUE de teste criada em exportacao/teste_ps1.')
 

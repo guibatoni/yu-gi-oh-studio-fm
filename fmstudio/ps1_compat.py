@@ -25,7 +25,7 @@ def audit(project) -> dict:
         except (ValueError,OSError):
             pass
     counts={'estatisticas':0,'nomes':0,'artes':0,'efeitos':0,'cartas_extras':len(project.new_cards),
-            'descricoes':0,'classes_cores':0,'icones_especiais':0}
+            'descricoes':0,'classes_cores':0,'icones_especiais':0,'equipamentos_ps1':0}
     blocked=[]; supported=[]
     for key,edits in sorted(project.edits.items(),key=lambda item:int(item[0])):
         cid=int(key); current=project.get(cid)
@@ -72,6 +72,15 @@ def audit(project) -> dict:
         else:
             counts['artes']+=1
             supported.append(f'#{cid}: imagem e miniatura em paletas existentes (se WA validado)')
+    native_equips=project.metadata.get('ps1_equip_additions',{})
+    if native_equips:
+        from .ps1_equip import _validated_plan
+        plans=_validated_plan(native_equips)
+        counts['equipamentos_ps1']=sum(len(v) for v in plans.values())
+        if known and wa_pinned:
+            supported.append(f'{counts["equipamentos_ps1"]} alvo(s) de Equip original para gravar em WA_MRG.MRG')
+        else:
+            blocked.append('Equipamentos PS1: importe o BIN/CUE original para registrar hashes SLUS e WA_MRG.')
     for key,items in project.effects.items():
         if items:
             counts['efeitos']+=len(items)
@@ -92,7 +101,7 @@ def audit(project) -> dict:
         'cartas_maiores_722':'PENDENTE_MIPS_MEMORIA_TABELAS',
         'tipo_god':'PENDENTE_MIPS_UI',
         'buffs_auras_cemiterio':'PENDENTE_MIPS_EVENTOS',
-        'equipamentos_imunidades':'PENDENTE_MIPS_REGRAS',
+        'equipamentos_imunidades':'PENDENTE_MIPS_REGRAS; alvos de Equip stock podem ser gravados',
         'ataque_2x_3x_piercing_haste':'PENDENTE_MIPS_COMBATE',
         'decks_e_regras_de_copias':'PENDENTE_MIPS_DECKBUILDER',
         'descarte_e_dano_a_monstros':'PENDENTE_NOVAS_REGRAS',
