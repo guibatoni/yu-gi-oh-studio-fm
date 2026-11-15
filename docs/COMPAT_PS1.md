@@ -34,7 +34,7 @@ O relatório **`exportacao/compatibilidade_ps1.json`** discrimina por projeto o 
 ## Como testar no ePSXe
 
 1. Abra seu projeto; salve todas as alterações com **Ctrl+S**.
-2. Selecione **Projeto / Exportação → Compatibilidade PS1** e verifique o relatório.
+2. Selecione **Projeto / Exportação → Compatibilidade PS1** e verifique o relatório. Na v1.1.1, após **Exportar alterações**, o Studio oferece a geração imediata do BIN/CUE; você também pode usar **Gerar jogo BIN/CUE** na barra principal.
 3. Clique **Gerar BIN/CUE de teste**, escolha o **mesmo disco** importado para o projeto e confirme a geração **parcial**.
 4. Abra o `.cue` da pasta `exportacao/teste_ps1` no emulador; dependendo do menu do ePSXe, pode ser necessário selecionar o `.bin` correspondente.
 5. Teste primeiro uma carta original com ATK/DEF alterado, depois o nome curto e sua arte. Revise nomes/descritivos e animações in-game; o teste automatizado não substitui o teste do emulador.

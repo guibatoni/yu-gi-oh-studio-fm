@@ -401,7 +401,8 @@ class Studio(tk.Tk):
                 ('Importar CSVs',self.import_csv,None),('Importar BIN / CUE',self.import_bin,None),
                 ('Extrair máximo',self.extract_max,'Accent.TButton'),
                 ('Vincular SLUS',self.attach_slus,None),('Salvar projeto',self.save_project,'Accent.TButton'),
-                ('Exportar alterações',self.export,None)]:
+                ('Exportar alterações',self.export,None),
+                ('Gerar jogo BIN/CUE',self.build_disc,'Accent.TButton')]:
             ttk.Button(bar,text=name,command=action,style=style).pack(side='left',padx=(0,7))
         self.status = tk.StringVar(value='Crie um projeto e importe o CSV ou uma imagem BIN/CUE do jogo.')
         tk.Label(self,textvariable=self.status,bg=SURFACE,fg=MUTED,anchor='w',padx=18,pady=7).pack(side='bottom',fill='x')
@@ -1496,11 +1497,18 @@ class Studio(tk.Tk):
         except (OSError,ModError,ValueError) as exc:
             messagebox.showerror('Exportação bloqueada',str(exc))
             return
-        messagebox.showinfo('Exportação concluída',
+        self._update_status('Alterações exportadas: '+str(folder))
+        if messagebox.askyesno(
+            'Exportação concluída — gerar jogo de teste?',
             f'Pasta: {folder}\n\nCartas alteradas: {manifest["cartas_editadas"]}\n'
             f'Efeitos planejados: {manifest["efeitos_planejados"]}\n\n'
-            'Fusões preservadas. O arquivo BIN/CUE jogável ainda não foi gerado; novos efeitos são somente simulações.')
-        self._update_status('Exportação concluída (ainda NÃO jogável no ePSXe): '+str(folder))
+            'A exportação dos dados foi concluída. Deseja também gerar uma '
+            'cópia BIN/CUE de teste para abrir no ePSXe?\n\n'
+            'Você escolherá o mesmo BIN/CUE importado no projeto. '
+            'O arquivo original NÃO será sobrescrito.\n'
+            'ATENÇÃO: efeitos novos e cartas extras ainda não funcionam no PS1.',
+            parent=self):
+            self.build_disc()
 
     def audit_ps1(self):
         if self._extract_running or not self._ensure_project():

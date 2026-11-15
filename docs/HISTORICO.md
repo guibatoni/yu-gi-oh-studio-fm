@@ -1,3 +1,10 @@
+## v1.1.1 — fluxo de exportação para ePSXe
+
+- Depois de **Exportar alterações**, o Studio pergunta se deseja gerar a cópia BIN/CUE para teste, evitando confundir a exportação dos dados com a imagem jogável.
+- Adicionado botão visível **Gerar jogo BIN/CUE** na barra principal.
+- A operação continua exigindo o mesmo disco da importação e mantém o original intacto.
+- Não adiciona efeitos MIPS nem cartas novas à versão PS1.
+
 ## v1.1.0 — BIN/CUE parcial: atributos, textos curtos e artes
 - Novo relatório de compatibilidade por projeto, com recursos de motor pendentes explicitados.
 - Grava nomes e descrições que cabem no espaço original e usam glifos/códigos F8 nativos.
