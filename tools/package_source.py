@@ -14,6 +14,18 @@ from fmstudio.updates import SOURCE_FILES, SOURCE_BUNDLE_NAME, SOURCE_SUM_NAME, 
 
 def build(out: Path) -> str:
     paths = sorted(SOURCE_FILES)
+    # Garante que TODOS os módulos distribuídos no repositório estejam no ZIP.
+    # O instalador antigo aceitava novos módulos fmstudio/*.py, mas o
+    # empacotador esquecia de incluí-los: instalações Python ficavam híbridas.
+    expected_modules = {
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / 'fmstudio').glob('*.py')
+        if path.is_file()
+    }
+    not_listed = expected_modules.difference(SOURCE_FILES)
+    if not_listed:
+        raise ValueError('Módulos de execução ausentes de SOURCE_FILES: ' +
+                         ', '.join(sorted(not_listed)))
     missing = [name for name in paths if not (ROOT / name).is_file()]
     if missing:
         raise ValueError('Arquivos ausentes para pacote fonte: ' + ', '.join(missing))

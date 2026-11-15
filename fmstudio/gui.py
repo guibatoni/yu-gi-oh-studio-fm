@@ -1626,6 +1626,14 @@ class Studio(tk.Tk):
         try:
             from .disc_build import build_test_disc
             manifest = build_test_disc(self.project, Path(source))
+        except ModuleNotFoundError as exc:
+            messagebox.showerror(
+                'Atualização incompleta',
+                f'Falta o módulo {exc.name!r} nesta instalação.\\n\\n'
+                'Clique em Atualizar para reinstalar o pacote completo da versão atual. '
+                'Se o botão não conseguir corrigir, utilize o migrador ATUALIZAR_SEM_ZIP.ps1. '
+                'Suas cartas e arquivos BIN originais serão preservados.', parent=self)
+            return
         except (OSError, ValueError, ModError, DiscError) as exc:
             messagebox.showerror('Não foi possível gerar BIN/CUE', str(exc), parent=self)
             return
