@@ -643,6 +643,17 @@ class Studio(tk.Tk):
         ttk.Button(buttons,text='PS1: permitir Equip em criatura',command=self.allow_native_equip).pack(side='left',padx=8)
         ttk.Button(buttons,text='PS1: trocar alvo Equip',command=self.replace_native_equip).pack(side='left',padx=8)
         ttk.Button(buttons,text='PS1: usar adições automáticas',command=self.activate_equip_additions).pack(side='left',padx=8)
+        native=tk.Frame(body,bg=SURFACE,padx=12,pady=8)
+        native.pack(fill='x',pady=(2,8))
+        tk.Label(native,text='EFEITOS NATIVOS DO PS1 (BIN/CUE EXPERIMENTAL)',
+                 bg=SURFACE,fg=ACCENT,font=('Segoe UI',9,'bold')).pack(anchor='w',pady=(0,5))
+        row_native=ttk.Frame(native)
+        row_native.pack(fill='x')
+        ttk.Button(row_native,text='Configurar Ritual',command=self.configure_native_ritual).pack(side='left')
+        ttk.Button(row_native,text='Limiar de armadilha',command=self.configure_native_trap).pack(side='left',padx=8)
+        ttk.Button(row_native,text='Bônus de terreno por tipo',command=self.configure_native_terrain).pack(side='left',padx=8)
+        tk.Label(native,text='Esses recursos reutilizam regras existentes. Cemitério, auras inéditas, imunidades e múltiplos ataques ainda precisam de MIPS.',
+                 bg=SURFACE,fg=MUTED,wraplength=940,justify='left').pack(anchor='w',pady=(5,0))
         sim=tk.Frame(body,bg=SURFACE,padx=15,pady=12)
         sim.pack(fill='x')
         tk.Label(sim,text='SIMULADOR DE EFEITOS',bg=SURFACE,fg=TEXT,font=('Segoe UI',10,'bold')).pack(anchor='w')
@@ -1237,6 +1248,149 @@ class Studio(tk.Tk):
                 eff['valor'],eff.get('valor_def','—')))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
 
+    def _ready_native_effect(self):
+        if self._extract_running or not self._ensure_project():
+            return False
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro','Salve as alterações pendentes do projeto.',parent=self)
+            return False
+        return True
+
+    def configure_native_ritual(self):
+        """Edita receita de Ritual que já existe na tabela do disco PS1."""
+        if not self._ready_native_effect():
+            return
+        ritual=self.selected_id
+        if not ritual or int(self.project.get(ritual)['tipo_id'])!=22:
+            messagebox.showinfo('Selecione uma carta Ritual',
+                                'Escolha na biblioteca a carta Ritual original (#001–#722).',
+                                parent=self)
+            return
+        import csv
+        from .ps1_native import patch_rituals
+        path=self.project.folder/'base'/'rituais.csv'
+        if not path.is_file():
+            messagebox.showerror('Ritual sem base','Importe primeiro o BIN/CUE original para obter rituais.csv.',parent=self)
+            return
+        with path.open('r',encoding='utf-8-sig',newline='') as f:
+            rows=list(csv.DictReader(f,delimiter=';'))
+        original=next((row for row in rows if int(row['ritual_id'])==ritual),None)
+        if original is None:
+            messagebox.showerror('Ritual não registrado',
+                                 f'A carta #{ritual:03d} não possui receita na tabela do PS1. '
+                                 'Criar novos rituais exigiria outro patch MIPS.',parent=self)
+            return
+        existing=self.project.metadata.get('ps1_ritual_recipes',{}).get(str(ritual))
+        initial=existing or [int(original[k]) for k in
+                    ('tributo_1','tributo_2','tributo_3','resultado')]
+        result=[]
+        for index,name in enumerate(('Tributo 1','Tributo 2','Tributo 3','Monstro invocado')):
+            n=simpledialog.askinteger(
+                'Ritual do PS1',
+                f'#{ritual:03d} — {self.project.get(ritual).get("nome","")}\n'
+                f'{name} (ID 1–722):',
+                initialvalue=int(initial[index]),minvalue=1,maxvalue=722,parent=self)
+            if n is None:
+                return
+            result.append(n)
+        if not messagebox.askyesno(
+            'Confirmar Ritual',
+            f'Ritual #{ritual:03d}\nTributos: #{result[0]:03d}, #{result[1]:03d}, '
+            f'#{result[2]:03d}\nInvoca: #{result[3]:03d}\n\n'
+            'Será alterada a receita existente em sete cópias, sem modificar fusões.\n'
+            'O comportamento no ePSXe ainda precisará ser validado.',
+            parent=self):
+            return
+        plan=dict(self.project.metadata.get('ps1_ritual_recipes',{}))
+        plan[str(ritual)]=result
+        try:
+            self.project.metadata['ps1_ritual_recipes']=plan
+            self.project.save()
+            self._refresh_project()
+            self._update_status(f'Ritual #{ritual:03d} registrado para BIN/CUE.')
+        except (OSError,ModError,ValueError) as exc:
+            messagebox.showerror('Ritual no PS1',str(exc),parent=self)
+
+    def configure_native_trap(self):
+        if not self._ready_native_effect():
+            return
+        trap=self.selected_id
+        from .ps1_native import TRAP_IDS, read_trap_thresholds, patch_trap_thresholds
+        if trap not in TRAP_IDS:
+            messagebox.showinfo('Selecione Trap de ataque',
+                'Selecione uma armadilha de ataque original (IDs #681–#686). '
+                'Outros efeitos de Trap não têm limiar configurável neste motor.',parent=self)
+            return
+        exe=self.project.folder/'base'/'source_SLUS_014.11'
+        if not exe.is_file():
+            messagebox.showerror('Base ausente','Vincule o executável SLUS original ao projeto.',parent=self)
+            return
+        original=exe.read_bytes()
+        old=read_trap_thresholds(original)[trap]
+        stored=self.project.metadata.get('ps1_trap_thresholds',{}).get(str(trap),old)
+        value=simpledialog.askinteger('Limiar de Trap',
+            f'#{trap:03d}: maior ATK que esta armadilha pode atingir.\n'
+            f'Valor original: {old} ATK.\nUse múltiplos de 100 (100–25500).',
+            initialvalue=int(stored),minvalue=100,maxvalue=25500,parent=self)
+        if value is None:
+            return
+        plan=dict(self.project.metadata.get('ps1_trap_thresholds',{}))
+        plan[str(trap)]=value
+        try:
+            patch_trap_thresholds(original,plan)
+            self.project.metadata['ps1_trap_thresholds']=plan
+            self.project.save()
+            self._refresh_project()
+            self._update_status(f'Trap #{trap:03d}: ativa com ATK até {value} (PS1).')
+        except (OSError,ModError,ValueError) as exc:
+            messagebox.showerror('Trap no PS1',str(exc),parent=self)
+
+    def configure_native_terrain(self):
+        if not self._ready_native_effect():
+            return
+        from .ps1_native import patch_terrain_boosts
+        terrain_names=('Forest','Wasteland','Mountain','Sogen','Umi','Yami')
+        terrain=simpledialog.askinteger('Terreno',
+            'Escolha o campo do PS1:\n'
+            +'\n'.join(f'{i+1}. {name}' for i,name in enumerate(terrain_names)),
+            minvalue=1,maxvalue=6,parent=self)
+        if terrain is None:
+            return
+        type_id=simpledialog.askinteger('Tipo de monstro',
+            'Tipo original (0–19):\n' +
+            '\n'.join(f'{i:02d} — {name}' for i,name in enumerate(TYPE_NAMES[:20])),
+            minvalue=0,maxvalue=19,parent=self)
+        if type_id is None:
+            return
+        key=f'{terrain}:{type_id}'
+        from .ps1_native import read_terrain_boosts
+        exe=self.project.folder/'base'/'source_SLUS_014.11'
+        if not exe.is_file():
+            messagebox.showerror('Sem base','Vincule o executável SLUS original ao projeto.',parent=self)
+            return
+        source=exe.read_bytes()
+        original=read_terrain_boosts(source)[(terrain,type_id)]
+        default=self.project.metadata.get('ps1_terrain_boosts',{}).get(key,original)
+        bonus=simpledialog.askinteger('Bônus de campo',
+            f'{terrain_names[terrain-1]}: {TYPE_NAMES[type_id]}\n'
+            f'Original: {original:+d} ATK/DEF.\n'
+            'Novo valor: múltiplos de 10, de -1200 a +1200.',
+            initialvalue=int(default),minvalue=-1200,maxvalue=1200,parent=self)
+        if bonus is None:
+            return
+        plan=dict(self.project.metadata.get('ps1_terrain_boosts',{}))
+        plan[key]=bonus
+        try:
+            patch_terrain_boosts(source,plan)
+            self.project.metadata['ps1_terrain_boosts']=plan
+            self.project.save()
+            self._refresh_project()
+            self._update_status(
+                f'Campo {terrain_names[terrain-1]}, {TYPE_NAMES[type_id]}: {bonus:+d} ATK/DEF.')
+        except (OSError,ModError,ValueError) as exc:
+            messagebox.showerror('Bônus de terreno PS1',str(exc),parent=self)
+
     def activate_equip_additions(self):
         """Volta ao modo de adição sem apagar trocas antigas do usuário."""
         if self._extract_running or not self._ensure_project():
@@ -1601,6 +1755,9 @@ class Studio(tk.Tk):
                 f'Modo Equip PS1: {pr.metadata.get("ps1_equip_mode","adicionar")}\n'
                 f'Adições de Equip salvas: {sum(len(v) for v in pr.metadata.get("ps1_equip_additions",{}).values())}\n'
                 f'Substituições de Equip salvas: {sum(len(v) for v in pr.metadata.get("ps1_equip_replacements",{}).values())}\n'
+                f'Receitas Ritual PS1: {len(pr.metadata.get("ps1_ritual_recipes",{}))}\n'
+                f'Limiar Trap PS1: {len(pr.metadata.get("ps1_trap_thresholds",{}))}\n'
+                f'Bônus terreno PS1: {len(pr.metadata.get("ps1_terrain_boosts",{}))}\n'
                 f'Artes PNG vinculadas: {len(pr.arts)} (somente prévia)\n'
                 f'Extração profunda: {pr.metadata.get("deep_extraction", {}).get("completed", "ainda não realizada")}\n'
                 f'Executável SLUS local: {source}\n\n'
@@ -1755,6 +1912,9 @@ class Studio(tk.Tk):
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             f'Método: {manifest.get("estrategia_equip_ps1","não aplicado")}.\n'
+            f'Rituais: {len(manifest.get("rituais_ps1_aplicados",[]))}; '
+            f'Armadilhas: {len(manifest.get("armadilhas_ps1_aplicadas",[]))}; '
+            f'Terrenos: {len(manifest.get("terrenos_ps1_aplicados",[]))}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
 
