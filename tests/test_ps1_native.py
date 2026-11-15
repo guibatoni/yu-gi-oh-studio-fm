@@ -120,6 +120,7 @@ class NativePS1TablesTests(unittest.TestCase):
                 effects={},
                 metadata={'base_sha256':{'slus':hashlib.sha256(exe).hexdigest()},
                           'ps1_ritual_recipes':{'690':[11,12,13,14]},
+                          'ps1_rituals_enabled':True,
                           'ps1_trap_thresholds':{'681':700},
                           'ps1_terrain_boosts':{'1:0':800}})
             project.export=lambda: (workspace/'exportacao',{})
