@@ -136,7 +136,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                            if equip_mode=='adicionar' else {})
             replacements=(metadata.get('ps1_equip_replacements',{})
                           if equip_mode=='substituir' else {})
-            original_wa=b''.join(reader.read_entry(wa_entry)) if (requested_art or native_equips or replacements) and wa_entry else None
+            native_rituals=metadata.get('ps1_ritual_recipes',{})
+            native_traps=metadata.get('ps1_trap_thresholds',{})
+            native_terrain=metadata.get('ps1_terrain_boosts',{})
+            original_wa=b''.join(reader.read_entry(wa_entry)) if (requested_art or native_equips or replacements or native_rituals) and wa_entry else None
     except DiscError as exc:
         raise ModError(f'Imagem original inválida: {exc}') from exc
 
@@ -186,6 +189,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 written_descriptions.extend(items)
             except ModError:
                 continue
+
+    from .ps1_native import patch_trap_thresholds, patch_terrain_boosts, patch_rituals
+    patched_exe, traps_written = patch_trap_thresholds(patched_exe, native_traps)
+    patched_exe, terrain_written = patch_terrain_boosts(patched_exe, native_terrain)
 
     written_arts=[]
     patched_wa=None
@@ -244,6 +251,19 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                     patched_wa if patched_wa is not None else original_wa,
                     native_equips)
                 equip_strategy='tabela-stock'
+
+    ritual_written=[]
+    if native_rituals:
+        if original_wa is None or wa_entry is None:
+            raise ModError('DATA/WA_MRG.MRG necessário para alterar rituais.')
+        provenance=project.folder/'base'/'resumo.json'
+        pinned=''
+        if provenance.is_file():
+            pinned=(json.loads(provenance.read_text(encoding='utf-8')).get('source_sha256') or {}).get('DATA/WA_MRG.MRG','')
+        if not pinned or hashlib.sha256(original_wa).hexdigest()!=pinned:
+            raise ModError('Rituais: hash de WA_MRG não corresponde à origem do projeto.')
+        patched_wa,ritual_written=patch_rituals(
+            patched_wa if patched_wa is not None else original_wa,native_rituals)
 
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
@@ -318,11 +338,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'descricoes_aplicadas':written_descriptions,
                 'artes_aplicadas':written_arts,
                 'equipamentos_ps1_aplicados':native_written,
+                'rituais_ps1_aplicados':ritual_written,
+                'armadilhas_ps1_aplicadas':traps_written,
+                'terrenos_ps1_aplicados':terrain_written,
                 'modo_equip_ps1':equip_mode,
                 'estrategia_equip_ps1':equip_strategy if (native_equips or replacements) else 'sem-equip',
                 'tamanho_bin':stage_bin.stat().st_size,
                 'recursos_pendentes':audit_report['pendente_de_motor'] if audit_report else [],
-                'aviso':'Build parcial de PS1. Habilidades inéditas, cartas extras e raridades ainda não executadas no motor.'}
+                'aviso':'Build parcial PS1: stats, textos, artes, Equip, rituais, limiares de Trap e bônus de terreno por tipo. Habilidades inéditas, cartas extras e raridades NÃO implementadas.'}
 
         if hasattr(project,'edits') and hasattr(project,'cards') and hasattr(project,'get'):
             from .disc_verify import verify_image_stats
