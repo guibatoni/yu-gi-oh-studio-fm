@@ -193,6 +193,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     from .ps1_native import patch_trap_thresholds, patch_terrain_boosts, patch_rituals
     patched_exe, traps_written = patch_trap_thresholds(patched_exe, native_traps)
     patched_exe, terrain_written = patch_terrain_boosts(patched_exe, native_terrain)
+    from .ps1_effects_lab import patch_deck_global_limit
+    patched_exe, deck_copies_written = patch_deck_global_limit(
+        patched_exe, metadata.get('ps1_deck_global_limit'))
 
     written_arts=[]
     patched_wa=None
@@ -341,6 +344,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'rituais_ps1_aplicados':ritual_written,
                 'armadilhas_ps1_aplicadas':traps_written,
                 'terrenos_ps1_aplicados':terrain_written,
+                'limite_global_copias_ps1_aplicado':deck_copies_written,
                 'modo_equip_ps1':equip_mode,
                 'estrategia_equip_ps1':equip_strategy if (native_equips or replacements) else 'sem-equip',
                 'tamanho_bin':stage_bin.stat().st_size,
