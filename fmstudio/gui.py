@@ -686,6 +686,7 @@ class Studio(tk.Tk):
         ttk.Button(buttons,text='Exportar propostas e SLUS auxiliar',style='Accent.TButton',command=self.export).pack(side='left',padx=8)
         ttk.Button(buttons,text='Compatibilidade PS1',command=self.audit_ps1).pack(side='left',padx=8)
         ttk.Button(buttons,text='Gerar BIN/CUE de teste',command=self.build_disc).pack(side='left',padx=8)
+        ttk.Button(buttons,text='Verificar BIN/CUE',command=self.verify_disc).pack(side='left',padx=8)
         tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Os efeitos ainda não são interpretados pelo jogo.\n'
                  'A cópia de teste permite atributos, textos curtos e artes com paleta original. Efeitos novos NÃO funcionam no PS1.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),justify='left',wraplength=750).pack(anchor='w',pady=(8,0))
@@ -1594,6 +1595,36 @@ class Studio(tk.Tk):
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status('Cópia BIN/CUE de teste criada em exportacao/teste_ps1.')
+
+    def verify_disc(self):
+        if self._extract_running or not self._ensure_project():
+            return
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro', 'Salve o projeto antes de verificar o disco.', parent=self)
+            return
+        selected = filedialog.askopenfilename(
+            title='Selecione o BIN/CUE que você realmente abriu no ePSXe',
+            filetypes=[('PlayStation BIN/CUE','*.bin *.cue'),('Todos arquivos','*.*')],
+            parent=self)
+        if not selected:
+            return
+        try:
+            from .disc_verify import verify_image_stats, describe
+            report = verify_image_stats(self.project, selected)
+            import json
+            destination = self.project.folder / 'exportacao' / 'verificacao_bin_ps1.json'
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n',
+                                   encoding='utf-8')
+            info = describe(report) + f'\n\nRelatório: {destination}'
+            if report['divergentes']:
+                messagebox.showwarning('BIN/CUE divergente do Studio', info, parent=self)
+            else:
+                messagebox.showinfo('BIN/CUE conferido', info, parent=self)
+            self._update_status('Verificação salva: ' + str(destination))
+        except (OSError, ValueError, ModError, DiscError) as exc:
+            messagebox.showerror('Falha na verificação do disco', str(exc), parent=self)
 
     def check_updates(self):
         """Consulta GitHub Releases fora da thread da interface."""

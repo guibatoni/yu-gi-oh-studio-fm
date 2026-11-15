@@ -1,3 +1,10 @@
+## v1.1.4 — Verificação de ATK/DEF no BIN
+
+- Aba Projeto/Exportação tem botão Verificar BIN/CUE para ler do disco selecionado ATK/DEF e demais atributos das cartas editadas.
+- Exibe valores originais, do projeto e do BIN; gera exportacao/verificacao_bin_ps1.json.
+- A geração de BIN agora valida os atributos gravados antes de concluir.
+- Para ePSXe: carregar o novo arquivo FM_STUDIO_TESTE_*.bin e iniciar sem savestate antigo.
+
 ## v1.1.3 — Diagnóstico PS1 sem mudanças compatíveis
 
 - A geração BIN/CUE agora verifica os campos editados antes de abrir a escolha da imagem.

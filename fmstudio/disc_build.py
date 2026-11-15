@@ -243,6 +243,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'tamanho_bin':bin_file.stat().st_size,
                 'recursos_pendentes':audit_report['pendente_de_motor'] if audit_report else [],
                 'aviso':'Cópia experimental. Apenas atributos, textos curtos originais e artes de paleta fixa. NÃO inclui novos efeitos, cartas extras, fontes personalizadas nem raridades no PS1.'}
+        if hasattr(project, 'edits') and hasattr(project, 'cards') and hasattr(project, 'get'):
+            from .disc_verify import verify_image_stats
+            verification = verify_image_stats(project, bin_file)
+            if verification['divergentes']:
+                raise ModError('BIN gerado diverge das alterações numéricas do projeto. '
+                               'O arquivo inválido não será mantido.')
+            result['verificacao_atributos'] = verification
         meta_file.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
         if audit_report:
             (output/'compatibilidade_ps1.json').write_text(json.dumps(audit_report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
