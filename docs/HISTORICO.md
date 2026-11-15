@@ -1,3 +1,10 @@
+## Validação no ePSXe — Equip funcionando (15/11/2026)
+
+- **Confirmado pelo usuário:** após atualizar para Studio FM v1.2.8 e testar no ePSXe com o MOD Original Drop X15, a alteração de compatibilidade de Equip funcionou em duelo.
+- A correção reconhece o preenchimento homogêneo FF no espaço reservado da tabela Equip e adiciona permissões sem remover alvos existentes nem deslocar fusões.
+- O usuário não especificou neste retorno qual equipamento foi utilizado; não registrar como validada uma combinação específica.
+- Próximo marco: efeitos novos de motor, especialmente bônus contínuos por tipo no cemitério; **não** considerá-los implementados no PS1 antes de teste real.
+
 ## v1.2.8 — Aceitar padding FF verdadeiro na tabela de Equip do Drop X15
 
 - Analisada a imagem real **Yu-Gi-Oh! FM Original (Drop x15)** já compartilhada: suas sete tabelas de equipamentos têm conteúdo idêntico, terminador u16 em 0x201A e, após o terminador, 2020 bytes do valor FF até o fim da região reservada (0x2800).
