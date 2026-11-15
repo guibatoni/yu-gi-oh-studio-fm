@@ -52,8 +52,8 @@ class NativeEquipTests(unittest.TestCase):
         # palavra depois do terminador NÃO é um contador n.
         for idx in range(TERRAIN_COPIES):
             start=WA_TERRAIN_BASE + idx*TERRAIN_STRIDE + EQUIP_OFF
-            original[start+22:start+24]=b'\x00\x00'  # 2 bytes de terminador
-            original[start+26:start+32]=b'\xAB\xCD\xFE\x01\x02\x03'
+            original[start+16:start+18]=b'\x00\x00'  # espaço livre após terminador
+            original[start+18:start+24]=b'\xAB\xCD\xFE\x01\x02\x03'
         wa=bytes(original)
         info=equip_layout_report(wa)
         self.assertTrue(info['dados_adicionais'])
@@ -64,7 +64,7 @@ class NativeEquipTests(unittest.TestCase):
         self.assertEqual(list_equipment_targets(patched)[650],[16,2])
         for idx in range(TERRAIN_COPIES):
             pos=WA_TERRAIN_BASE+idx*TERRAIN_STRIDE+EQUIP_OFF
-            self.assertEqual(patched[pos+26:pos+32],wa[pos+26:pos+32])
+            self.assertEqual(patched[pos+18:pos+24],wa[pos+18:pos+24])
             self.assertEqual(patched[pos+FUSION_OFF-EQUIP_OFF:pos+FUSION_OFF-EQUIP_OFF+10],
                              wa[pos+FUSION_OFF-EQUIP_OFF:pos+FUSION_OFF-EQUIP_OFF+10])
 
@@ -72,7 +72,7 @@ class NativeEquipTests(unittest.TestCase):
         original=bytearray(sample_wa())
         for idx in range(TERRAIN_COPIES):
             pos=WA_TERRAIN_BASE+idx*TERRAIN_STRIDE+EQUIP_OFF
-            original[pos+24:pos+28]=b'\xDE\xAD\xBE\xEF'
+            original[pos+16:pos+20]=b'\xDE\xAD\xBE\xEF'
         original=bytes(original)
         with self.assertRaisesRegex(ModError,'insuficiente'):
             patch_equipment_targets(original,{'650':[2]})
@@ -81,7 +81,7 @@ class NativeEquipTests(unittest.TestCase):
     def test_terminator_only_two_bytes_not_four(self):
         table=bytearray(sample_wa())
         start=WA_TERRAIN_BASE+EQUIP_OFF
-        table[start+24:start+26]=b'\xFE\xDC'
+        table[start+16:start+18]=b'\xFE\xDC'
         self.assertEqual(list_equipment_targets(bytes(table))[650],[16])
 
     def test_unknown_equip_is_rejected(self):
