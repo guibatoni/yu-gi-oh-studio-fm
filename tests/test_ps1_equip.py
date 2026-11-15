@@ -67,5 +67,44 @@ class NativeEquipTests(unittest.TestCase):
         with self.assertRaises(ModError):
             add_equipment_target(project,16,1)
 
+class NativeEquipDiscIntegration(unittest.TestCase):
+    def test_build_bin_rewrites_all_equip_tables_and_preserves_source(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+        from types import SimpleNamespace
+        from fmstudio.disc import DiscReader
+        from fmstudio.disc_build import build_test_disc
+        from test_ps1_content import write_disc
+
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            source=root/'original.bin'
+            exe=b'PS-X EXE'+bytes(2048)
+            wa=sample_wa()
+            write_disc(source,exe,wa)
+            image_hash=hashlib.sha256(source.read_bytes()).hexdigest()
+            project_folder=root/'studio-project'
+            (project_folder/'base').mkdir(parents=True)
+            (project_folder/'base'/'resumo.json').write_text(
+                __import__('json').dumps({
+                    'source_sha256':{'DATA/WA_MRG.MRG':hashlib.sha256(wa).hexdigest()}
+                }),encoding='utf-8')
+            project=SimpleNamespace(
+                folder=project_folder,
+                arts={},
+                metadata={'base_sha256':{'slus':hashlib.sha256(exe).hexdigest()},
+                          META_KEY:{'650':[1]}})
+            project.export=lambda : (project_folder/'exportacao', {})
+            result=build_test_disc(project,source)
+            self.assertEqual(result['equipamentos_ps1_aplicados'][0]['novos_alvos'],[1])
+            self.assertTrue(result['setores_modificados']>0)
+            with DiscReader(Path(result['bin'])) as reader:
+                wa_entry=next(x for x in reader.files() if x.path=='DATA/WA_MRG.MRG')
+                modified=b''.join(reader.read_entry(wa_entry))
+            self.assertIn(1,list_equipment_targets(modified)[650])
+            self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(),image_hash)
+
+
 if __name__=='__main__':
     unittest.main()
