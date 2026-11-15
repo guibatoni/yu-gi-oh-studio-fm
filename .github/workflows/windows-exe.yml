@@ -1,0 +1,58 @@
+name: FM Mod Studio - Windows e Release
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'studio-v*'
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Obter codigo
+        uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Testes unitarios
+        run: python -m unittest discover -s tests -v
+      - name: Preparar empacotamento
+        run: python -m pip install pyinstaller
+      - name: Compilar aplicativo
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name FM-Mod-Studio app.py
+      - name: Compilar atualizador independente
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name FM-Mod-Studio-Updater updater_main.py
+      - name: Empacotar e gerar checksum
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Copy-Item dist/FM-Mod-Studio.exe release/FM-Mod-Studio.exe
+          Copy-Item dist/FM-Mod-Studio-Updater.exe release/FM-Mod-Studio-Updater.exe
+          Copy-Item LEIA-ME.txt release/LEIA-ME.txt
+          Copy-Item INICIAR.bat release/INICIAR.bat
+          Compress-Archive -Path release/* -DestinationPath FM-Mod-Studio-Windows.zip -Force
+          $hash = (Get-FileHash -Algorithm SHA256 FM-Mod-Studio-Windows.zip).Hash.ToLowerInvariant()
+          "$hash  FM-Mod-Studio-Windows.zip" | Set-Content -Encoding ascii FM-Mod-Studio-Windows.zip.sha256
+      - name: Gerar pacote do aplicativo Python (atualização por botão)
+        run: python tools/package_source.py --out FM-Mod-Studio-Source.zip
+      - name: Publicar artefato de build
+        uses: actions/upload-artifact@v4
+        with:
+          name: FM-Mod-Studio-Windows
+          path: |
+            FM-Mod-Studio-Windows.zip
+            FM-Mod-Studio-Windows.zip.sha256
+            FM-Mod-Studio-Source.zip
+            FM-Mod-Studio-Source.zip.sha256
+      - name: Criar GitHub Release para a tag
+        if: startsWith(github.ref, 'refs/tags/studio-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            FM-Mod-Studio-Windows.zip
+            FM-Mod-Studio-Windows.zip.sha256
+            FM-Mod-Studio-Source.zip
+            FM-Mod-Studio-Source.zip.sha256
