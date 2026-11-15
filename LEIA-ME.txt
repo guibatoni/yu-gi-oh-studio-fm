@@ -1,0 +1,28 @@
+YU-GI-OH STUDIO CARD FM
+======================
+
+Windows 10/11. Abra INICIAR.bat ou FM-Mod-Studio.exe.
+
+Dentro do aplicativo, clique em "Atualizar" para verificar novas versoes
+publicadas no GitHub Releases. O aplicativo fecha, o atualizador instala
+na MESMA PASTA e reabre o programa. Nao altera o jogo original nem os
+projetos de MOD salvos.
+
+Nao mova ou apague FM-Mod-Studio-Updater.exe: ele e necessario para as
+atualizacoes automáticas. Se uma atualizacao falhar, veja o arquivo:
+%LOCALAPPDATA%\FM-Mod-Studio\logs\atualizador.log
+
+IMPORTANTE: os efeitos novos sao simulações no editor, nao alteram o motor
+PS1 nesta etapa. Fusoes originais preservadas.
+
+Codigo e atualizacoes:
+https://github.com/guibatoni/yu-gi-oh-studio-fm
+
+NOVIDADES v0.6.0:
+- Escolha a cor do nome em Cartas > Escolher cor; aparece na prévia do Studio.
+- Navegue entre cartas sem perguntas de salvar.
+- Clique em Salvar projeto ou pressione Ctrl+S para salvar tudo de uma vez.
+- A cor ainda nao e gravada dentro do jogo de PS1.
+
+ATUALIZACAO v0.6.2: suporta instalacao automatica em Python e EXE apos publicacao no GitHub Releases.
+Se o repositorio nao existe, rode PUBLICAR_GITHUB.bat.

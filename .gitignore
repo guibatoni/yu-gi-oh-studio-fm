@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+projetos/*
+!projetos/.gitkeep
+*.bin
+*.iso
+*.cue
+*.mrg
+SLUS_014.11
+# Dados do usuário e recursos extraídos do jogo
+**/original/
+**/analysis/
+**/exportacao/
+**/backups/
+**/base/
+*.sav
+*.mcd
+*.mcr
+*.exe
+*.zip
+*.jsonl
