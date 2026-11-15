@@ -138,21 +138,36 @@ def patch_equipment_targets(wa: bytes, additions: dict) -> tuple[bytes, list[dic
     if not changed:
         return wa, []
 
-    # Nunca sobrescreve bytes desconhecidos após o terminador: podem ser
-    # estruturas próprias do MOD. Só utiliza zeros contíguos imediatamente
-    # depois do terminador da tabela previamente validada.
-    first_extra = next((i for i in range(end, len(original[0]))
-                        if original[0][i] != 0), len(original[0]))
+    # O WA_MRG retail e algumas versões Drop X15 preenchem o RESTANTE
+    # da reserva Equip com 0xFF, e não com zero. Somente trata 0xFF como
+    # preenchimento quando TODOS os bytes restantes no bloco são 0xFF,
+    # e quando as sete cópias são idênticas (validado acima). Não assume
+    # que sequências parciais de 0xFF são livres: podem ser dados do MOD.
+    tail = original[0][end:]
+    padding = None
+    if tail and all(value == 0xFF for value in tail):
+        padding = 'FF'
+        first_extra = len(original[0])
+    elif tail and all(value == 0x00 for value in tail):
+        padding = '00'
+        first_extra = len(original[0])
+    else:
+        # Compatibilidade conservadora: permite somente prefixo de zeros,
+        # como nas versões anteriores, preservando dados extras em seguida.
+        first_extra = next((i for i in range(end, len(original[0]))
+                            if original[0][i] != 0), len(original[0]))
+        if first_extra > end:
+            padding = '00-prefixo'
     free_space = first_extra - end
     growth = len(encoded) - end
     if growth > free_space:
         raise ModError(
-            'MOD com dados adicionais na tabela Equip: espaço seguro '
-            f'insuficiente ({free_space} byte(s) livres, {growth} necessário(s)). '
+            'Tabela Equip sem preenchimento livre suficiente '
+            f'({free_space} byte(s) livres, {growth} necessário(s)). '
             f'Terminador u16 em 0x{end-2:X}; '
-            f'próximo dado ocupado em 0x{first_extra:X}. '
-            'A imagem original foi preservada. Para esse MOD é preciso '
-            'mapear a rotina Duel_CheckEquip e seus blocos auxiliares.'
+            f'próximo dado protegido em 0x{first_extra:X}. '
+            'O Studio só reconhece uma região inteira preenchida por FF/00 '
+            'ou zeros antes de outros dados. A imagem original foi preservada.'
         )
     if len(encoded) > EQUIP_LEN:
         raise ModError('Tabela de equipamentos ultrapassaria seu bloco reservado.')
@@ -173,6 +188,7 @@ def patch_equipment_targets(wa: bytes, additions: dict) -> tuple[bytes, list[dic
         output[pos:pos+EQUIP_LEN] = modified
     for item in changed:
         item['bytes_livres_antes'] = free_space
+        item['preenchimento_original'] = padding
         item['dados_adicionais_preservados'] = first_extra < EQUIP_LEN
     return bytes(output), changed
 
