@@ -29,7 +29,7 @@ TYPE_NAMES = (
     "Dragon", "Spellcaster", "Zombie", "Warrior", "Beast-Warrior", "Beast",
     "Winged Beast", "Fiend", "Fairy", "Insect", "Dinosaur", "Reptile", "Fish",
     "Sea Serpent", "Machine", "Thunder", "Aqua", "Pyro", "Rock", "Plant",
-    "Magic", "Trap", "Ritual", "Equip",
+    "Magic", "Trap", "Ritual", "Equip", "God",
 )
 ATTR_NAMES = ("Light", "Dark", "Earth", "Water", "Fire", "Wind")
 STAR_NAMES = ("", "Mars", "Jupiter", "Saturn", "Uranus", "Pluto", "Neptune", "Mercury", "Sun", "Moon", "Venus")

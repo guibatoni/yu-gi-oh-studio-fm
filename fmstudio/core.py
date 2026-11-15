@@ -49,6 +49,7 @@ ACTIONS = {
     'nao_bloqueavel':'Não pode ser bloqueada (dano direto)',
     'perder_lp_por_ataque':'Controlador perde X LP a cada ataque',
     'sem_limite_deck':'Sem limite de cópias no deck',
+    'bonus_por_carta_id':'Recebe ATK/DEF por carta específica',
 }
 TARGETS = {
     'proprio':'Próprio / controlador',
@@ -161,6 +162,23 @@ def check_effect(entry: dict):
         return {'evento':event,'acao':action,'alvo':target,'valor':0,'observacao':note}
     if event == 'regra_deck':
         raise ModError('Evento de deck exclusivo da regra de cópias')
+    if action == 'bonus_por_carta_id':
+        if event != 'continuo' or target != 'proprio':
+            raise ModError('Bônus por carta exige campo e alvo próprio')
+        ref = _bounded_int(entry.get('carta_referencia_id'), 'Carta de referência',1,32766)
+        atk = _bounded_int(entry.get('valor',0),'Bônus de ATK',0,9999)
+        defense = _bounded_int(entry.get('valor_def',0),'Bônus de DEF',0,9999)
+        if atk==0 and defense==0:
+            raise ModError('Informe bônus de ATK ou DEF')
+        source = str(entry.get('origem_contagem','campo'))
+        if source not in ('campo','deck'):
+            raise ModError('Origem precisa ser campo ou deck')
+        scope = str(entry.get('escopo','aliados'))
+        if scope not in SCOPES:
+            raise ModError('Escopo inválido')
+        return {'evento':event,'acao':action,'alvo':target,'valor':atk,
+                'valor_def':defense, 'carta_referencia_id':ref,
+                'origem_contagem':source,'escopo':scope,'observacao':note}
     if action in EFFECT_ACTIONS:
         if event != 'continuo':
             raise ModError('Efeitos de aura/deck precisam do gatilho contínuo')
@@ -171,7 +189,7 @@ def check_effect(entry: dict):
         defense = _bounded_int(entry.get('valor_def', 0), 'Bônus DEF', 0, 9999)
         if atk == 0 and defense == 0:
             raise ModError('Bônus contínuo precisa aumentar ATK ou DEF')
-        typ = _bounded_int(entry.get('tipo_id', -1), 'Tipo (-1 para todos)', -1, 23)
+        typ = _bounded_int(entry.get('tipo_id', -1), 'Tipo (-1 para todos)', -1, 24)
         scope = str(entry.get('escopo','aliados'))
         if scope not in SCOPES:
             raise ModError('Escopo inválido')
@@ -199,7 +217,7 @@ def check_effect(entry: dict):
         amount = _bounded_int(entry.get('valor'), 'valor do efeito', 1, limit)
         item = {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
         if action in DECK_ACTIONS:
-            item['tipo_id'] = _bounded_int(entry.get('tipo_id',-1),'Tipo do deck',-1,23)
+            item['tipo_id'] = _bounded_int(entry.get('tipo_id',-1),'Tipo do deck',-1,24)
         return item
     if target in ('aliados_tipo','monstro_alvo','monstro_equipado'):
         raise ModError('Alvo não permitido para efeito comum')
@@ -214,6 +232,7 @@ class Project:
         self.edits: dict[str,dict] = edits or {}
         self.effects: dict[str,list] = effects or {}
         self.arts: dict[str,str] = arts or {}
+        self.new_cards: dict[str,dict] = dict(metadata.get('novas_cartas',{}))
         self.cards: dict[int,dict] = {}
         self.fusions: list[dict] = []
         self.imported_notes: list[str] = []
@@ -250,6 +269,7 @@ class Project:
         data['edicoes'] = self.edits
         data['efeitos'] = self.effects
         data['artes'] = self.arts
+        data['novas_cartas'] = self.new_cards
         current = self.folder / 'projeto.json'
         # Backup rotativo: recupera uma edição acidental sem copiar a ISO.
         if current.is_file():
@@ -271,6 +291,10 @@ class Project:
                     raise ModError(f'Carta repetida: {cid}')
                 self.cards[cid] = row
         fusions = self.folder / 'base' / 'fusoes.csv'
+        for key, card in self.new_cards.items():
+            cid = _bounded_int(key, 'ID da nova carta', CARD_COUNT+1, 32766)
+            if cid in self.cards: raise ModError(f'ID duplicado: {cid}')
+            self.cards[cid] = dict(card)
         self.fusions = _read_csv(fusions) if fusions.exists() else []
         meta = self.folder / 'base' / 'resumo.json'
         self.imported_notes = json.loads(meta.read_text(encoding='utf-8')).get('warnings',[]) if meta.exists() else []
@@ -508,6 +532,28 @@ class Project:
         base.update(self.edits.get(str(cid),{}))
         return base
 
+    def add_card(self, copy_from: int, *, name: str | None = None) -> int:
+        """Cria carta virtual acima de 722; NUNCA altera tabelas do SLUS original."""
+        if copy_from not in self.cards:
+            raise ModError('Escolha uma carta válida para servir como modelo.')
+        cid = max([CARD_COUNT] + list(self.cards)) + 1
+        if cid > 32766:
+            raise ModError('Limite de ID do projeto (32766) atingido')
+        source = self.get(copy_from)
+        card = dict(source)
+        card.update({'id':cid, 'nome':name or f'Nova carta {cid}',
+                     'descricao':'', 'cor_nome':DEFAULT_NAME_COLOR,
+                     'modelo_base_id': int(copy_from), 'virtual':True})
+        self.cards[cid] = card
+        self.new_cards[str(cid)] = card
+        try:
+            self.save()
+        except Exception:
+            self.cards.pop(cid,None)
+            self.new_cards.pop(str(cid),None)
+            raise
+        return cid
+
     def set_card(self, cid: int, fields: dict):
         if cid not in self.cards:
             raise ModError('ID inexistente')
@@ -642,6 +688,10 @@ class Project:
                     check_effect(item)
                 except ModError as exc:
                     issues.append(f'Efeito {cid}/{i}: {exc}')
+        for cid, arr in self.effects.items():
+            for eff in arr:
+                if eff.get('acao') == 'bonus_por_carta_id' and int(eff.get('carta_referencia_id',0)) not in self.cards:
+                    issues.append(f'Carta {cid}: referência #{eff.get("carta_referencia_id")} ausente')
         orig_fusions = self.folder/'base'/'fusoes.csv'
         if self.cards and not orig_fusions.exists():
             issues.append('Faltam as fusões da base. Importação incompleta!')
@@ -663,6 +713,19 @@ class Project:
             if str(cid) in self.edits:
                 changes.append({'id':cid, **self.edits[str(cid)]})
         _write_json_atomic(output/'alteracoes_cartas.json', changes)
+        _write_json_atomic(output/'novas_cartas.json',
+                           {'status':'EDITOR_APENAS_SEM_SUPORTE_PS1', 'cartas':{str(k):self.get(int(k)) for k in self.new_cards}})
+        from .richtext import native_text_only
+        from .expanded import resolve_references
+        textual={}
+        for cid in sorted(self.cards):
+            card=self.get(cid)
+            desc=card.get('descricao','')
+            if desc:
+                compiled, warnings=native_text_only(desc)
+                textual[str(cid)]={'descricao_resolvida':resolve_references(compiled,{k:self.get(k) for k in self.cards}),
+                                   'avisos':warnings}
+        _write_json_atomic(output/'textos_e_codigos.json',{'status':'METADADOS_SEM_PATCH_BIN', 'cartas':textual})
         _write_json_atomic(output/'efeitos_planejados.json',
                            {'status':'SIMULACAO_APENAS_SEM_PATCH_PS1', 'efeitos_por_carta':self.effects})
         _write_json_atomic(output/'artes_referencia.json',
@@ -671,15 +734,19 @@ class Project:
                     'fusoes':'ORIGINAIS_PRESERVADAS', 'cartas_editadas':len(changes),
                     'efeitos_planejados':sum(map(len,self.effects.values())),
                     'alerta':'Efeitos e textos NÃO foram implementados no motor PS1 nesta versão',
-                    'patch_jogavel':False, 'arquivos': ['alteracoes_cartas.json','efeitos_planejados.json','artes_referencia.json']}
+                    'patch_jogavel':False, 'arquivos': ['alteracoes_cartas.json','novas_cartas.json','textos_e_codigos.json','efeitos_planejados.json','artes_referencia.json'],
+                    'cartas_virtuais':len(self.new_cards), 'tipo_god_status':'EDITOR_ONLY'}
         source = self.folder/'base'/'source_SLUS_014.11'
-        if source.exists() and any(any(k in NUMERIC for k in row) for row in changes):
+        if source.exists() and any(row['id'] <= CARD_COUNT and any(k in NUMERIC for k in row) for row in changes):
             data = bytearray(source.read_bytes())
             if hashlib.sha256(data).hexdigest() != self.metadata.get('base_sha256',{}).get('slus'):
                 raise ModError('Executável original diverge do hash salvo; exportação bloqueada')
             byte_diffs = []
             for row in changes:
                 cid = row['id']
+                if cid > CARD_COUNT: continue
+                if int(self.get(cid)['tipo_id']) == 24:
+                    continue  # tipo God só existe no editor, sem injetar em tabelas retail
                 base = self.cards[cid]
                 off = STATS_ADDR - EXE_DELTA + (cid - 1) * 4
                 before = struct.unpack_from('<I', data, off)[0]

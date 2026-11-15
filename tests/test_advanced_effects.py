@@ -38,7 +38,7 @@ class AdvancedTests(unittest.TestCase):
         self.assertEqual(parse_card_ids('1x3, #016*2; 4'), [1,1,1,16,16,4])
         self.assertEqual(parse_card_ids(''), [])
         with self.assertRaises(ModError):parse_card_ids('1x41')
-        with self.assertRaises(ModError):parse_card_ids('723')
+        with self.assertRaises(ModError):parse_card_ids('32767')
         with self.assertRaises(ModError):parse_card_ids('1 and 2')
         with self.assertRaises(ModError):parse_card_ids('1,-2')
 
@@ -165,7 +165,7 @@ class AdvancedTests(unittest.TestCase):
     def test_type_any_valid_and_bad_settings_rejected(self):
         e=effect('aura_tipo',event='continuo',value=100,typ=-1,scope='inimigos')
         self.assertEqual(e['tipo_id'],-1)
-        with self.assertRaises(ModError): effect('aura_tipo',event='continuo',value=100,typ=24)
+        with self.assertRaises(ModError): effect('aura_tipo',event='continuo',value=100,typ=25)
         with self.assertRaises(ModError): effect('equip_imune_armadilha',event='equipado',value=2)
         with self.assertRaises(ModError): effect('descartar_alvo',value=6)
 

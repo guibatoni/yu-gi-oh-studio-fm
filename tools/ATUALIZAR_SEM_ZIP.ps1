@@ -17,7 +17,7 @@ Write-Host "Modo: $nome. Nenhum arquivo BIN/CUE, projeto ou backup será copiado
 $confirm = Read-Host 'O Studio está fechado? Deseja instalar a versão estável mais recente? (S/N)'
 if ($confirm -notin @('S', 's', 'SIM', 'sim')) { Write-Host 'Cancelado'; exit 0 }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$headers = @{ 'User-Agent' = 'FM-Studio-Migrador/0.9.1' }
+$headers = @{ 'User-Agent' = 'FM-Studio-Migrador/1.0.0' }
 $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $headers
 if ($release.draft -or $release.prerelease -or ($release.tag_name -notmatch '^studio-v[0-9]+\.[0-9]+\.[0-9]+$')) { throw 'Release não é uma versão estável válida.' }
 $assets = @($release.assets)

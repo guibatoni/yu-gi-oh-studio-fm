@@ -35,18 +35,26 @@ UPDATER_NAME = 'FM-Mod-Studio-Updater.exe'
 WINDOWS_FILES = frozenset({PROGRAM_NAME, UPDATER_NAME, 'INICIAR.bat', 'LEIA-ME.txt'})
 SOURCE_FILES = frozenset({
     'app.py', 'FM_Mod_Studio.pyw', 'updater_main.py',
-    'fmstudio/__init__.py', 'fmstudio/abilities.py', 'fmstudio/core.py', 'fmstudio/continuous.py', 'fmstudio/duel_engine.py', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
+    'fmstudio/__init__.py', 'fmstudio/abilities.py', 'fmstudio/core.py', 'fmstudio/continuous.py', 'fmstudio/duel_engine.py', 'fmstudio/expanded.py', 'fmstudio/richtext.py',
+    'assets/icons/perfurar.png', 'assets/icons/ataque_2x.png', 'assets/icons/ataque_3x.png',
+    'assets/icons/nao_bloqueavel.png', 'assets/icons/infinito.png', 'assets/icons/anti_trap.png',
+    'assets/icons/anti_magia.png', 'assets/icons/indestrutivel.png', 'assets/icons/god.png',
+    'assets/icons/atlas_16x16.png', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
     'fmstudio/disc.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
     'fmstudio/gui.py', 'fmstudio/updates.py',
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
     'PUBLICAR_GITHUB.bat', 'PUBLICAR_GITHUB.ps1', 'LEIA-ME.txt',
     'README.md', 'docs/HISTORICO.md', 'docs/ATUALIZACOES_GITHUB.md',
     'docs/ORIGEM_E_VALIDACAO.md', 'docs/ROADMAP_EFEITOS.md',
-    'docs/MIGRACAO_REPOSITORIO.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md',
+    'docs/MIGRACAO_REPOSITORIO.md', 'docs/EXPANSAO_722_GOD_TEXTO.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md',
 })
 SOURCE_REQUIRED = frozenset({
     'app.py', 'updater_main.py', 'fmstudio/__init__.py', 'fmstudio/gui.py',
-    'fmstudio/core.py', 'fmstudio/abilities.py', 'fmstudio/continuous.py', 'fmstudio/duel_engine.py', 'fmstudio/lab_gui.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
+    'fmstudio/core.py', 'fmstudio/abilities.py', 'fmstudio/continuous.py', 'fmstudio/duel_engine.py', 'fmstudio/expanded.py', 'fmstudio/richtext.py',
+    'assets/icons/perfurar.png', 'assets/icons/ataque_2x.png', 'assets/icons/ataque_3x.png',
+    'assets/icons/nao_bloqueavel.png', 'assets/icons/infinito.png', 'assets/icons/anti_trap.png',
+    'assets/icons/anti_magia.png', 'assets/icons/indestrutivel.png', 'assets/icons/god.png',
+    'assets/icons/atlas_16x16.png', 'fmstudio/lab_gui.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
 })
 MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
 MAX_FILE_BYTES = 200 * 1024 * 1024

@@ -14,6 +14,8 @@ from .tables import TYPE_NAMES, ATTR_NAMES, STAR_NAMES
 from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
 from .abilities import QUICK_ACTIONS, BOOLEAN_ACTIONS, quick_settings
 from . import __version__
+from .expanded import display_name, bonus_description, resolve_references
+from .richtext import NATIVE_ICONS, CUSTOM_ICONS, TEXT_COLORS, tokens
 from .updates import read_latest, start_updater, UpdateError
 
 BG = '#0d1220'
@@ -50,7 +52,7 @@ class EffectDialog(tk.Toplevel):
         self.vars={}
         self.combos={}
         self.sources={'evento':{k:v for k,v in EVENTS.items() if k != 'regra_deck'},
-                      'acao':{k:v for k,v in ACTIONS.items() if k not in QUICK_ACTIONS},
+                      'acao':{k:v for k,v in ACTIONS.items() if k not in QUICK_ACTIONS and k != 'bonus_por_carta_id'},
                       'alvo':TARGETS,'escopo':SCOPES}
         row=0
         for key,label in [('evento','Quando ativa'),('acao','O que acontece'),('alvo','Alvo do efeito')]:
@@ -73,7 +75,7 @@ class EffectDialog(tk.Toplevel):
         self.def_entry.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
         ttk.Label(form,text='Tipo afetado / contado').grid(row=row,column=0,sticky='w');row+=1
         self.vars['tipo_id']=tk.IntVar(value=-1)
-        options=[(-1,'Todos os tipos')]+[(i,name) for i,name in enumerate(TYPE_NAMES[:24])]
+        options=[(-1,'Todos os tipos')]+[(i,name) for i,name in enumerate(TYPE_NAMES[:25])]
         self.type_ids=[i for i,_ in options]
         self.type_combo=ttk.Combobox(form,state='disabled',width=60,values=[f'{i:02d} — {label}' for i,label in options])
         self.type_combo.current(0)
@@ -175,6 +177,61 @@ class EffectDialog(tk.Toplevel):
         except (ModError,ValueError) as exc:
             messagebox.showerror('Efeito inválido',str(exc),parent=self)
             return
+        self.destroy()
+
+
+class SpecificCardEffectDialog(tk.Toplevel):
+    """Adicionar bônus por carta selecionada sem digitar IDs na descrição."""
+    def __init__(self, master, cards, on_save):
+        super().__init__(master)
+        self.title('Efeito por carta específica')
+        self.geometry('590x460')
+        self.configure(bg=BG)
+        self.transient(master)
+        self.grab_set()
+        self.cards=cards
+        self.on_save=on_save
+        pane=ttk.Frame(self,padding=20);pane.pack(fill='both',expand=True)
+        ttk.Label(pane,text='Escolha a carta que será contada:').pack(anchor='w',pady=(0,5))
+        self.labels={f'{cid:05d} — {display_name(cid,cards)}':cid for cid in sorted(cards)}
+        self.selected=tk.StringVar()
+        self.combo=ttk.Combobox(pane,textvariable=self.selected,values=list(self.labels),width=62)
+        self.combo.pack(fill='x',pady=(0,12))
+        if self.labels:self.combo.current(0)
+        ttk.Label(pane,text='Contar cartas em:').pack(anchor='w')
+        self.origin=tk.StringVar(value='campo')
+        for label,val in [('Campo (somente viradas para cima)','campo'),('Deck completo configurado','deck')]:
+            ttk.Radiobutton(pane,text=label,value=val,variable=self.origin).pack(anchor='w',pady=3)
+        ttk.Label(pane,text='Escopo:').pack(anchor='w',pady=(7,3))
+        self.scope=tk.StringVar(value='aliados')
+        scope=ttk.Combobox(pane,textvariable=self.scope,values=['aliados','inimigos','todos'],state='readonly')
+        scope.pack(fill='x',pady=(0,12))
+        row=ttk.Frame(pane);row.pack(fill='x')
+        self.attack=tk.StringVar(value='200');self.defense=tk.StringVar(value='0')
+        for key,v in [('ATK por cópia',self.attack),('DEF por cópia',self.defense)]:
+            block=ttk.Frame(row);block.pack(side='left',padx=(0,16))
+            ttk.Label(block,text=key).pack(anchor='w');ttk.Entry(block,width=15,textvariable=v).pack()
+        ttk.Label(pane,text='A descrição exibirá o NOME da carta, não o ID.\nO efeito será simulado; não será escrito no BIN do PS1.',
+                  foreground='#edc47e').pack(anchor='w',pady=14)
+        buttons=ttk.Frame(pane);buttons.pack(fill='x')
+        ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left')
+        ttk.Button(buttons,text='Adicionar efeito + texto',style='Accent.TButton',command=self.submit).pack(side='right')
+    def submit(self):
+        value=self.selected.get().strip()
+        ref=self.labels.get(value)
+        if ref is None:
+            match=re.match(r'^#?(\d+)',value)
+            ref=int(match.group(1)) if match else None
+        if not ref or ref not in self.cards:
+            messagebox.showerror('Referência inválida','Escolha uma carta existente.',parent=self);return
+        try:
+            entry={'evento':'continuo','acao':'bonus_por_carta_id','alvo':'proprio',
+                   'carta_referencia_id':ref,'origem_contagem':self.origin.get(),
+                   'escopo':self.scope.get(),'valor':int(self.attack.get()),
+                   'valor_def':int(self.defense.get())}
+            self.on_save(entry)
+        except (ValueError,ModError) as exc:
+            messagebox.showerror('Efeito inválido',str(exc),parent=self);return
         self.destroy()
 
 
@@ -352,6 +409,7 @@ class Studio(tk.Tk):
         sidebar.pack(side='left',fill='y',padx=(0,12))
         sidebar.pack_propagate(False)
         tk.Label(sidebar,text='BIBLIOTECA DE CARTAS',bg=SURFACE,fg=TEXT,font=('Segoe UI',11,'bold')).pack(anchor='w',padx=14,pady=(17,8))
+        ttk.Button(sidebar,text='+ Criar nova carta (ID acima de 722)',command=self.add_new_card).pack(fill='x',padx=12,pady=(0,9))
         search = ttk.Entry(sidebar,textvariable=self.filter)
         search.pack(fill='x',padx=12,pady=(0,10))
         search.insert(0,'')
@@ -408,8 +466,20 @@ class Studio(tk.Tk):
         return entry
 
     def _cards_tab(self):
-        body = tk.Frame(self.tab_cards,bg=BG,padx=19,pady=12)
-        body.pack(fill='both',expand=True)
+        shell=tk.Frame(self.tab_cards,bg=BG)
+        shell.pack(fill='both',expand=True)
+        scroll=ttk.Scrollbar(shell,orient='vertical')
+        scroll.pack(side='right',fill='y')
+        cv=tk.Canvas(shell,bg=BG,highlightthickness=0,yscrollcommand=scroll.set)
+        cv.pack(side='left',fill='both',expand=True)
+        scroll.configure(command=cv.yview)
+        body=tk.Frame(cv,bg=BG,padx=19,pady=12)
+        wid=cv.create_window((0,0),window=body,anchor='nw')
+        body.bind('<Configure>',lambda evt:cv.configure(scrollregion=cv.bbox('all')))
+        cv.bind('<Configure>',lambda evt:cv.itemconfigure(wid,width=evt.width))
+        cv.bind('<Enter>',lambda evt:cv.bind_all('<MouseWheel>',lambda e:cv.yview_scroll(-1 if e.delta>0 else 1,'units')))
+        cv.bind('<Leave>',lambda evt:cv.unbind_all('<MouseWheel>'))
+
         tk.Label(body,text='EDITOR DE CARTAS',bg=BG,fg=TEXT,font=('Segoe UI',16,'bold')).pack(anchor='w')
         tk.Label(body,text='Alterações de ATK/DEF, tipo, nível, atributo e estrelas podem gerar um SLUS auxiliar; nomes e descrições ainda são metadados.',
                  bg=BG,fg=MUTED,font=('Segoe UI',9),wraplength=780,justify='left').pack(anchor='w',pady=(4,12))
@@ -455,10 +525,19 @@ class Studio(tk.Tk):
         tk.Label(form,text='A cor aparece na prévia e na biblioteca; ainda não é aplicada no PS1.',
                  bg=BG,fg=MUTED,font=('Segoe UI',9),wraplength=465,justify='left').pack(anchor='w',pady=(4,0))
         ttk.Button(form,text='Importar arte PNG (prévia)',command=self.import_art).pack(anchor='w',pady=(9,0))
-        tk.Label(body,text='Descrição personalizada (ainda não codificada para o PS1)',bg=BG,fg=TEXT,font=('Segoe UI',10)).pack(anchor='w',pady=(17,4))
-        self.description=tk.Text(body,height=3,wrap='word',bg=SURFACE,fg=TEXT,insertbackground=TEXT,
+        tk.Label(body,text='Descrição com ícones, cores e referências a outras cartas (prévia no Studio)',bg=BG,fg=TEXT,font=('Segoe UI',10)).pack(anchor='w',pady=(12,3))
+        desc_tools=ttk.Frame(body)
+        desc_tools.pack(fill='x',pady=(0,5))
+        ttk.Button(desc_tools,text='Inserir ícone',command=self.choose_description_icon).pack(side='left',padx=(0,6))
+        ttk.Button(desc_tools,text='Cor no trecho',command=self.choose_description_color).pack(side='left',padx=(0,6))
+        ttk.Button(desc_tools,text='Referenciar carta',command=self.choose_description_reference).pack(side='left')
+        self.description=tk.Text(body,height=4,wrap='word',bg=SURFACE,fg=TEXT,insertbackground=TEXT,
                                  selectbackground='#365a73',highlightthickness=1,highlightbackground=BORDER,font=('Segoe UI',10))
-        self.description.pack(fill='both',expand=True)
+        self.description.pack(fill='x')
+        tk.Label(body,text='PRÉVIA DA DESCRIÇÃO — cores e ícones (não é a renderização exata do PS1)',bg=BG,fg=MUTED,font=('Segoe UI',9)).pack(anchor='w',pady=(7,3))
+        self.description_preview=tk.Text(body,height=5,wrap='word',bg='#182339',fg=TEXT,
+            highlightthickness=1,highlightbackground=BORDER,font=('Consolas',11),state='disabled',cursor='arrow')
+        self.description_preview.pack(fill='both',expand=True)
         buttons=ttk.Frame(body)
         buttons.pack(fill='x',pady=(12,0))
         ttk.Button(buttons,text='Salvar projeto (todas as cartas)',style='Accent.TButton',command=self.save_project).pack(side='left')
@@ -541,6 +620,7 @@ class Studio(tk.Tk):
         buttons=ttk.Frame(body)
         buttons.pack(fill='x',pady=12)
         ttk.Button(buttons,text='+ Adicionar efeito',style='Accent.TButton',command=self.add_effect).pack(side='left')
+        ttk.Button(buttons,text='+ Bônus por carta',command=self.add_specific_effect).pack(side='left',padx=8)
         ttk.Button(buttons,text='Remover efeito selecionado',command=self.remove_effect).pack(side='left',padx=8)
         sim=tk.Frame(body,bg=SURFACE,padx=15,pady=12)
         sim.pack(fill='x')
@@ -887,6 +967,7 @@ class Studio(tk.Tk):
         if self.description.edit_modified():
             self.description.edit_modified(False)
             self._on_card_field_input()
+            self.render_description()
 
     def choose_name_color(self):
         if not self.project or not self.selected_id:
@@ -970,6 +1051,7 @@ class Studio(tk.Tk):
         self.preview.itemconfigure(self.preview_type,text=f'{TYPE_NAMES[int(c["tipo_id"])] if int(c["tipo_id"])<len(TYPE_NAMES) else "Tipo não mapeado"} • {ATTR_NAMES[int(c["atributo_id"])] if int(c["atributo_id"])<len(ATTR_NAMES) else "Atributo não mapeado"}')
         self.preview.itemconfigure(self.preview_stats,text=f'ATK {c["ataque"]}   DEF {c["defesa"]}')
         self._load_art()
+        self.render_description()
         self._refresh_effects()
         self._refresh_fusions()
         self._update_status(f'Carta {ident} selecionada • alterações pendentes na memória até Salvar projeto')
@@ -1085,8 +1167,10 @@ class Studio(tk.Tk):
             self._load_quick_settings(effects)
         self.effect_caption.configure(text=f'Efeitos de {format_id(cid)} — {len(effects)} cadastrado(s)')
         for i,eff in enumerate(effects):
+            label=(f"Bônus por {display_name(eff['carta_referencia_id'],{c:self.drafts.get_card(c) for c in self.project.cards})}"
+                   if eff.get('acao')=='bonus_por_carta_id' else caption_key(ACTIONS,eff['acao']))
             self.effect_tree.insert('','end',iid=str(i),values=(caption_key(EVENTS,eff['evento']),
-                caption_key(ACTIONS,eff['acao']),caption_key(TARGETS,eff['alvo']),
+                label,caption_key(TARGETS,eff['alvo']),
                 ('Todos' if eff.get('tipo_id') == -1 else TYPE_NAMES[eff['tipo_id']] if 'tipo_id' in eff and 0 <= eff['tipo_id'] < len(TYPE_NAMES) else '—'),
                 eff['valor'],eff.get('valor_def','—')))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
@@ -1106,6 +1190,138 @@ class Studio(tk.Tk):
             self._update_pending_label()
             self._update_status(f'Efeito pendente para a carta {format_id(self.selected_id)}. Clique Salvar projeto.')
         EffectDialog(self,submit)
+
+    def add_specific_effect(self):
+        if self._extract_running or not self.project or not self.selected_id:
+            return
+        self._stage_current()
+        cards={cid:self.drafts.get_card(cid) for cid in self.project.cards}
+        def submit(entry):
+            self.drafts.add_effect(self.selected_id,entry)
+            # Texto guarda token referencial; exibição mostra o nome corrente.
+            atk, defense=int(entry['valor']),int(entry['valor_def'])
+            strength=' e '.join(filter(None,(
+                f'+{atk} ATK' if atk else '',f'+{defense} DEF' if defense else '')))
+            line=f'Esta carta recebe {strength} para cada {{card:{entry["carta_referencia_id"]}}} no {entry["origem_contagem"]}.'
+            existing=self.description.get('1.0','end-1c')
+            self.description.insert('end', ('\n' if existing.strip() else '') + line)
+            self._stage_current()
+            self._refresh_effects()
+            self.render_description()
+            self._update_pending_label()
+        SpecificCardEffectDialog(self,cards,submit)
+
+    def add_new_card(self):
+        if self._extract_running or not self.project or not self.project.cards:
+            messagebox.showinfo('Base ausente','Importe primeiro as 722 cartas de referência.',parent=self)
+            return
+        if self.selected_id:
+            self._stage_current()
+        try:
+            cid=self.project.add_card(self.selected_id or 1)
+        except ModError as exc:
+            messagebox.showerror('Nova carta',str(exc),parent=self)
+            return
+        self.filter.set('')
+        self._refresh_cards()
+        self.selected_id=None
+        self.tree.selection_set(str(cid))
+        self.tree.see(str(cid))
+        self._on_card_select()
+        self._update_status(f'Carta #{cid} criada e registrada no projeto (não adicionada ao BIN PS1).')
+
+    def insert_description_token(self, token: str):
+        if not self.project or not self.selected_id:
+            return
+        self.description.insert('insert', token)
+        self.render_description()
+        self._stage_current()
+        self._update_pending_label()
+
+    def choose_description_icon(self):
+        if not self.project: return
+        popup=tk.Toplevel(self);popup.title('Ícones de descrição • 16×16');popup.geometry('590x530')
+        popup.configure(bg=BG)
+        pane=tk.Frame(popup,bg=BG);pane.pack(fill='both',expand=True)
+        cv=tk.Canvas(pane,bg=BG,highlightthickness=0)
+        scroll=ttk.Scrollbar(pane,command=cv.yview);scroll.pack(side='right',fill='y')
+        cv.pack(side='left',fill='both',expand=True);cv.configure(yscrollcommand=scroll.set)
+        body=tk.Frame(cv,bg=BG);wid=cv.create_window((0,0),window=body,anchor='nw')
+        body.bind('<Configure>',lambda e:cv.configure(scrollregion=cv.bbox('all')))
+        cv.bind('<Configure>',lambda e:cv.itemconfigure(wid,width=e.width))
+        popup._icon_refs=[]
+        tk.Label(body,text='NOVOS ÍCONES (prévia; requerem patch de fontes PS1)',bg=BG,fg=ACCENT).pack(anchor='w',pady=8,padx=12)
+        for name,label in CUSTOM_ICONS.items():
+            row=tk.Frame(body,bg=BG);row.pack(fill='x',padx=12,pady=2)
+            photo=self.get_icon_image(name)
+            if photo: popup._icon_refs.append(photo)
+            btn=ttk.Button(row,text=label,command=lambda n=name:(self.insert_description_token('{icon:'+n+'}'),popup.destroy()))
+            btn.pack(side='left',fill='x',expand=True)
+            if photo: tk.Label(row,image=photo,bg=BG).pack(side='left',padx=8)
+        tk.Label(body,text='ÍCONES NATIVOS (códigos F8 já documentados no jogo)',bg=BG,fg=ACCENT).pack(anchor='w',pady=(12,5),padx=12)
+        for name,code in NATIVE_ICONS.items():
+            ttk.Button(body,text=f'{name}   •   {{f8 0B {code:02X}}}',
+                command=lambda code=code:(self.insert_description_token(f'{{f8 0B {code:02X}}}'),popup.destroy())).pack(fill='x',padx=12,pady=1)
+
+    def choose_description_color(self):
+        if not self.project:return
+        popup=tk.Toplevel(self);popup.title('Colorir texto');popup.configure(bg=BG)
+        for name,(num,hexcol) in TEXT_COLORS.items():
+            tk.Button(popup,text=name.upper(),fg=hexcol,bg=SURFACE,relief='flat',width=24,
+                      command=lambda name=name:(self.apply_description_color(name),popup.destroy())).pack(padx=12,pady=3)
+
+    def apply_description_color(self,name):
+        if not self.project:return
+        try:
+            a=self.description.index('sel.first');b=self.description.index('sel.last')
+            selection=self.description.get(a,b)
+            self.description.delete(a,b)
+            self.description.insert(a,'{color:'+name+'}'+selection+'{/color}')
+        except tk.TclError:
+            self.insert_description_token('{color:'+name+'}')
+        self.render_description()
+        self._stage_current()
+
+    def choose_description_reference(self):
+        if not self.project:return
+        value=simpledialog.askstring('Referenciar carta','ID da carta (ex.: 1, 723):',parent=self)
+        if not value:return
+        try:
+            cid=int(value.strip().lstrip('#'))
+            if cid not in self.project.cards: raise ValueError()
+        except ValueError:
+            messagebox.showerror('Referência','Carta não encontrada no projeto.',parent=self);return
+        self.insert_description_token(f'{{card:{cid}}}')
+
+    def get_icon_image(self,name):
+        if not hasattr(self,'_icon_cache'):self._icon_cache={}
+        if name not in self._icon_cache:
+            try:
+                root=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))
+                self._icon_cache[name]=tk.PhotoImage(file=str(root/'assets'/'icons'/(name+'.png')))
+            except (tk.TclError,OSError):
+                self._icon_cache[name]=None
+        return self._icon_cache[name]
+
+    def render_description(self):
+        if not hasattr(self,'description_preview'):return
+        widget=self.description_preview
+        widget.configure(state='normal');widget.delete('1.0','end')
+        self._desc_images=[]
+        c={cid:self.drafts.get_card(cid) for cid in self.project.cards} if self.project and self.drafts else {}
+        for chunk,color,icon in tokens(self.description.get('1.0','end-1c'),c):
+            if icon:
+                img=self.get_icon_image(icon)
+                if img:
+                    self._desc_images.append(img)
+                    widget.image_create('end',image=img)
+                else:
+                    widget.insert('end',f'[{icon[7:] if icon.startswith("nativo:") else icon}]')
+            else:
+                tag='col_'+color.lstrip('#')
+                widget.tag_configure(tag,foreground=color)
+                widget.insert('end',chunk,tag)
+        widget.configure(state='disabled')
 
     def remove_effect(self):
         if self._extract_running:

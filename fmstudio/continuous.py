@@ -7,7 +7,7 @@ Equipamentos permanecem anexos ao slot: status não persistem após remoção.
 from __future__ import annotations
 from collections import Counter
 
-EFFECT_ACTIONS = {'aura_tipo', 'bonus_por_tipo', 'bonus_deck_tipo'}
+EFFECT_ACTIONS = {'aura_tipo', 'bonus_por_tipo', 'bonus_deck_tipo', 'bonus_por_carta_id'}
 EQUIPMENT_ACTIONS = {'equip_imune_armadilha', 'equip_imune_magia_armadilha',
                      'equip_indestrutivel', 'equip_atk'}
 MAX_MONSTERS_PER_SIDE = 5
@@ -17,7 +17,8 @@ SIDES = ('jogador', 'adversario')
 
 def resolve_field(monsters: list[dict], effects_by_card: dict, *,
                   deck_types: dict[str, Counter] | None = None,
-                  equipments: list[dict] | None = None) -> tuple[list[dict], list[dict]]:
+                  equipments: list[dict] | None = None,
+                  deck_cards: dict[str, list[int]] | None = None) -> tuple[list[dict], list[dict]]:
     """Devolve novas cópias com bônus e proteções; não modifica o tabuleiro fornecido.
 
     `deck_types` é a contagem de TIPOS no deck completo configurado (incluindo
@@ -39,7 +40,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             raise ModError('Campo: carta, tipo, slot, ATK e DEF devem ser inteiros') from exc
         if not 1 <= slot <= MAX_MONSTERS_PER_SIDE or (side, slot) in occupied:
             raise ModError('Campo: slot inválido ou ocupado')
-        if not 1 <= cid <= 722 or not 0 <= typ <= 31:
+        if not 1 <= cid <= 32766 or not 0 <= typ <= 31:
             raise ModError('Campo: ID/tipo fora do intervalo')
         if not 0 <= attack <= MAX_STAT or not 0 <= defense <= MAX_STAT:
             raise ModError('Campo: ATK/DEF fora do intervalo')
@@ -56,6 +57,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
     counts = Counter((m['lado'],m['tipo_id']) for m in field if m['face_up'])
     by_side = Counter(m['lado'] for m in field if m['face_up'])
     deck_types = deck_types or {}
+    deck_cards = deck_cards or {}
     events = []
 
     def effect_set(cid):
@@ -110,7 +112,16 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             if raw.get('evento') != 'continuo' or raw.get('acao') not in EFFECT_ACTIONS:
                 continue
             eff = check_effect(raw)
-            if eff['acao'] == 'aura_tipo':
+            if eff['acao'] == 'bonus_por_carta_id':
+                scope = eff.get('escopo','aliados')
+                sides=([source['lado']] if scope == 'aliados' else
+                       [s for s in SIDES if s != source['lado']] if scope == 'inimigos' else list(SIDES))
+                ref=eff['carta_referencia_id']
+                n = (sum(1 for m in field if m['face_up'] and m['lado'] in sides and m['card_id']==ref)
+                     if eff.get('origem_contagem') == 'campo' else
+                     sum(1 for sd in sides for cid in deck_cards.get(sd,[]) if cid == ref))
+                add_bonus(source,source,eff,n,i)
+            elif eff['acao'] == 'aura_tipo':
                 targets = [m for m in field if matching(m,source,eff)]
                 for target in targets:
                     add_bonus(source,target,eff,1,i)
@@ -132,7 +143,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             slot, cid = int(equipment.get('slot')), int(equipment.get('card_id'))
         except (ValueError, TypeError) as exc:
             raise ModError('Equipamento: slot e ID devem ser inteiros') from exc
-        if side not in SIDES or not 1 <= slot <= MAX_MONSTERS_PER_SIDE or not 1 <= cid <= 722:
+        if side not in SIDES or not 1 <= slot <= MAX_MONSTERS_PER_SIDE or not 1 <= cid <= 32766:
             raise ModError('Equipamento: alvo ou carta inválidos')
         target = index.get((side,slot))
         if target is None:  # removido => anexos não produzem efeito

@@ -1,3 +1,12 @@
+## v1.0.0 — Cartas virtuais, God e descrições aprimoradas
+- Suporte no editor a IDs a partir de 723 (até 32766 no projeto), sem repack PS1.
+- Tipo God (ID 24) no Studio, salvo como metadado; não gravado no executável PS1.
+- Seletor de ícones nativos de 16×16 e 9 ícones personalizados em PNG transparente, com paleta reduzida.
+- Trechos coloridos em descrições, conversão das cores conhecidas aos códigos F8 em exportação auxiliar.
+- Bônus dinâmico por ID de carta com nome resolvido em prévia/descrição, por campo ou deck.
+- Projetos antigos, fusões e backups preservados.
+- Duelos reais e expansões binárias do PS1 ainda pendentes.
+
 ## v0.7.0 — Efeitos contínuos e campo visual
 - Aura para todos os aliados face-up do tipo escolhido (+ATK/+DEF).
 - Bônus para fonte por quantidade de aliados face-up do tipo escolhido.

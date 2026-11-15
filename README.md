@@ -1,4 +1,15 @@
-# Yu-Gi-Oh Studio FM v0.9.1 — Atualizações diretas
+# Yu-Gi-Oh Studio FM v1.0.0 — Expansão de cartas e descrições
+
+## Novidades v1.0.0
+
+- **+ Criar nova carta:** IDs virtuais a partir de 723 até 32766, copiados de uma carta-base selecionada. Essas cartas só existem no Studio e no laboratório; não no BIN original do PS1.
+- **God (tipo 24)** para novos monstros e filtros de auras; o exportador não injeta esse tipo desconhecido no executável retail.
+- **Ícones de descrição:** escolha entre códigos nativos `{f8 0B XX}` documentados no jogo e ícones novos `{icon:...}` de 16×16 px. Ícones novos permanecem na prévia, aguardando patch de fonte do PS1.
+- **Texto colorido:** selecione um trecho e clique Cor no trecho. Cores conhecidas convertem para `{f8 0A XX}` na exportação textual, mas não são gravadas no banco do PS1.
+- **+ Bônus por carta:** escolha a carta pelo nome; conte cópias viradas para cima no campo ou no deck completo e receba +X ATK/+Y DEF. A descrição exibe o nome, e não o número da carta.
+- **Fusões originais intocadas**, salvamento por botão e atualização pelo GitHub mantidos.
+
+Documentação: `docs/EXPANSAO_722_GOD_TEXTO.md`.
 
 O botão **Atualizar** consulta GitHub Releases do repositório `guibatoni/yu-gi-oh-studio-fm`, baixa o pacote correto de forma automática, verifica SHA-256 e instala na mesma pasta, preservando os projetos.
 

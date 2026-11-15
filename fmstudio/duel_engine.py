@@ -33,7 +33,7 @@ def parse_card_ids(text: str, *, maximum: int = MAX_DECK) -> list[int]:
             raise ModError(f'Lista de cartas: formato inválido {chunk!r}. Use 1, 2x3, 16*2')
         cid = int(match.group(1))
         qty = int(match.group(2) or '1')
-        if cid < 1 or cid > 722 or qty < 1 or qty > maximum or len(result)+qty > maximum:
+        if cid < 1 or cid > 32766 or qty < 1 or qty > maximum or len(result)+qty > maximum:
             raise ModError(f'Lista de cartas: ID ou quantidade inválida em {chunk!r} (limite {maximum})')
         result.extend([cid]*qty)
     return result
@@ -91,7 +91,7 @@ class DuelLab:
 
     def set_field(self, monsters: list[dict], equipments: list[dict] | None = None):
         # Resolve/valida tudo antes de substituir; se falhar, mantém o estado.
-        resolve_field(monsters,self.effects,deck_types=self.type_counts(),equipments=equipments or [])
+        resolve_field(monsters,self.effects,deck_types=self.type_counts(),equipments=equipments or [],deck_cards=self.decks)
         new_keys={(m['lado'],int(m['slot']),int(m['card_id'])) for m in monsters}
         self.damage={key:v for key,v in self.damage.items() if key in new_keys}
         self.attacks_used={key:v for key,v in self.attacks_used.items() if key in new_keys}
@@ -99,7 +99,7 @@ class DuelLab:
         self.equipments=deepcopy(equipments or [])
 
     def resolve(self):
-        return resolve_field(self.monsters,self.effects,deck_types=self.type_counts(),equipments=self.equipments)
+        return resolve_field(self.monsters,self.effects,deck_types=self.type_counts(),equipments=self.equipments,deck_cards=self.decks)
 
     def get(self, side: str, slot: int):
         for monster in self.monsters:

@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Continue' # PowerShell 5.1 pode tratar stderr normal de gh/git como NativeCommandError; cada chamada é checada por exit code
 Set-Location -LiteralPath $PSScriptRoot
 $repo = 'guibatoni/yu-gi-oh-studio-fm'
-$tag = 'studio-v0.9.1'
+$tag = 'studio-v1.0.0'
 Write-Host "Yu-Gi-Oh Studio Card FM $tag" -ForegroundColor Cyan
 Write-Host "GitHub: https://github.com/$repo"
 Write-Warning 'O repositório é público. Publicaremos apenas CÓDIGO, sem ROMs, BIOS, dados extraídos, imagens de cartas ou projetos privados.'
@@ -54,7 +54,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Não foi possível preparar os arquivos.' }
     & git -C $temporario diff --cached --quiet
     if ($LASTEXITCODE -eq 1) {
-        & git -C $temporario commit -m 'release: Studio v0.9.1 atualizador automatico'
+        & git -C $temporario commit -m 'release: Studio v1.0.0 atualizador automatico'
         if ($LASTEXITCODE -ne 0) { throw 'Commit falhou. Configure git user.name e user.email.' }
         & git -C $temporario push origin HEAD:main
         if ($LASTEXITCODE -ne 0) { throw 'Push falhou. Verifique permissão ou alterações remotas.' }
