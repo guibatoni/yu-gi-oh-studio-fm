@@ -152,4 +152,73 @@ class DiscBuildTests(unittest.TestCase):
         self.patched=self.original
         with self.assertRaises(ModError):build_test_disc(self.project,self.src)
 
+class StableDiscOutputTests(DiscBuildTests):
+    """Mesmo nome substitui; nome diferente cria outra imagem, sem tocar na origem."""
+
+    def test_rebuild_same_source_replaces_instead_of_duplicating(self):
+        original_hash=hashlib.sha256(self.src.read_bytes()).hexdigest()
+        first=build_test_disc(self.project,self.src)
+        first_path=Path(first['bin'])
+        first_bytes=first_path.read_bytes()
+        self.assertEqual(first['acao_arquivo'],'criado')
+        self.assertIn('original',first_path.name)
+        self.assertEqual(len(list(first_path.parent.glob('*.bin'))),1)
+
+        self.patched=self.original[:2100]+b'B'+self.original[2101:]
+        second=build_test_disc(self.project,self.src)
+        self.assertEqual(first['bin'],second['bin'])
+        self.assertEqual(first['cue'],second['cue'])
+        self.assertEqual(second['acao_arquivo'],'substituido')
+        self.assertNotEqual(first_bytes,first_path.read_bytes())
+        self.assertEqual(hashlib.sha256(self.src.read_bytes()).hexdigest(),original_hash)
+        self.assertEqual(len(list(first_path.parent.glob('*.bin'))),1)
+        self.assertFalse(any(first_path.parent.glob('.fmstudio_build_*')))
+        with DiscReader(second['bin']) as reader:
+            slus=next(e for e in reader.files() if e.path=='SLUS_014.11')
+            self.assertEqual(b''.join(reader.read_entry(slus)),self.patched)
+
+    def test_different_source_filename_creates_distinct_image(self):
+        first=build_test_disc(self.project,self.src)
+        another=self.path/'outro_mod.bin'
+        another.write_bytes(self.src.read_bytes())
+        second=build_test_disc(self.project,another)
+        self.assertNotEqual(first['bin'],second['bin'])
+        self.assertTrue(Path(first['bin']).is_file())
+        self.assertTrue(Path(second['bin']).is_file())
+        self.assertEqual(len(list(Path(first['bin']).parent.glob('*.bin'))),2)
+        self.assertEqual(second['acao_arquivo'],'criado')
+
+    def test_failed_patch_preserves_prior_bin_and_sidecars(self):
+        from unittest.mock import patch
+        result=build_test_disc(self.project,self.src)
+        files=[Path(result[k]) for k in ('bin','cue')]
+        files.append(files[0].with_suffix('.json'))
+        before={f:f.read_bytes() for f in files}
+        self.patched=self.original[:2100]+b'B'+self.original[2101:]
+        with patch('fmstudio.disc_build._write_file_patches',side_effect=ModError('falha simulada')):
+            with self.assertRaisesRegex(ModError,'falha simulada'):
+                build_test_disc(self.project,self.src)
+        self.assertEqual({f:f.read_bytes() for f in files},before)
+        self.assertFalse(any(files[0].parent.glob('.fmstudio_build_*')))
+
+    def test_locked_bin_rolls_back_sidecars_and_preserves_last_good(self):
+        from unittest.mock import patch
+        result=build_test_disc(self.project,self.src)
+        files=[Path(result[k]) for k in ('bin','cue')]
+        files.append(files[0].with_suffix('.json'))
+        before={f:f.read_bytes() for f in files}
+        self.patched=self.original[:2100]+b'Z'+self.original[2101:]
+        native_replace=Path.replace
+
+        def fail_on_bin(inst,target):
+            if inst.suffix=='.bin' and inst.parent.name.startswith('.fmstudio_build_'):
+                raise PermissionError('ePSXe bloqueou o arquivo')
+            return native_replace(inst,target)
+
+        with patch.object(Path,'replace',fail_on_bin):
+            with self.assertRaisesRegex(ModError,'Feche o jogo no ePSXe'):
+                build_test_disc(self.project,self.src)
+        self.assertEqual({f:f.read_bytes() for f in files},before)
+        self.assertFalse(any(files[0].parent.glob('.fmstudio_build_*')))
+
 if __name__=='__main__':unittest.main()
