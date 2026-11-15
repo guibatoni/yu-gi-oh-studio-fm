@@ -26,7 +26,7 @@ def audit(project) -> dict:
             pass
     counts={'estatisticas':0,'nomes':0,'artes':0,'efeitos':0,'cartas_extras':len(project.new_cards),
             'descricoes':0,'classes_cores':0,'icones_especiais':0,'equipamentos_ps1':0,'equip_substituicoes':0,
-            'rituais_ps1':0,'armadilhas_ps1':0,'terrenos_ps1':0}
+            'rituais_ps1':0,'armadilhas_ps1':0,'terrenos_ps1':0,'limite_global_deck_ps1':0}
     blocked=[]; supported=[]
     for key,edits in sorted(project.edits.items(),key=lambda item:int(item[0])):
         cid=int(key); current=project.get(cid)
@@ -127,6 +127,18 @@ def audit(project) -> dict:
                 blocked.append(f'Campo PS1: {exc}')
         else:
             blocked.append('Campos: SLUS original precisa ser verificado')
+    global_copy_limit=project.metadata.get('ps1_deck_global_limit')
+    if global_copy_limit is not None and int(global_copy_limit)!=3:
+        from .ps1_effects_lab import deck_global_patch_probe
+        if known:
+            probe=deck_global_patch_probe(exe,global_copy_limit)
+            if probe['status']=='candidato_unico_experimental':
+                counts['limite_global_deck_ps1']=1
+                supported.append(f'Limite global MIPS de {global_copy_limit} cópias por ID (EXPERIMENTAL; teste no ePSXe pendente)')
+            else:
+                blocked.append('Limite global PS1: '+probe['motivo'])
+        else:
+            blocked.append('Limite global MIPS de cópias exige SLUS original confirmado')
     for key,items in project.effects.items():
         if items:
             counts['efeitos']+=len(items)
@@ -152,11 +164,11 @@ def audit(project) -> dict:
         'armadilhas_ataque_681_686':'gravavel_no_SLUS_SE_TABELA_RETAIL',
         'bonus_terreno_tipo':'gravavel_no_SLUS_SE_TABELA_RETAIL',
         'ataque_2x_3x_piercing_haste':'PENDENTE_MIPS_COMBATE',
-        'decks_e_regras_de_copias':'PENDENTE_MIPS_DECKBUILDER',
+        'decks_e_regras_de_copias':'Limite GLOBAL 1–40: patch MIPS experimental sob assinatura; limites por carta: somente simulador',
         'descarte_e_dano_a_monstros':'PENDENTE_NOVAS_REGRAS',
       },
       'pendente_de_motor':blocked,
-      'observacao':'BIN/CUE gerado implementa algumas regras nativas (Equip, Ritual, Trap e terreno); efeitos personalizados inéditos e novas cartas seguem somente no Studio até patch MIPS comprovado.',
+      'observacao':'BIN/CUE parcial: Equip validado; limite global de cópias é experimental sob assinatura MIPS e precisa teste no ePSXe; efeitos inéditos de campo/cemitério/batalha ainda somente no simulador.',
     }
 
 
