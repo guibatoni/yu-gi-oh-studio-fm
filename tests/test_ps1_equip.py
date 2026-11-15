@@ -7,7 +7,7 @@ from fmstudio.core import ModError
 from fmstudio.tables import (WA_TERRAIN_BASE, TERRAIN_STRIDE, TERRAIN_COPIES,
                              EQUIP_OFF, EQUIP_LEN, FUSION_OFF, FUSION_LEN)
 from fmstudio.ps1_equip import (patch_equipment_targets, list_equipment_targets,
-                               add_equipment_target, META_KEY)
+                               equip_layout_report, add_equipment_target, META_KEY)
 
 
 def sample_wa():
@@ -45,6 +45,44 @@ class NativeEquipTests(unittest.TestCase):
         result,actions=patch_equipment_targets(original,{'650':[16]})
         self.assertIs(result,original)
         self.assertEqual(actions,[])
+
+    def test_extra_mod_data_after_two_byte_terminator_is_preserved(self):
+        original=bytearray(sample_wa())
+        # Repete dados específicos do MOD após o fim da tabela. A primeira
+        # palavra depois do terminador NÃO é um contador n.
+        for idx in range(TERRAIN_COPIES):
+            start=WA_TERRAIN_BASE + idx*TERRAIN_STRIDE + EQUIP_OFF
+            original[start+22:start+24]=b'\x00\x00'  # 2 bytes de terminador
+            original[start+26:start+32]=b'\xAB\xCD\xFE\x01\x02\x03'
+        wa=bytes(original)
+        info=equip_layout_report(wa)
+        self.assertTrue(info['dados_adicionais'])
+        self.assertEqual(info['bytes_zerados_apos_terminador'],2)
+        # Adiciona exatamente uma carta: 2 bytes de crescimento.
+        patched,changed=patch_equipment_targets(wa,{'650':[2]})
+        self.assertEqual(len(changed),1)
+        self.assertEqual(list_equipment_targets(patched)[650],[16,2])
+        for idx in range(TERRAIN_COPIES):
+            pos=WA_TERRAIN_BASE+idx*TERRAIN_STRIDE+EQUIP_OFF
+            self.assertEqual(patched[pos+26:pos+32],wa[pos+26:pos+32])
+            self.assertEqual(patched[pos+FUSION_OFF-EQUIP_OFF:pos+FUSION_OFF-EQUIP_OFF+10],
+                             wa[pos+FUSION_OFF-EQUIP_OFF:pos+FUSION_OFF-EQUIP_OFF+10])
+
+    def test_auxiliary_bytes_immediately_after_terminator_block_growth(self):
+        original=bytearray(sample_wa())
+        for idx in range(TERRAIN_COPIES):
+            pos=WA_TERRAIN_BASE+idx*TERRAIN_STRIDE+EQUIP_OFF
+            original[pos+24:pos+28]=b'\xDE\xAD\xBE\xEF'
+        original=bytes(original)
+        with self.assertRaisesRegex(ModError,'insuficiente'):
+            patch_equipment_targets(original,{'650':[2]})
+        self.assertEqual(original,bytes(original))
+
+    def test_terminator_only_two_bytes_not_four(self):
+        table=bytearray(sample_wa())
+        start=WA_TERRAIN_BASE+EQUIP_OFF
+        table[start+24:start+26]=b'\xFE\xDC'
+        self.assertEqual(list_equipment_targets(bytes(table))[650],[16])
 
     def test_unknown_equip_is_rejected(self):
         with self.assertRaises(ModError):

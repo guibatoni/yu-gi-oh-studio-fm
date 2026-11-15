@@ -1,3 +1,11 @@
+## v1.2.5 — Correção do terminador e preservação de dados adicionais Equip
+
+- Corrigido terminador da tabela Equip de 4 bytes para **u16(0), apenas 2 bytes**, como o código original do PS1 verifica.
+- Dados não nulos após o terminador são reconhecidos como conteúdo auxiliar do MOD e preservados, sem interpretação ou limpeza.
+- Novos alvos são gravados apenas se couberem na sequência de zeros imediatamente após a tabela existente; caso contrário, o Studio bloqueia a exportação e exibe os bytes disponíveis e necessários.
+- Após modificar, todas as sete cópias são regravadas, a tabela é relida e dados auxiliares são comparados para impedir perda silenciosa.
+- Testes com dados auxiliares sintéticos, buffer insuficiente e preservação das fusões. O motor do MOD Drop X15 ainda precisa de validação no ePSXe; alterar a tabela não garante efeito em jogos com código MIPS personalizado.
+
 ## v1.2.4 — Diagnóstico da falha de Equip no PS1
 
 - Novo botão Projeto / Exportação > Diagnosticar Equip no BIN/CUE.

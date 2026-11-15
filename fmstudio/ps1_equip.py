@@ -15,19 +15,26 @@ from .tables import (CARD_COUNT, EQUIP_LEN, EQUIP_OFF,
 META_KEY = 'ps1_equip_additions'
 
 
-def _unpack(table: bytes) -> list[tuple[int, list[int]]]:
+def _parse_table(table: bytes) -> tuple[list[tuple[int, list[int]]], int]:
+    """Lê registros equip/u16 count/u16 targets e terminador u16(0).
+
+    O motor original testa somente p[0] == 0. Os bytes seguintes NÃO fazem
+    parte do terminador e podem conter dados próprios do MOD, que nunca
+    devem ser apagados nem interpretados como registros Equip.
+    """
     if len(table) != EQUIP_LEN:
         raise ModError('Tamanho inválido da tabela de equipamentos.')
     cursor = 0
     records = []
     seen = set()
-    while cursor + 4 <= len(table):
-        equip_id, n = struct.unpack_from('<HH', table, cursor)
-        cursor += 4
+    while cursor + 2 <= len(table):
+        equip_id = struct.unpack_from('<H', table, cursor)[0]
         if equip_id == 0:
-            if n != 0 or any(table[cursor:]):
-                raise ModError('Dados desconhecidos após o fim da tabela de equipamentos; patch bloqueado.')
-            return records
+            return records, cursor + 2
+        if cursor + 4 > len(table):
+            raise ModError('Cabeçalho de Equip truncado antes do terminador.')
+        _, n = struct.unpack_from('<HH', table, cursor)
+        cursor += 4
         if equip_id > CARD_COUNT or equip_id in seen or n > CARD_COUNT:
             raise ModError('Tabela de equipamentos fora do formato original suportado.')
         if cursor + 2 * n > len(table):
@@ -38,7 +45,31 @@ def _unpack(table: bytes) -> list[tuple[int, list[int]]]:
         records.append((equip_id, targets))
         seen.add(equip_id)
         cursor += 2 * n
-    raise ModError('Tabela de equipamentos sem terminador.')
+    raise ModError('Tabela de equipamentos sem terminador u16(0).')
+
+
+def _unpack(table: bytes) -> list[tuple[int, list[int]]]:
+    return _parse_table(table)[0]
+
+
+def equip_layout_report(wa: bytes) -> dict:
+    """Diagnóstico somente leitura: terminador, espaço zerado e dados extras."""
+    pos = WA_TERRAIN_BASE + EQUIP_OFF
+    if pos + EQUIP_LEN > len(wa):
+        raise ModError('WA_MRG.MRG é menor que a tabela de equipamentos.')
+    table = wa[pos:pos+EQUIP_LEN]
+    records, end = _parse_table(table)
+    occupied_start = next((p for p in range(end, len(table))
+                           if table[p] != 0), len(table))
+    return {
+        'registros': len(records),
+        'terminador_u16_offset': end-2,
+        'bytes_zerados_apos_terminador': occupied_start-end,
+        'dados_adicionais': occupied_start < len(table),
+        'primeiro_dado_adicional_offset': (occupied_start if occupied_start < len(table) else None),
+        'primeiros_bytes_adicionais_hex': (table[occupied_start:occupied_start+16].hex()
+                                          if occupied_start < len(table) else ''),
+    }
 
 
 def list_equipment_targets(wa: bytes) -> dict[int, list[int]]:
@@ -82,13 +113,13 @@ def patch_equipment_targets(wa: bytes, additions: dict) -> tuple[bytes, list[dic
     if any(copy != original[0] for copy in original[1:]):
         raise ModError('As sete cópias de equipamento divergem nesta versão do MOD; '
                        'patch automático bloqueado para preservar seus dados.')
-    records = _unpack(original[0])
+    records, end = _parse_table(original[0])
     known = {equip for equip, _ in records}
     if not set(plan).issubset(known):
         invalid = min(set(plan)-known)
         raise ModError(f'Equipamento #{invalid} não possui uma tabela original conhecida.')
 
-    result = bytearray()
+    encoded = bytearray()
     changed = []
     for equip, targets in records:
         merged = list(targets)
@@ -97,23 +128,52 @@ def patch_equipment_targets(wa: bytes, additions: dict) -> tuple[bytes, list[dic
             if card not in merged:
                 merged.append(card)
                 new.append(card)
-        result += struct.pack('<HH', equip, len(merged))
+        encoded += struct.pack('<HH', equip, len(merged))
         if merged:
-            result += struct.pack(f'<{len(merged)}H', *merged)
+            encoded += struct.pack(f'<{len(merged)}H', *merged)
         if new:
             changed.append({'equipamento_id': equip, 'novos_alvos': new,
                             'alvos_totais': len(merged)})
-    result += b'\x00\x00\x00\x00'
-    if len(result) > EQUIP_LEN:
-        raise ModError(f'Tabela de equipamentos não tem espaço para adicionar alvos '
-                       f'({len(result)} > {EQUIP_LEN} bytes).')
-    result += bytes(EQUIP_LEN - len(result))
+    encoded += b'\x00\x00'  # Terminador REAL: somente um u16 de ID zero.
     if not changed:
         return wa, []
+
+    # Nunca sobrescreve bytes desconhecidos após o terminador: podem ser
+    # estruturas próprias do MOD. Só utiliza zeros contíguos imediatamente
+    # depois do terminador da tabela previamente validada.
+    first_extra = next((i for i in range(end, len(original[0]))
+                        if original[0][i] != 0), len(original[0]))
+    free_space = first_extra - end
+    growth = len(encoded) - end
+    if growth > free_space:
+        raise ModError(
+            'MOD com dados adicionais na tabela Equip: espaço seguro '
+            f'insuficiente ({free_space} byte(s) livres, {growth} necessário(s)). '
+            f'Terminador u16 em 0x{end-2:X}; '
+            f'próximo dado ocupado em 0x{first_extra:X}. '
+            'A imagem original foi preservada. Para esse MOD é preciso '
+            'mapear a rotina Duel_CheckEquip e seus blocos auxiliares.'
+        )
+    if len(encoded) > EQUIP_LEN:
+        raise ModError('Tabela de equipamentos ultrapassaria seu bloco reservado.')
+
+    modified = bytearray(original[0])
+    modified[:len(encoded)] = encoded
+    if modified[first_extra:] != original[0][first_extra:]:
+        raise ModError('Verificação falhou: dados auxiliares de Equip seriam alterados.')
+    # Releitura protege contra bugs na contagem/deslocamento dos registros.
+    verified = dict(_unpack(bytes(modified)))
+    for equip, cards in plan.items():
+        if not set(cards).issubset(verified[equip]):
+            raise ModError('Verificação falhou: novos alvos não foram gravados.')
+
     output = bytearray(wa)
     for index in range(TERRAIN_COPIES):
         pos = WA_TERRAIN_BASE + index * TERRAIN_STRIDE + EQUIP_OFF
-        output[pos:pos+EQUIP_LEN] = result
+        output[pos:pos+EQUIP_LEN] = modified
+    for item in changed:
+        item['bytes_livres_antes'] = free_space
+        item['dados_adicionais_preservados'] = first_extra < EQUIP_LEN
     return bytes(output), changed
 
 
