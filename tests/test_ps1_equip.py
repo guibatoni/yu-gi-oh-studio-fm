@@ -84,6 +84,38 @@ class NativeEquipTests(unittest.TestCase):
         table[start+16:start+18]=b'\xFE\xDC'
         self.assertEqual(list_equipment_targets(bytes(table))[650],[16])
 
+    def test_full_ff_padding_allows_original_drop_x15_layout(self):
+        """O Drop X15 real usa 2020 bytes de FF depois do terminador u16."""
+        original=bytearray(sample_wa())
+        for idx in range(TERRAIN_COPIES):
+            at=WA_TERRAIN_BASE+idx*TERRAIN_STRIDE+EQUIP_OFF
+            # A fixture original termina após 16 bytes. Todo o restante
+            # representa padding FF de área reservada, não um bloco extra.
+            original[at+16:at+EQUIP_LEN]=bytes([0xFF])*(EQUIP_LEN-16)
+        source=bytes(original)
+        patched,changes=patch_equipment_targets(source,{'650':[7,9]})
+        self.assertEqual(list_equipment_targets(patched)[650],[16,7,9])
+        self.assertEqual(changes[0]['preenchimento_original'],'FF')
+        self.assertEqual(changes[0]['bytes_livres_antes'],EQUIP_LEN-16)
+        self.assertEqual(len(patched),len(source))
+        for idx in range(TERRAIN_COPIES):
+            at=WA_TERRAIN_BASE+idx*TERRAIN_STRIDE+EQUIP_OFF
+            self.assertEqual(patched[at+20:at+EQUIP_LEN],
+                             source[at+20:at+EQUIP_LEN])
+            self.assertEqual(patched[at+FUSION_OFF-EQUIP_OFF:
+                                     at+FUSION_OFF-EQUIP_OFF+FUSION_LEN],
+                             source[at+FUSION_OFF-EQUIP_OFF:
+                                    at+FUSION_OFF-EQUIP_OFF+FUSION_LEN])
+
+    def test_ff_prefix_with_unknown_data_is_not_treated_as_free(self):
+        """Não confundir parte de dados desconhecidos com padding integral."""
+        original=bytearray(sample_wa())
+        for idx in range(TERRAIN_COPIES):
+            at=WA_TERRAIN_BASE+idx*TERRAIN_STRIDE+EQUIP_OFF
+            original[at+16:at+20]=b'\xff\xff\xaa\x55'
+        with self.assertRaisesRegex(ModError,'insuficiente'):
+            patch_equipment_targets(bytes(original),{'650':[7]})
+
     def test_unknown_equip_is_rejected(self):
         with self.assertRaises(ModError):
             patch_equipment_targets(sample_wa(),{'652':[1]})
