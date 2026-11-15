@@ -10,6 +10,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from pathlib import Path
 from .core import Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR, ONCE_ACTIONS
 from .drafts import DraftSession
+from .disc import DiscError
 from .tables import TYPE_NAMES, ATTR_NAMES, STAR_NAMES
 from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
 from .abilities import QUICK_ACTIONS, BOOLEAN_ACTIONS, quick_settings
@@ -900,6 +901,17 @@ class Studio(tk.Tk):
             return False
         if not self._ensure_project():
             return
+        if self.project.cards and (self.project.edits or self.project.effects):
+            messagebox.showinfo(
+                'Projeto editado — não reimporte o jogo',
+                'Seu projeto já possui alterações salvas. Reimportar a imagem substituiria '
+                'a base das cartas, por isso foi bloqueado para proteger seu trabalho.\n\n'
+                'Para TESTAR no ePSXe, clique em Gerar jogo BIN/CUE (na barra superior), '
+                'selecione a MESMA imagem de origem e confirme.\n\n'
+                'Para iniciar uma base diferente, crie um NOVO projeto.',
+                parent=self)
+            self._update_status('Base mantida: use Gerar jogo BIN/CUE para criar a cópia de teste.')
+            return
         path=filedialog.askopenfilename(title='Imagem original ou mod (.bin/.cue/.iso)',filetypes=[('Disco PS1','*.bin *.cue *.iso'),('Todos arquivos','*.*')])
         if not path:
             return
@@ -1561,7 +1573,7 @@ class Studio(tk.Tk):
         try:
             from .disc_build import build_test_disc
             manifest = build_test_disc(self.project, Path(source))
-        except (OSError, ValueError, ModError) as exc:
+        except (OSError, ValueError, ModError, DiscError) as exc:
             messagebox.showerror('Não foi possível gerar BIN/CUE', str(exc), parent=self)
             return
         messagebox.showinfo('BIN/CUE de teste gerado',
