@@ -583,7 +583,7 @@ class Studio(tk.Tk):
             lambda e: canvas.yview_scroll(-1 if e.delta>0 else 1,'units')))
         canvas.bind('<Leave>',lambda event:canvas.unbind_all('<MouseWheel>'))
         tk.Label(body,text='EFEITOS DAS CARTAS',bg=BG,fg=TEXT,font=('Segoe UI',16,'bold')).pack(anchor='w')
-        tk.Label(body,text='Gatilhos e ações para planejar e simular efeitos. NÃO são aplicados no motor do PS1 nesta versão.',
+        tk.Label(body,text='Gatilhos personalizados continuam simulados. Apenas a compatibilidade de Equip original pode ser gravada no PS1 nesta versão.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),wraplength=780,justify='left').pack(anchor='w',pady=(8,12))
         self.effect_caption=tk.Label(body,text='Escolha uma carta',bg=BG,fg=ACCENT,font=('Segoe UI',12,'bold'))
         self.effect_caption.pack(anchor='w',pady=(0,8))
@@ -688,8 +688,8 @@ class Studio(tk.Tk):
         ttk.Button(buttons,text='Compatibilidade PS1',command=self.audit_ps1).pack(side='left',padx=8)
         ttk.Button(buttons,text='Gerar BIN/CUE de teste',command=self.build_disc).pack(side='left',padx=8)
         ttk.Button(buttons,text='Verificar BIN/CUE',command=self.verify_disc).pack(side='left',padx=8)
-        tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Os efeitos ainda não são interpretados pelo jogo.\n'
-                 'A cópia de teste permite atributos, textos curtos e artes com paleta original. Efeitos novos NÃO funcionam no PS1.',
+        tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Efeitos inéditos ainda não são interpretados pelo jogo.\n'
+                 'A cópia de teste permite atributos, textos, artes e alvos de Equip stock. Efeitos inéditos NÃO funcionam no PS1.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),justify='left',wraplength=750).pack(anchor='w',pady=(8,0))
 
     def _extract_tab(self):
@@ -1500,7 +1500,7 @@ class Studio(tk.Tk):
                 'FASES DE EXPORTAÇÃO\n'
                 '• Estatísticas: SLUS auxiliar se houver executável vinculado.\n'
                 '• Nomes, cores e descrições: apenas registro e prévia no Studio.\n'
-                '• Efeitos: gatilhos e auras de campo apenas em simulação.\n'
+                '• Efeitos inéditos: simulação; alvos de Equip original: exportáveis ao PS1.\n'
                 '• Fusões: imutáveis, com verificação de integridade.\n'
                 '• Imagem BIN/CUE jogável: não gerada nesta versão.\n')
         pane.insert('1.0',txt)
