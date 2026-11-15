@@ -73,13 +73,17 @@ class DuelLab:
         counts = Counter(ids)
         for cid, quantity in counts.items():
             self.card(cid)
-            unlimited = any(e.get('acao') == 'sem_limite_deck' and
-                            e.get('evento') == 'regra_deck' and
-                            check_effect(e)['acao'] == 'sem_limite_deck'
-                            for e in self.effects.get(str(cid), self.effects.get(cid, [])))
-            if quantity > 3 and not unlimited:
-                raise ModError(f'Deck: carta #{cid} tem {quantity} cópias (máximo padrão 3). '
-                               'Marque "Sem limite de cópias" na carta para permitir mais.')
+            per_card = 3
+            for entry in self.effects.get(str(cid), self.effects.get(cid, [])):
+                if entry.get('acao') in ('sem_limite_deck','limite_copias_deck'):
+                    eff = check_effect(entry)
+                    if eff['acao'] == 'sem_limite_deck':
+                        per_card = MAX_DECK
+                    else:
+                        per_card = max(per_card, eff['valor'])
+            if quantity > per_card:
+                raise ModError(f'Deck: carta #{cid} tem {quantity} cópias '
+                               f'(máximo configurado {per_card}, deck com até {MAX_DECK}).')
         self.decks[side] = list(ids)
 
     def set_hand(self, side: str, ids: list[int]):

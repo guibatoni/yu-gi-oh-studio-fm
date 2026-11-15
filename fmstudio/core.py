@@ -50,6 +50,7 @@ ACTIONS = {
     'nao_bloqueavel':'Não pode ser bloqueada (dano direto)',
     'perder_lp_por_ataque':'Controlador perde X LP a cada ataque',
     'sem_limite_deck':'Sem limite de cópias no deck',
+    'limite_copias_deck':'Limite personalizado de cópias no deck',
     'bonus_por_carta_id':'Recebe ATK/DEF por carta específica',
     'bonus_cemiterio_tipo':'Recebe ATK/DEF por tipo no cemitério',
     'ataque_primeiro_turno':'Ataca no turno de invocação',
@@ -168,8 +169,13 @@ def check_effect(entry: dict):
         if event != 'regra_deck' or target != 'proprio' or str(entry.get('valor',0)) != '0':
             raise ModError('Sem limite de cópias é regra de deck sem valor numérico')
         return {'evento':event,'acao':action,'alvo':target,'valor':0,'observacao':note}
+    if action == 'limite_copias_deck':
+        if event != 'regra_deck' or target != 'proprio':
+            raise ModError('Limite personalizado exige regra de deck e alvo próprio')
+        amount = _bounded_int(entry.get('valor'), 'limite de cópias', 1, 40)
+        return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
     if event == 'regra_deck':
-        raise ModError('Evento de deck exclusivo da regra de cópias')
+        raise ModError('Evento de deck exclusivo das regras de cópias')
     if action == 'bonus_por_carta_id':
         if event != 'continuo' or target != 'proprio':
             raise ModError('Bônus por carta exige campo e alvo próprio')
