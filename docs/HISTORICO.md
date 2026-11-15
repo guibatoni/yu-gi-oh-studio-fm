@@ -1,3 +1,9 @@
+## v1.2.1 — Consolidação e teste de gravação de Equip
+
+- Teste integrado de BIN/CUE sintético confirmou a escrita de alvos de equipamentos no WA_MRG.MRG e a preservação do disco original.
+- Interface esclarece quais ações de Equip já podem entrar no PS1 e quais efeitos inéditos continuam somente no simulador.
+- Formato seguro mantém as sete cópias de tabela, valida cabeçalhos/padding e recusa estruturas desconhecidas.
+
 ## v1.2.0 — Primeira alteração de efeito nativo do PS1: Equip
 
 - Na aba Efeitos, selecione carta Equip original e use **PS1: permitir Equip em criatura**.
