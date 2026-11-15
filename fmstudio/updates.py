@@ -160,6 +160,20 @@ def parse_checksum(content: str, *, bundle: str = BUNDLE_NAME) -> str:
     return match.group(1).lower()
 
 
+def allowed_source_member(name: str) -> bool:
+    """Permite módulos futuros em pastas controladas; nunca arquivos pessoais/ROMs.
+
+    Regex ancorada proíbe '..', barras invertidas, duplicatas e nomes arbitrários.
+    A lista SOURCE_FILES continua explícita para gerar pacotes de Release.
+    """
+    if name in SOURCE_FILES:
+        return True
+    return bool(re.fullmatch(r'(?:fmstudio/[a-z][a-z0-9_]{0,63}\.py|'
+                             r'assets/icons/[a-z0-9_-]{1,64}\.png|'
+                             r'docs/[A-Za-z0-9_-]{1,80}\.md|'
+                             r'tools/[a-z][a-z0-9_]{0,63}\.py)', name))
+
+
 def validate_archive(archive: Path, kind: str = 'windows') -> set[str]:
     allow = WINDOWS_FILES if kind == 'windows' else SOURCE_FILES if kind == 'source' else None
     if allow is None:
@@ -174,7 +188,8 @@ def validate_archive(archive: Path, kind: str = 'windows') -> set[str]:
                 name = info.filename
                 # ZIP com links simbólicos não é permitido, inclusive em máquinas Windows.
                 symlink = ((info.external_attr >> 16) & 0o170000) == 0o120000
-                if (info.is_dir() or symlink or name not in allow or
+                if (info.is_dir() or symlink or
+                        (name not in allow and not (kind == 'source' and allowed_source_member(name))) or
                         name.casefold() in seen_folded or info.file_size > MAX_FILE_BYTES):
                     raise UpdateError(f'Conteúdo inesperado no ZIP: {name}')
                 total += info.file_size

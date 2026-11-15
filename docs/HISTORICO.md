@@ -1,3 +1,7 @@
+## v1.0.1 — Correção do atualizador Python
+- Reconhecimento de novos módulos e ícones de fonte, mantendo rejeição de arquivos ROM, traversal e pastas do usuário.
+- Script de migração sem ZIP manual compatível com ícones em assets/icons.
+
 ## v1.0.0 — Cartas virtuais, God e descrições aprimoradas
 - Suporte no editor a IDs a partir de 723 (até 32766 no projeto), sem repack PS1.
 - Tipo God (ID 24) no Studio, salvo como metadado; não gravado no executável PS1.

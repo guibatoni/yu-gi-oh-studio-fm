@@ -17,7 +17,7 @@ Write-Host "Modo: $nome. Nenhum arquivo BIN/CUE, projeto ou backup será copiado
 $confirm = Read-Host 'O Studio está fechado? Deseja instalar a versão estável mais recente? (S/N)'
 if ($confirm -notin @('S', 's', 'SIM', 'sim')) { Write-Host 'Cancelado'; exit 0 }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$headers = @{ 'User-Agent' = 'FM-Studio-Migrador/1.0.0' }
+$headers = @{ 'User-Agent' = 'FM-Studio-Migrador/1.0.1' }
 $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $headers
 if ($release.draft -or $release.prerelease -or ($release.tag_name -notmatch '^studio-v[0-9]+\.[0-9]+\.[0-9]+$')) { throw 'Release não é uma versão estável válida.' }
 $assets = @($release.assets)
@@ -54,10 +54,10 @@ try {
         throw "Entrada inválida: $name"
       }
       if (-not $names.Add($name)) { throw "Entrada duplicada: $name" }
-      if ($name -match '\.(bin|cue|iso|img|sav|mcr|mcd)$' -or $name -match '(^|/)(projetos|backups|assets|base|exportacao)/') {
+      if ($name -match '\.(bin|cue|iso|img|sav|mcr|mcd)$' -or $name -match '(^|/)(projetos|backups|base|exportacao)/' -or ($name -match '(^|/)assets/' -and $name -notmatch '^assets/icons/[a-z0-9_-]+\.png$')) {
         throw "Conteúdo de usuário não é permitido: $name"
       }
-      if ($python -and $name -notmatch '^(app\.py|FM_Mod_Studio\.pyw|updater_main\.py|fmstudio/[a-z_]+\.py|tools/[a-z_]+\.py|docs/[A-Za-z0-9_]+\.md|[A-Za-z0-9_-]+\.(bat|ps1|md|txt))$') {
+      if ($python -and $name -notmatch '^(app\.py|FM_Mod_Studio\.pyw|updater_main\.py|fmstudio/[a-z0-9_]+\.py|tools/[a-z0-9_]+\.py|docs/[A-Za-z0-9_-]+\.md|assets/icons/[a-z0-9_-]+\.png|[A-Za-z0-9_-]+\.(bat|ps1|md|txt))$') {
         throw "Arquivo desconhecido: $name"
       }
       if ($windows -and $name -notin @('FM-Mod-Studio.exe','FM-Mod-Studio-Updater.exe','INICIAR.bat','LEIA-ME.txt')) {

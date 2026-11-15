@@ -52,6 +52,15 @@ class NewFeaturesTests(unittest.TestCase):
             self.assertEqual(struct.unpack_from('>II',raw,16),(16,16))
             self.assertLess(len(raw),5000)
 
+    def test_updater_future_safe_files(self):
+        from fmstudio.updates import allowed_source_member
+        self.assertTrue(allowed_source_member('fmstudio/future_rules.py'))
+        self.assertTrue(allowed_source_member('assets/icons/future_icon.png'))
+        self.assertFalse(allowed_source_member('assets/icons/../../../rom.bin'))
+        self.assertFalse(allowed_source_member('projetos/one/projeto.json'))
+        self.assertFalse(allowed_source_member('assets/rom.bin'))
+        self.assertFalse(allowed_source_member('fmstudio/evil.exe'))
+
     def test_effect_validation(self):
         e=check_effect({'evento':'continuo','acao':'bonus_por_carta_id','alvo':'proprio',
                         'valor':200,'valor_def':300,'carta_referencia_id':723,

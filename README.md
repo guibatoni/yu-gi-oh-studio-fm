@@ -1,4 +1,8 @@
-# Yu-Gi-Oh Studio FM v1.0.0 — Expansão de cartas e descrições
+# Yu-Gi-Oh Studio FM v1.0.1 — Expansão de cartas e descrições
+
+## Correção v1.0.1
+
+O atualizador Python e o script de migração reconhecem novos módulos e PNGs de `assets/icons/`, preservando a proteção contra ROMs e diretórios de projeto. Para instalações Python mais antigas que v1.0, use `tools/ATUALIZAR_SEM_ZIP.ps1` uma única vez; para instalações EXE, clique em **Atualizar**. Depois desta migração, as próximas versões podem adicionar módulos e ícones nas pastas permitidas sem pedir ZIP manual.
 
 ## Novidades v1.0.0
 
