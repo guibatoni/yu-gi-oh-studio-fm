@@ -102,6 +102,28 @@ class NativePS1TablesTests(unittest.TestCase):
         with self.assertRaisesRegex(ModError,'padrão'):
             patch_terrain_boosts(bytes(altered),{'1:0':800})
 
+    def test_ritual_config_is_suspended_without_explicit_activation(self):
+        """Rituais já cadastrados não devem afetar nova ISO enquanto em pausa."""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder=Path(tmp)
+            source=folder/'Original.bin'
+            exe,wa=native_exe(),native_wa()
+            write_disc(source,exe,wa)
+            root=folder/'project'
+            root.mkdir()
+            project=SimpleNamespace(
+                folder=root,arts={},
+                metadata={
+                    'base_sha256':{'slus':hashlib.sha256(exe).hexdigest()},
+                    'ps1_ritual_recipes':{'690':[11,12,13,14]},
+                })
+            project.export=lambda:(root/'exportacao',{})
+            with self.assertRaisesRegex(ModError,'Nenhuma diferença'):
+                build_test_disc(project,source)
+            self.assertEqual(project.metadata['ps1_ritual_recipes']['690'],
+                             [11,12,13,14])
+            self.assertFalse((root/'exportacao'/'teste_ps1').exists())
+
     def test_all_three_export_through_same_bin_cue_without_touching_original(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
