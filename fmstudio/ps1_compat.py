@@ -93,7 +93,7 @@ def audit(project) -> dict:
             plans=_validated_plan(native_equips)
             counts['equipamentos_ps1']=sum(len(v) for v in plans.values())
             if known and wa_pinned:
-                supported.append(f'{counts["equipamentos_ps1"]} alvo(s) de Equip original para gravar em WA_MRG.MRG')
+                supported.append(f'{counts["equipamentos_ps1"]} alvo(s) de Equip a testar (bitmap MIPS automático se identificado; senão tabela stock)')
             else:
                 blocked.append('Equipamentos PS1: importe BIN/CUE para registrar hashes SLUS e WA_MRG.')
     for key,items in project.effects.items():

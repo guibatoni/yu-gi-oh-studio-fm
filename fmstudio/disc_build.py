@@ -228,11 +228,22 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             patched_wa,native_written=replace_equipment_targets(
                 patched_wa if patched_wa is not None else original_wa,
                 replacements)
+            equip_strategy='troca-u16-original'
         else:
-            from .ps1_equip import patch_equipment_targets
-            patched_wa,native_written=patch_equipment_targets(
+            from .ps1_equip_bitmap import patch_bitmap_equips
+            bitmap=patch_bitmap_equips(
+                original_exe,
                 patched_wa if patched_wa is not None else original_wa,
                 native_equips)
+            if bitmap is not None:
+                patched_wa,native_written=bitmap
+                equip_strategy='bitmap-mips-94'
+            else:
+                from .ps1_equip import patch_equipment_targets
+                patched_wa,native_written=patch_equipment_targets(
+                    patched_wa if patched_wa is not None else original_wa,
+                    native_equips)
+                equip_strategy='tabela-stock'
 
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
@@ -308,6 +319,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'artes_aplicadas':written_arts,
                 'equipamentos_ps1_aplicados':native_written,
                 'modo_equip_ps1':equip_mode,
+                'estrategia_equip_ps1':equip_strategy if (native_equips or replacements) else 'sem-equip',
                 'tamanho_bin':stage_bin.stat().st_size,
                 'recursos_pendentes':audit_report['pendente_de_motor'] if audit_report else [],
                 'aviso':'Build parcial de PS1. Habilidades inéditas, cartas extras e raridades ainda não executadas no motor.'}

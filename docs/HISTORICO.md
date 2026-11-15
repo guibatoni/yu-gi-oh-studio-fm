@@ -1,3 +1,12 @@
+## v1.2.7 — Equip: reconhecimento de bitmap MIPS e adições automáticas
+
+- Detecta a rotina Duel_CheckEquip modificada que utiliza registros de 94 bytes (u16 Equip + 92 bytes bitmap de monstros), seguindo endereços presentes no executável, inclusive salto direto para rotina alternativa.
+- Se identificada uma tabela única, grava a permissão de Equip ativando apenas o bit do monstro nos sete terrenos, sem precisar ampliar/deslocar arquivos e sem sobrescrever os dados adicionais de MOD.
+- Quando a assinatura não está presente, mantém a escrita na tabela stock original somente se houver espaço. Assinatura de bitmap sem referência MIPS válida bloqueia a geração.
+- Diagnóstico Equip lê o formato realmente identificado e reporta o tipo de tabela; manifesto BIN/CUE informa a estratégia usada.
+- Botão para reativar adições sem apagar substituições antigas.
+- Não há realocação de blocos MIPS genérica nesta versão; os testes de execução no ePSXe continuam necessários.
+
 ## v1.2.6 — Troca de alvo de Equip sem aumentar o tamanho (experimental)
 
 - MODs com 0 bytes disponíveis na tabela de equipamentos não podem receber alvos novos pelo formato stock sem realocação MIPS.

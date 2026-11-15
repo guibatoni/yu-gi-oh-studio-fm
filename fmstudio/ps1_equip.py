@@ -340,16 +340,34 @@ def inspect_equips_on_disc(path, plan):
     except DiscError as exc:
         raise ModError('Não foi possível ler BIN/CUE: '+str(exc)) from exc
 
+    from .ps1_equip_bitmap import inspect_bitmap_equips
+    bitmap=inspect_bitmap_equips(slus,wa,plan)
     copies=[]
     for index in range(TERRAIN_COPIES):
         pos=WA_TERRAIN_BASE+index*TERRAIN_STRIDE+EQUIP_OFF
         if pos+EQUIP_LEN > len(wa):
             raise ModError('WA_MRG.MRG truncado na tabela Equip da cópia '+str(index))
         copy=wa[pos:pos+EQUIP_LEN]
-        _unpack(copy)  # garante que cada cópia seja legível
+        if bitmap is None:
+            _unpack(copy)  # legado: a rotina MIPS não usa bitmap reconhecido
         copies.append(copy)
     tables_same=all(copy==copies[0] for copy in copies[1:])
-    targets=dict(_unpack(copies[0]))
+    targets=dict(_unpack(copies[0])) if bitmap is None else None
+    if bitmap is None:
+        check={str(equip):{str(monster):monster in targets.get(equip,[])
+                          for monster in wanted}
+               for equip,wanted in plan.items()}
+        format_name='tabela-original-u16'
+    else:
+        check={}
+        for equip,wanted in plan.items():
+            check[str(equip)]={}
+            for monster in wanted:
+                bit_index,mask=monster>>3,1 << (7 - (monster & 7))
+                check[str(equip)][str(monster)]=all(
+                    bool(wa[records[equip]+2+bit_index] & mask)
+                    for records in bitmap['registros'])
+        format_name='bitmap-94-mips-detectado'
     hook_offset=0x80019A08-EXE_DELTA  # Duel_CheckEquip, área conhecida
     hook=slus[hook_offset:hook_offset+0x58] if len(slus)>=hook_offset+0x58 else b''
     return {
@@ -357,10 +375,10 @@ def inspect_equips_on_disc(path, plan):
         'sha256_slus':hashlib.sha256(slus).hexdigest(),
         'sha256_rotina_equip':hashlib.sha256(hook).hexdigest() if hook else None,
         'sete_tabelas_iguais':tables_same,
+        'formato_equip':format_name,
+        'endereco_ram_bitmap':hex(bitmap['endereco_ram']) if bitmap else None,
         'tabelas':[hashlib.sha256(copy).hexdigest() for copy in copies],
-        'alvos':{str(equip):{str(monster):monster in targets.get(equip,[])
-                          for monster in wanted}
-                 for equip,wanted in plan.items()}
+        'alvos':check
     }
 
 
@@ -416,6 +434,7 @@ def diagnose_equipment_project(project, image):
 
 def describe_equip_diagnostic(report):
     lines=['Imagem verificada:', report['imagem'], '',
+           'Motor Equip detectado: '+report.get('formato_equip','desconhecido'),
            'Sete tabelas idênticas: '+('SIM' if report['sete_tabelas_iguais'] else 'NÃO')]
     for row in report['comparacoes']:
         result={

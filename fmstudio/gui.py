@@ -642,6 +642,7 @@ class Studio(tk.Tk):
         ttk.Button(buttons,text='Remover efeito selecionado',command=self.remove_effect).pack(side='left',padx=8)
         ttk.Button(buttons,text='PS1: permitir Equip em criatura',command=self.allow_native_equip).pack(side='left',padx=8)
         ttk.Button(buttons,text='PS1: trocar alvo Equip',command=self.replace_native_equip).pack(side='left',padx=8)
+        ttk.Button(buttons,text='PS1: usar adições automáticas',command=self.activate_equip_additions).pack(side='left',padx=8)
         sim=tk.Frame(body,bg=SURFACE,padx=15,pady=12)
         sim.pack(fill='x')
         tk.Label(sim,text='SIMULADOR DE EFEITOS',bg=SURFACE,fg=TEXT,font=('Segoe UI',10,'bold')).pack(anchor='w')
@@ -1236,6 +1237,38 @@ class Studio(tk.Tk):
                 eff['valor'],eff.get('valor_def','—')))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
 
+    def activate_equip_additions(self):
+        """Volta ao modo de adição sem apagar trocas antigas do usuário."""
+        if self._extract_running or not self._ensure_project():
+            return
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro','Salve o projeto antes de trocar o modo Equip.',parent=self)
+            return
+        plan=self.project.metadata.get('ps1_equip_additions',{})
+        if not plan:
+            messagebox.showinfo('Sem adições',
+                                'Selecione uma carta Equip e use PS1: permitir Equip em criatura '
+                                'para adicionar o monstro desejado.',parent=self)
+            return
+        if not messagebox.askyesno(
+            'Usar modo automático',
+            'Ativar adições de Equip no próximo BIN/CUE?\n\n'
+            'O Studio tentará detectar bitmaps MIPS de 94 bytes. '
+            'Se a base usar o formato original, só gravará se houver espaço seguro.\n'
+            'As trocas de Equip anteriores permanecerão salvas, mas não serão aplicadas.\n'
+            'O BIN original não será alterado.',
+            parent=self):
+            return
+        self.project.metadata['ps1_equip_mode']='adicionar'
+        try:
+            self.project.save()
+        except (OSError,ModError) as exc:
+            messagebox.showerror('Equip no PS1',str(exc),parent=self)
+            return
+        self._refresh_project()
+        self._update_status('Modo Equip automático ativado; gerar BIN/CUE para testar.')
+
     def replace_native_equip(self):
         """Troca uma permissão existente SEM aumentar a tabela: teste opt-in."""
         if self._extract_running or not self._ensure_project():
@@ -1721,6 +1754,7 @@ class Studio(tk.Tk):
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
+            f'Método: {manifest.get("estrategia_equip_ps1","não aplicado")}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
 
