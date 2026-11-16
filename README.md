@@ -1,3 +1,21 @@
+# Studio FM v1.4.9 — Corrigida exportação de ícone Deus sem Pillow
+
+O erro "A exportação do ícone God necessita de Pillow" foi corrigido.
+O PNG God (RGBA 16×16) agora é decodificado com bibliotecas padrão de
+Python, sem exigir instalação adicional no executável Windows. O leitor
+confere cabeçalho, CRC, filtros, dimensões e limites da descompressão
+antes de gravar o glifo no BIN de teste.
+
+Pillow ainda é usado na importação de artes maiores, e a compilação
+Windows agora o inclui explicitamente. A CI testa o ícone também
+com Python -S (sem bibliotecas de terceiros).
+
+Nenhum patch novo de motor MIPS: tipo God 24 e símbolo na descrição
+continuam testes experimentais no ePSXe. O BIN original e os
+projetos existentes são preservados.
+
+---
+
 # Studio FM v1.4.8 — Gravação experimental do tipo real God 24
 
 Corrige o bloqueio mostrado ao tentar gerar BIN da carta Time Wizard #016

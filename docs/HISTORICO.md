@@ -1,3 +1,11 @@
+## v1.4.9 — Correção da dependência do ícone God no Windows
+
+- Leitor PNG RGBA 16×16 sem Pillow, com validação de CRC, limites e filtros.
+- Pacote Windows passa a coletar explicitamente Pillow para outras artes.
+- CI com Python -S para provar que o ícone funciona sem pacotes externos.
+- Testes de PNG corrompido, filtro e preservação de bytes WA_MRG.
+- Sem alteração nas regras MIPS nem nos atributos salvos do projeto.
+
 ## v1.4.8 — Permitir ensaio do tipo Deus 24 sem converter para outro tipo
 
 - Modal de confirmação explícita ao gerar BIN com God24 na carta selecionada.

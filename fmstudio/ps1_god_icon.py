@@ -7,6 +7,7 @@ não gravamos. Esta prova é no TEXTO da carta, não implementa tipo God 24.
 from __future__ import annotations
 
 import struct
+import zlib
 from pathlib import Path
 
 from .core import ModError
@@ -34,24 +35,102 @@ def glyph_rows(wa: bytes) -> list[bytes]:
     return [wa[offset:offset + 8] for offset in offsets]
 
 
+def decode_god_png(image_path: Path) -> list[tuple[int, int, int, int]]:
+    """Decodifica PNG RGBA 16x16 sem Pillow, com CRC e limites estritos."""
+    try:
+        raw=Path(image_path).read_bytes()
+    except OSError as exc:
+        raise ModError('Ícone Deus PNG ausente no aplicativo.') from exc
+    if len(raw)>262144 or raw[:8]!=b'\x89PNG\r\n\x1a\n':
+        raise ModError('Ícone Deus: PNG inválido ou maior que o limite seguro.')
+    offset=8
+    header=None
+    parts=[]
+    seen_data=False
+    ended=False
+    while offset<len(raw):
+        if len(raw)-offset<12:
+            raise ModError('Ícone Deus: bloco PNG incompleto.')
+        length=struct.unpack_from('>I',raw,offset)[0]
+        offset+=4
+        if length>262144 or offset+8+length>len(raw):
+            raise ModError('Ícone Deus: tamanho de bloco PNG inválido.')
+        kind=raw[offset:offset+4]
+        offset+=4
+        data=raw[offset:offset+length]
+        offset+=length
+        crc=struct.unpack_from('>I',raw,offset)[0]
+        offset+=4
+        if (zlib.crc32(kind+data)&0xFFFFFFFF)!=crc:
+            raise ModError('Ícone Deus: CRC PNG incorreto.')
+        if kind==b'IHDR':
+            if header is not None or seen_data or length!=13:
+                raise ModError('Ícone Deus: cabeçalho PNG inválido.')
+            w,h,depth,color,comp,filt,interlace=struct.unpack('>IIBBBBB',data)
+            if (w,h,depth,color,comp,filt,interlace)!=(16,16,8,6,0,0,0):
+                raise ModError('Ícone Deus: esperado PNG RGBA 16x16, 8 bits, sem entrelaçamento.')
+            header=data
+        elif kind==b'IDAT':
+            if header is None:
+                raise ModError('Ícone Deus: dados PNG sem cabeçalho.')
+            seen_data=True
+            parts.append(data)
+        elif kind==b'IEND':
+            if length or header is None or not seen_data:
+                raise ModError('Ícone Deus: encerramento PNG inválido.')
+            ended=True
+            break
+        elif kind[:1] and not (kind[0]&0x20):
+            raise ModError('Ícone Deus: bloco PNG obrigatório não suportado.')
+    if not ended or offset!=len(raw) or not parts:
+        raise ModError('Ícone Deus: arquivo PNG incompleto.')
+    expected=16*(1+16*4)
+    try:
+        inflater=zlib.decompressobj()
+        expanded=inflater.decompress(b''.join(parts),expected+1)
+        expanded+=inflater.flush(expected+1-len(expanded))
+    except zlib.error as exc:
+        raise ModError('Ícone Deus: dados compactados PNG inválidos.') from exc
+    if (not inflater.eof or inflater.unused_data or inflater.unconsumed_tail
+            or len(expanded)!=expected):
+        raise ModError('Ícone Deus: dados PNG excedem ou não completam 16x16 RGBA.')
+    pixels=[]
+    previous=bytearray(64)
+    pos=0
+    for _ in range(16):
+        method=expanded[pos]
+        pos+=1
+        row=bytearray(expanded[pos:pos+64])
+        pos+=64
+        if method not in (0,1,2,3,4):
+            raise ModError('Ícone Deus: filtro PNG desconhecido.')
+        for i in range(64):
+            left=row[i-4] if i>=4 else 0
+            above=previous[i]
+            corner=previous[i-4] if i>=4 else 0
+            if method==0:
+                predict=0
+            elif method==1:
+                predict=left
+            elif method==2:
+                predict=above
+            elif method==3:
+                predict=(left+above)//2
+            else:
+                p=left+above-corner
+                da,db,dc=abs(p-left),abs(p-above),abs(p-corner)
+                predict=left if da<=db and da<=dc else above if db<=dc else corner
+            row[i]=(row[i]+predict)&255
+        pixels.extend(tuple(row[i:i+4]) for i in range(0,64,4))
+        previous=row
+    return pixels
+
+
 def patch_god_glyph(wa: bytes, image_path: Path) -> tuple[bytes, dict]:
     """Pinta apenas um slot comprovadamente vazio, com a paleta do próprio jogo."""
     if PALETTE_OFFSET + 32 > len(wa):
         raise ModError('Paleta original de ícones ausente no WA_MRG.MRG.')
-    try:
-        from PIL import Image
-    except ImportError as exc:
-        raise ModError('A exportação do ícone God necessita de Pillow.') from exc
-    image_path = Path(image_path)
-    try:
-        with Image.open(image_path) as source:
-            source.load()
-            rgba = source.convert('RGBA')
-            if rgba.size != (WIDTH, HEIGHT):
-                raise ModError('O ícone Deus deve ser PNG 16x16.')
-            pixels = list(rgba.getdata())
-    except OSError as exc:
-        raise ModError('Não foi possível ler o PNG Deus usado no teste.') from exc
+    pixels=decode_god_png(Path(image_path))
     palette = [struct.unpack_from('<H', wa, PALETTE_OFFSET + 2*i)[0]
                for i in range(16)]
     available = [i for i in range(1, 16) if palette[i] != 0]
