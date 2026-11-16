@@ -1,3 +1,11 @@
+# Studio FM v1.4.12 — Inventário das chamadas MIPS do ícone Deus
+
+O botão Efeitos > Diagnosticar motor MIPS agora registra no JSON o inventário de chamadas JAL a func_80036C14 nas três regiões envolvidas na exibição dos ícones. Cada ocorrência inclui endereço RAM, offset SLUS, opcode, delay slot e instruções próximas. A análise também compara hashes das janelas com o diagnóstico enviado do projeto yugioh teste e recusa mapear código quando t_addr/t_size do cabeçalho não correspondem à base PS1. Nenhum byte do executável ou do projeto é modificado.
+
+Essa verificação ainda não instala o ícone God24 no baú: identificar uma chamada não basta para inserir um desvio, pois tipo 24 e Guardian Star 1 compartilham o índice do ícone. São necessários testes MIPS de contexto, ABI, espaço de código e renderização no ePSXe.
+
+---
+
 # Studio FM v1.4.11 — Diagnóstico de ícone de tipo God
 
 O Time Wizard #016 continua sem ícone Deus no campo de tipo do baú: o teste anterior de glifo modifica apenas a descrição. No motor retail o valor 24 também é o índice da primeira Guardian Star (0x17+1), então sobrescrever essa textura afetaria outros símbolos. A função Efeitos > Diagnosticar motor MIPS agora grava diagnostico_icone_tipo_god no JSON, com regiões e hashes de três rotinas retail. Não injeta hook nem promete que o ícone já está no ePSXe. Para instalar um ícone correto será necessário redirecionar especificamente o tipo God24, com sprite próprio e assinatura validada no SLUS do mod.

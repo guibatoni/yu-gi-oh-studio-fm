@@ -1,3 +1,11 @@
+## v1.4.12 — Chamadas JAL e delay slots da exibição God24
+
+- Relatório de chamadas para func_80036C14, com opcode, delay slot e contexto.
+- Verificação comparativa dos SHA-256 das três regiões do diagnóstico anterior.
+- Validação de t_addr/t_size antes de inspecionar o segmento carregado.
+- Testes sintéticos de chamada MIPS e arquivo incompatível.
+- Nenhuma injeção MIPS no jogo nesta etapa; o BIN original fica intacto.
+
 ## v1.4.11 — Diagnóstico da ausência de ícone God24
 
 - Separadas as rotinas de ícone de tipo do glifo da descrição.

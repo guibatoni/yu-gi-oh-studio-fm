@@ -1422,12 +1422,17 @@ class Studio(tk.Tk):
             calls=report.get('referencias_chamadas_mips',{})
             stat_refs=calls.get('por_funcao',{}).get('atributos_dinamicos',{})
             jals=stat_refs.get('total_jal_diretos','não disponível')
+            ic=report.get('chamadas_mips_icone_tipo_god',{})
+            type_calls=ic.get('rotinas',{}).get('tipo_na_lista',{}).get('total_chamadas_glifo','indisponível')
+            identity=ic.get('comparacao_com_relatorio_anterior','sem comparação')
             deck=report['perfil_limite_global_deck']
             msg=(f'Funções MIPS encontradas: {ready}/{len(report["funcoes_encontradas"])}\n'
                  f'Efeitos cadastrados: {groups}\n'
                  f'Limite global de cópias: {deck["status"]}\n'
                  f'Chamadas diretas JAL ao cálculo de atributos: {jals}\n'
-                 'Ícone God24 no baú: diagnóstico incluído, SEM hook MIPS instalado.\n'
+                 f'Chamadas de glifo no trecho de tipo: {type_calls}.\n'
+                 f'Comparação com diagnóstico anterior: {identity}.\n'
+                 'Ícone God24: JALs e delay slots no JSON; SEM hook instalado.\n'
                  'Amostras de instruções MIPS adicionadas ao relatório.\n\n'
                  'Os endereços são referências do PS1 original; MODs podem usar hooks.\n'
                  'Nenhum efeito inédito foi instalado no BIN somente por gerar este relatório.\n\n'

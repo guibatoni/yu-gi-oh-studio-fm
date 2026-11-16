@@ -133,6 +133,38 @@ class MipsEffectProbeTests(unittest.TestCase):
         self.assertEqual(diagnose_god_type_icon(b'wrong')['status'],
                          'executavel_invalido')
 
+    def test_god_icon_call_scan_matches_mips_jal_and_delay_slot(self):
+        from fmstudio.ps1_effects_lab import scan_god24_render_calls, GOD_ICON_TEXT_APPEND_RAM
+        exe=bytearray(stock_like_exe())
+        struct.pack_into('<II',exe,0x18,EXE_DELTA+0x800,0x78000)
+        addr=GOD_ICON_RENDER_SITES['tipo_na_lista'][1]+0x100
+        offset=addr-EXE_DELTA
+        word=0x0C000000|((GOD_ICON_TEXT_APPEND_RAM>>2)&0x03FFFFFF)
+        struct.pack_into('<I',exe,offset,word)
+        struct.pack_into('<I',exe,offset+4,0x24A50001)
+        before=bytes(exe)
+        report=scan_god24_render_calls(before)
+        self.assertEqual(report['status'],'somente_leitura_sem_hook')
+        self.assertFalse(report['hook_aplicado'])
+        segment=report['rotinas']['tipo_na_lista']
+        self.assertEqual(segment['total_chamadas_glifo'],1)
+        call=segment['chamadas_ate_16'][0]
+        self.assertEqual(call['endereco_ram'],f'0x{addr:08X}')
+        self.assertEqual(call['delay_slot'],'0x24A50001')
+        self.assertTrue(any(e['call'] for e in call['contexto_opcodes']))
+        self.assertTrue(any(e['delay'] for e in call['contexto_opcodes']))
+        self.assertEqual(before,bytes(exe))
+
+    def test_god_icon_call_scan_rejects_invalid_segment(self):
+        from fmstudio.ps1_effects_lab import scan_god24_render_calls
+        self.assertEqual(scan_god24_render_calls(b'x')['status'],'cabecalho_invalido')
+        original=bytearray(stock_like_exe())
+        self.assertEqual(scan_god24_render_calls(original)['status'],
+                         'segmento_codigo_nao_validado')
+        struct.pack_into('<II',original,0x18,EXE_DELTA+0x800,0xFFFFFFFC)
+        self.assertEqual(scan_god24_render_calls(original)['status'],
+                         'segmento_codigo_nao_validado')
+
     def test_lp_patch_retains_original_and_changes_immediate(self):
         exe=bytearray(stock_like_exe())
         struct.pack_into('<I',exe,0x7DD0,0x24021F40)

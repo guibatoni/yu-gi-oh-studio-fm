@@ -407,6 +407,93 @@ def diagnose_god_type_icon(exe: bytes) -> dict:
     return result
 
 
+# Impressões digitais enviadas no diagnóstico anterior do projeto yugioh teste.
+# Servem somente para comparação; não autorizam um hook MIPS.
+GOD_ICON_REFERENCE_HASHES = {
+    'tipo_na_lista':'c335fb3d7fd4630dd80beb5698b64bc0d15ace6f6603d0c3467e339fffa258c8',
+    'sprite_tipo':'5d89cbea3338fd8c2d244c16d2930a8027ce9b88a032659373aadf0ded83c6d8',
+    'renderizador_glifos':'0ffcbe2407d7efa89f2d1ab05a0346a5ca47bb6bcb7655dfa5d0d8dd09e389c4',
+}
+GOD_ICON_TEXT_APPEND_RAM = 0x80036C14
+
+
+def scan_god24_render_calls(exe: bytes) -> dict:
+    """Leitura de JAL, atraso (delay slot) e assinaturas nas rotinas de ícone.
+
+    Todos os dados vêm do executável importado; NENHUMA escrita na ISO.
+    Uma ocorrência JAL não demonstra que o registrador de tipo esteja vivo.
+    """
+    out={
+        'status':'somente_leitura_sem_hook',
+        'caminho_compartilhado_com_guardian_stars':True,
+        'caminho_do_tipo_deve_ser_isolado':True,
+        'executavel_sha256':hashlib.sha256(exe).hexdigest(),
+        'rotinas':{},
+        'hook_aplicado':False,
+    }
+    if len(exe)<0x800 or exe[:8]!=b'PS-X EXE':
+        out['status']='cabecalho_invalido'
+        return out
+    base,segment_size=struct.unpack_from('<II',exe,0x18)
+    if (base!=EXE_DELTA+0x800 or not segment_size or segment_size%4
+            or segment_size>len(exe)-0x800):
+        out['status']='segmento_codigo_nao_validado'
+        return out
+    for key,(name,ram,span) in GOD_ICON_RENDER_SITES.items():
+        offset=ram-EXE_DELTA
+        if offset<0x800 or offset+span>0x800+segment_size:
+            out['rotinas'][key]={
+                'nome':name,'status':'fora_do_segmento_codigo'}
+            continue
+        buf=exe[offset:offset+span]
+        digest=hashlib.sha256(buf).hexdigest()
+        words=struct.unpack('<'+str(span//4)+'I',buf)
+        callsites=[]
+        count=0
+        for index,word in enumerate(words):
+            if word>>26!=3:
+                continue
+            pc=ram+index*4
+            target=((pc+4)&0xF0000000)|((word&0x03FFFFFF)<<2)
+            if target!=GOD_ICON_TEXT_APPEND_RAM:
+                continue
+            count+=1
+            if len(callsites)>=16:
+                continue
+            lo=max(0,index-10)
+            hi=min(len(words),index+7)
+            callsites.append({
+                'endereco_ram':f'0x{pc:08X}',
+                'offset_slus':f'0x{offset+index*4:X}',
+                'opcode':f'0x{word:08X}',
+                'delay_slot':(f'0x{words[index+1]:08X}'
+                              if index+1<len(words) else None),
+                'contexto_opcodes':[{
+                    'endereco_ram':f'0x{ram+i*4:08X}',
+                    'word':f'0x{words[i]:08X}',
+                    'call':i==index,'delay':i==index+1}
+                    for i in range(lo,hi)],
+            })
+        out['rotinas'][key]={
+            'nome':name,'status':'janela_lida_sem_hook_validado',
+            'endereco_ram':f'0x{ram:08X}',
+            'hash_sha256':digest,
+            'coincide_relatorio_anterior':digest==GOD_ICON_REFERENCE_HASHES.get(key),
+            'total_chamadas_glifo':count,
+            'chamadas_ate_16':callsites,
+            'chamadas_excedem_amostragem':count>len(callsites),
+        }
+    comparable=[v.get('coincide_relatorio_anterior') for v in out['rotinas'].values()]
+    out['comparacao_com_relatorio_anterior']=(
+        'todas_tres_regioes_coincidem'
+        if len(comparable)==3 and all(comparable)
+        else 'hash_diferente_ou_regiao_ausente')
+    out['aviso']='Índice God24 coincide com Guardian Star 1. '
+    out['aviso']+='Nenhum desvio pode ser gravado sem validar o caminho tipo, '
+    out['aviso']+='delay slots, destino, ABI e espaço de código no SLUS real.'
+    return out
+
+
 def analyze_project_effects(project) -> dict:
     """Relatório local sem prometer que o jogo executa habilidades da GUI."""
     base=project.folder/'base'/'source_SLUS_014.11'
@@ -425,13 +512,14 @@ def analyze_project_effects(project) -> dict:
             else:unknown.append(record)
     limit=project.metadata.get('ps1_deck_global_limit')
     return {
-        'versao_perfil':2,'alvo':'SLUS_014.11 (PS1 MIPS)',
+        'versao_perfil':3,'alvo':'SLUS_014.11 (PS1 MIPS)',
         'sha256_executavel_origem':hashlib.sha256(exe).hexdigest(),
         'funcoes_encontradas':scan_effect_sites(exe),
         'amostras_instrucoes_mips':{alias:inspect_function_instructions(exe,alias)
                                     for alias in SITES},
         'referencias_chamadas_mips':scan_direct_mips_calls(exe),
         'diagnostico_icone_tipo_god':diagnose_god_type_icon(exe),
+        'chamadas_mips_icone_tipo_god':scan_god24_render_calls(exe),
         'probe_lp_inicial':probe_initial_duel_lp(exe,project.metadata.get('ps1_starting_lp')),
         'perfil_limite_global_deck':deck_global_patch_probe(exe,limit),
         'grupos_programados_no_studio':grouped,
