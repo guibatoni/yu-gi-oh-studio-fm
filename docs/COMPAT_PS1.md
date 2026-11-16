@@ -1,3 +1,27 @@
+## v1.4.25 — Efeitos e descrições no Drop x15
+
+As rotinas a seguir são instaladas na cópia BIN/CUE a partir dos
+efeitos salvos. O Studio verifica o SHA-256 do executável
+`SLUS_014.11`, os pontos MIPS e os espaços de código, dados e texturas.
+
+| Recurso | Comportamento no PS1 |
+| --- | --- |
+| Ataques duplos e triplos | Até dois ou três ataques por monstro por turno, sujeitos às regras de posição e seleção do jogo. |
+| Habilidades de ataque | Perfuração em defesa, ataque direto com monstros no campo adversário, ataque no primeiro turno e custo de LP por ataque. |
+| Imunidades e indestrutibilidade | Monstros virados para cima podem resistir a efeitos de magias e armadilhas. Indestrutibilidade impede remoção por destruição e permite a perda de LP do combate. |
+| Bônus ganhos | ATK/DEF por tipo ou ID no campo, por tipo ou ID no deck completo e por tipo no cemitério do duelo. |
+| Bônus concedidos | Auras de monstros virados para cima, com escopo e tipo configurados. Encantamentos aplicados por Equip podem acrescentar ATK ou proteção. |
+| Quantidade por carta | Limites de 1 a 40 cópias por ID. A opção ∞ permite até 40. O deck usa 40 espaços e Exodia mantém uma cópia por peça na configuração padrão. |
+| Descrição | Sete cores, ícones do jogo e dez do Studio. Textos maiores que o slot original usam espaço do banco de descrições. A tela usa até nove linhas de 21 colunas e a fonte do jogo. |
+
+As ações manuais de gatilho como descarte, cura ou dano personalizado
+continuam listadas como pendências. A fonte do PS1 limita os caracteres
+disponíveis; as substituições de acentos aparecem no relatório.
+
+Os duelos, o construtor de decks e a tela de detalhes foram testados no
+PCSX-ReARMed. Para conferir no ePSXe, abra a cópia recém-gerada pelo
+Studio e comece um duelo novo.
+
 ## v1.4.24 — Exibição do tipo God 24
 
 No perfil Drop x15, a opção **PS1: Tipo God no baú (teste)** ativa o

@@ -1,21 +1,23 @@
-# Habilidades rápidas — FM Studio v0.9.0
+# Habilidades rápidas — Studio FM
 
 O Studio traz uma faixa de **Habilidades rápidas** na aba **Efeitos**. Selecione uma criatura e marque os recursos desejados. As opções passam a ser rascunhos automaticamente; **Salvar projeto** ou **Ctrl+S** grava tudo de uma vez. Navegar entre cartas não abre perguntas de salvar.
 
 ## Habilidades disponíveis
 
-| Habilidade | Regra no simulador |
+| Habilidade | Regra |
 |---|---|
-| Ataca 1x, 2x ou 3x | Número máximo de ataques por monstro **por turno simulado**; 1x é padrão. Atacante deve estar virado para cima. `Novo turno` reinicia ataques do lado escolhido. |
-| Indestrutível | Impede destruição por dano letal simulado e por resultado de combate; remoção explícita do campo ainda é possível. |
-| Imune a mágicas | Bloqueia dano de efeitos categorizados como `magia` no simulador. Outras interações de magias ainda não implementadas. |
-| Imune a armadilhas | Bloqueia dano de efeitos categorizados como `armadilha` no simulador. Outras interações de armadilhas ainda não implementadas. |
+| Ataca 1x, 2x ou 3x | Define o máximo de ataques por monstro a cada turno. Atacante deve estar virado para cima. |
+| Indestrutível | Preserva o monstro virado para cima contra destruição. A perda de LP do combate continua valendo. |
+| Imune a mágicas | Protege um monstro virado para cima de efeitos como Dark Hole, redução de atributos e Swords of Revealing Light. |
+| Imune a armadilhas | Protege um monstro virado para cima de armadilhas de ataque e de Reverse Trap ao equipar. |
 | Dano perfurante | Quando ATK da criatura excede DEF do alvo em posição de defesa, causa a diferença aos LP do jogador defensor. |
-| Não pode ser bloqueada | No laboratório, permite ataque direto aos LP mesmo quando o oponente tem criaturas em campo; não implementa o modelo de bloqueadores do MTGA no PS1. |
+| Não pode ser bloqueada | Permite ataque direto aos LP mesmo quando o oponente tem monstros em campo. |
+| Ataca no primeiro turno | Libera o ataque para esse monstro quando o jogo bloquearia o ataque no turno de abertura. |
 | Cada ataque perde X LP | O controlador perde os LP definidos a cada ataque realizado, inclusive em ataque direto, até zero. O gatilho aplica-se por ataque, não na atualização da tela. |
-| Sem limite de cópias no deck | A carta pode aparecer mais de 3 vezes no deck configurado; **o total do deck continua limitado a 40 cartas**. |
+| Sem limite de cópias no deck | O deck de 40 espaços pode ser preenchido com cópias da mesma carta. |
 
-Todas são capacidades do **simulador do Studio**; não estão aplicadas ao executável original de PlayStation 1. As receitas de fusão não são alteradas.
+No Drop x15, salve o projeto e use **Gerar jogo BIN/CUE** para aplicar as
+habilidades à cópia do jogo.
 
 ## Exemplo de uso
 

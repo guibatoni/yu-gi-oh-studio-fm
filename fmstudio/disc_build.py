@@ -115,6 +115,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     bloqueará construções parciais ao invés de publicar uma imagem enganosa.
     """
     source_image=Path(source_image).resolve()
+    from .ps1_runtime import SOURCE_SHA256, compile_effects, install_runtime
+    texts={int(cid):project.get(int(cid)).get('descricao','')
+           for cid,rows in getattr(project,'edits',{}).items()
+           if 'descricao' in rows and 1<=int(cid)<=722}
     try:
         with DiscReader(source_image) as reader:
             if reader.mode!='MODE2/2352':
@@ -125,6 +129,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             if exe is None:
                 raise ModError('SLUS_014.11 não encontrado na imagem.')
             original_exe=b''.join(reader.read_entry(exe))
+            source_digest=hashlib.sha256(original_exe).hexdigest()
+            native_profile=source_digest==SOURCE_SHA256
             wa_entry=entries.get('DATA/WA_MRG.MRG')
             requested_art={int(k):v for k,v in getattr(project,'arts',{}).items() if int(k)<=722}
             metadata=getattr(project,'metadata',{})
@@ -144,14 +150,16 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             god_test_card=metadata.get('ps1_god_icon_test_card_id')
             god_chest_enabled=metadata.get('ps1_god_chest_preview',False)
             needs_wa=(requested_art or native_equips or replacements or native_rituals
-                      or god_test_card or god_chest_enabled)
+                      or god_test_card or god_chest_enabled
+                      or (native_profile and any('{icon:' in desc for desc in texts.values())))
             original_wa=b''.join(reader.read_entry(wa_entry)) if needs_wa and wa_entry else None
     except DiscError as exc:
         raise ModError(f'Imagem original inválida: {exc}') from exc
 
     expected=getattr(project,'metadata',{}).get('base_sha256',{}).get('slus')
-    if not expected or hashlib.sha256(original_exe).hexdigest()!=expected:
+    if not expected or source_digest!=expected:
         raise ModError('SLUS da imagem não corresponde ao executável vinculado ao projeto.')
+    native_plan=compile_effects(project,native_profile)
 
     from .core import god24_experiment_enabled
     god_type_test=metadata.get('ps1_god_type_test_card_id')
@@ -193,24 +201,30 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             except ModError:
                 continue
 
-    if hasattr(project,'edits'):
-        from .ps1_content import patch_descriptions
-        texts={int(cid):project.get(int(cid)).get('descricao','') for cid,rows in project.edits.items()
-               if 'descricao' in rows and int(cid)<=722}
+    description_icons=set()
+    if texts:
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
-        for cid,desc in sorted(texts.items()):
-            try:
-                patched_exe,items=patch_descriptions(patched_exe,{cid:desc},catalog)
-                written_descriptions.extend(items)
-            except ModError:
-                continue
+        if native_profile:
+            from .ps1_text import patch_descriptions
+            patched_exe,written_descriptions,description_icons,_=patch_descriptions(
+                patched_exe,texts,catalog,start=native_plan.data_end)
+        else:
+            from .ps1_content import patch_descriptions
+            for cid,desc in sorted(texts.items()):
+                try:
+                    patched_exe,items=patch_descriptions(patched_exe,{cid:desc},catalog)
+                    written_descriptions.extend(items)
+                except ModError:
+                    continue
 
     from .ps1_native import patch_trap_thresholds, patch_terrain_boosts, patch_rituals
     patched_exe, traps_written = patch_trap_thresholds(patched_exe, native_traps)
     patched_exe, terrain_written = patch_terrain_boosts(patched_exe, native_terrain)
     from .ps1_effects_lab import patch_deck_global_limit
-    patched_exe, deck_copies_written = patch_deck_global_limit(
-        patched_exe, metadata.get('ps1_deck_global_limit'))
+    deck_copies_written=[]
+    if not native_plan.copy_rules:
+        patched_exe, deck_copies_written = patch_deck_global_limit(
+            patched_exe, metadata.get('ps1_deck_global_limit'))
 
     from .ps1_effects_lab import patch_initial_duel_lp
     patched_exe, lp_written = patch_initial_duel_lp(patched_exe,metadata.get('ps1_starting_lp'))
@@ -289,7 +303,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     god_icon_report=None
     legacy_god_icon=(god_test_card is not None and not
                      (god_chest_enabled and type(god_test_card) is int
-                      and god_test_card==god_type_test))
+                      and god_test_card==god_type_test)
+                     and not any(row['id']==god_test_card and row.get('icones')
+                                 for row in written_descriptions))
     if legacy_god_icon:
         from .ps1_god_icon import try_patch_god_icon, god_icon_asset
         if isinstance(god_test_card,bool) or not isinstance(god_test_card,int):
@@ -342,6 +358,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         from .ps1_god24_play import apply as patch_duel
         patched_exe,god_duel_report=patch_duel(
             original_exe,patched_exe,kinds)
+
+    if description_icons:
+        if original_wa is None:
+            raise ModError('Ícones de descrição exigem DATA/WA_MRG.MRG no BIN de origem.')
+        from .ps1_text import patch_icons
+        patched_wa=patch_icons(patched_wa if patched_wa is not None else original_wa,description_icons)
+    patched_exe,native_report=install_runtime(
+        original_exe,patched_exe,native_plan,description_icons=bool(description_icons))
 
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
@@ -414,6 +438,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'setores_modificados':len(changed),'lbas':sorted(changed),
                 'nomes_aplicados':written_names,
                 'descricoes_aplicadas':written_descriptions,
+                'icones_de_descricao_ps1':sorted(description_icons),
+                'efeitos_nativos_ps1':native_report,
                 'artes_aplicadas':written_arts,
                 'equipamentos_ps1_aplicados':native_written,
                 'rituais_ps1_aplicados':ritual_written,
@@ -440,13 +466,16 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'estrategia_equip_ps1':equip_strategy if (native_equips or replacements) else 'sem-equip',
                 'tamanho_bin':stage_bin.stat().st_size,
                 'recursos_pendentes':audit_report['pendente_de_motor'] if audit_report else [],
-                'aviso':'Build parcial PS1: stats, textos, artes, Equip, rituais, limiares de Trap e bônus de terreno por tipo. Habilidades inéditas, cartas extras e raridades NÃO implementadas.'}
+                'aviso':'Confira os recursos aplicados e as pendências desta cópia PS1.'}
 
         if hasattr(project,'edits') and hasattr(project,'cards') and hasattr(project,'get'):
             from .disc_verify import verify_image_stats
             checked=verify_image_stats(project,stage_bin)
             if checked['divergentes']:
                 raise ModError('BIN de teste diverge dos atributos do projeto. '
+                               'A cópia anterior foi preservada.')
+            if native_plan.data and checked['efeitos_nativos_ps1']['status']!='aplicado':
+                raise ModError('A tabela de efeitos do BIN diverge do projeto. '
                                'A cópia anterior foi preservada.')
             if god_chest_enabled:
                 if (checked['god24_mascaras_bau']['status']!='aplicado_2_de_2'

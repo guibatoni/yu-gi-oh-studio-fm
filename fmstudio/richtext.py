@@ -1,4 +1,4 @@
-"""Anotações reversíveis de texto e ícones. Códigos novos ainda não são PS1."""
+"""Anotações de cores e ícones usadas pelo editor e pelo exportador PS1."""
 from __future__ import annotations
 import re
 from .expanded import resolve_references

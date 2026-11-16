@@ -1,6 +1,6 @@
 """Motor puro de auras e encantamentos para o simulador do Studio.
 
-Nenhum efeito é escrito no PS1. Recalcula-se inteiramente do estado-base.
+Recalcula os efeitos inteiramente do estado-base.
 Auras podem conceder bônus a várias cartas ou escalar a própria carta.
 Equipamentos permanecem anexos ao slot: status não persistem após remoção.
 """

@@ -1,3 +1,16 @@
+## v1.4.25 — Efeitos de duelo e descrições no PS1
+
+- Ataques 2x/3x, imunidades, indestrutibilidade e bônus de ATK/DEF
+  entram no BIN/CUE do perfil Drop x15.
+- Auras, bônus por carta/tipo/cemitério e encantamentos são calculados
+  durante a partida.
+- O construtor de decks respeita limites personalizados de 1–40
+  cópias por carta.
+- A descrição pode usar cores e os dez ícones do Studio no baú, no
+  deck e no duelo. Textos maiores podem usar espaço do banco de texto.
+- A cópia gerada tem a tabela de efeitos e os pontos MIPS conferidos
+  por releitura.
+
 ## v1.4.24 — Nome e ícone do tipo God
 
 - God 24 tem rótulo e ícone próprios nos detalhes da carta no PS1.

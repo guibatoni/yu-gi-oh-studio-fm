@@ -44,6 +44,7 @@ SOURCE_FILES = frozenset({
     'fmstudio/disc.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_effects_lab.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
     'fmstudio/gui.py', 'fmstudio/updates.py',
     'fmstudio/ps1_god24_play.py', 'fmstudio/ps1_god24_display.py',
+    'fmstudio/ps1_runtime.py', 'fmstudio/ps1_runtime_blob.py', 'fmstudio/ps1_text.py',
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
     'PUBLICAR_GITHUB.bat', 'PUBLICAR_GITHUB.ps1', 'LEIA-ME.txt',
     'README.md', 'docs/HISTORICO.md', 'docs/ATUALIZACOES_GITHUB.md',
@@ -52,6 +53,7 @@ SOURCE_FILES = frozenset({
 })
 SOURCE_REQUIRED = frozenset({
     'fmstudio/ps1_god24_play.py', 'fmstudio/ps1_god24_display.py',
+    'fmstudio/ps1_runtime.py', 'fmstudio/ps1_runtime_blob.py', 'fmstudio/ps1_text.py',
     'app.py', 'updater_main.py', 'fmstudio/__init__.py', 'fmstudio/gui.py',
     'fmstudio/core.py', 'fmstudio/abilities.py', 'fmstudio/continuous.py', 'fmstudio/duel_engine.py', 'fmstudio/expanded.py', 'fmstudio/richtext.py', 'fmstudio/rarities.py',
     'assets/icons/perfurar.png', 'assets/icons/ataque_2x.png', 'assets/icons/ataque_3x.png',

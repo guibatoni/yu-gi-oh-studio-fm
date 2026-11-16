@@ -16,7 +16,7 @@ from fmstudio.disc_build import build_test_disc
 
 
 def main():
-    parser=argparse.ArgumentParser(description='Gerar BIN/CUE experimental com estatísticas, textos curtos e artes originais.')
+    parser=argparse.ArgumentParser(description='Gerar BIN/CUE de teste com os recursos compatíveis do projeto.')
     parser.add_argument('--projeto',required=True,type=Path,help='Pasta com projeto.json')
     parser.add_argument('--bin',required=True,type=Path,help='Imagem BIN ou CUE usada na importação')
     parser.add_argument('--exigir-completo',action='store_true',help='Recusa geração se houver qualquer função sem suporte PS1')
@@ -29,10 +29,11 @@ def main():
     print('BIN de teste criado:',result['bin'])
     print('CUE de teste criado:',result['cue'])
     print('Setores alterados:',result['setores_modificados'])
-    print('Textos curtos gravados:',len(result['nomes_aplicados'])+len(result['descricoes_aplicadas']))
+    print('Textos gravados:',len(result['nomes_aplicados'])+len(result['descricoes_aplicadas']))
+    print('Ícones de descrição:',len(result['icones_de_descricao_ps1']))
+    print('Efeitos PS1 gravados:',len((result['efeitos_nativos_ps1'] or {}).get('efeitos',[])))
     print('Regiões de artes gravadas:',len(result['artes_aplicadas']))
     print('Funções sem rotina PS1:',len(result['recursos_pendentes']))
-    print('Novos efeitos NÃO são executados no PS1.')
     return 0
 
 if __name__=='__main__':

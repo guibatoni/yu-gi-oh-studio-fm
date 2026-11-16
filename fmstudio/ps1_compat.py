@@ -8,8 +8,9 @@ import json
 from pathlib import Path
 from .tables import CARD_COUNT
 from .ps1_content import name_patch_info, description_patch_info
-from .core import ModError, god24_experiment_enabled
+from .core import ACTIONS, ModError, god24_experiment_enabled
 from .ps1_god24_chest import SOURCE_SHA256 as GOD24_SOURCE_SHA256
+from .ps1_runtime import compile_effects
 
 
 def audit(project) -> dict:
@@ -17,6 +18,8 @@ def audit(project) -> dict:
     exe=base.read_bytes() if base.is_file() else None
     pinned=project.metadata.get('base_sha256',{}).get('slus')
     known=bool(exe and pinned and hashlib.sha256(exe).hexdigest()==pinned)
+    native_profile=known and pinned==GOD24_SOURCE_SHA256
+    native_plan=compile_effects(project,native_profile)
     wa_summary=project.folder/'base'/'resumo.json'
     wa_pinned=False
     if wa_summary.is_file():
@@ -28,7 +31,8 @@ def audit(project) -> dict:
     counts={'estatisticas':0,'nomes':0,'artes':0,'efeitos':0,'cartas_extras':len(project.new_cards),
             'descricoes':0,'classes_cores':0,'icones_especiais':0,'equipamentos_ps1':0,'equip_substituicoes':0,
             'rituais_ps1':0,'armadilhas_ps1':0,'terrenos_ps1':0,'limite_global_deck_ps1':0}
-    blocked=[]; supported=[]
+    blocked=list(native_plan.pending); supported=[]
+    descriptions={}
     for key,edits in sorted(project.edits.items(),key=lambda item:int(item[0])):
         cid=int(key); current=project.get(cid)
         changed=set(edits)
@@ -70,7 +74,9 @@ def audit(project) -> dict:
             else:
                 blocked.append(f'#{cid}: nome requer SLUS de origem confirmado')
         if 'descricao' in changed:
-            if known:
+            if native_profile:
+                descriptions[cid]=current.get('descricao','')
+            elif known:
                 try:
                     names={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {cid:current}
                     description_patch_info(exe,cid,current.get('descricao',''),names)
@@ -83,6 +89,15 @@ def audit(project) -> dict:
         if changed & {'raridade','cor_nome'}:
             counts['classes_cores']+=1
             blocked.append(f'#{cid}: cor/raridade do nome não implementada no renderizador do PS1')
+    if descriptions:
+        from .ps1_text import patch_descriptions
+        catalog={cid:project.get(cid) for cid in project.cards}
+        _,rows,icons,pending=patch_descriptions(exe,descriptions,catalog,start=native_plan.data_end)
+        counts['descricoes']=len(rows)
+        counts['icones_especiais']=len(icons)
+        for row in rows:
+            supported.append(f'#{row["id"]}: descrição com cores e ícones')
+        blocked.extend(pending)
     for key,rel in project.arts.items():
         cid=int(key)
         if cid>CARD_COUNT:
@@ -151,7 +166,10 @@ def audit(project) -> dict:
     global_copy_limit=project.metadata.get('ps1_deck_global_limit')
     if global_copy_limit is not None and int(global_copy_limit)!=3:
         from .ps1_effects_lab import deck_global_patch_probe
-        if known:
+        if native_plan.copy_rules:
+            counts['limite_global_deck_ps1']=1
+            supported.append(f'Limite padrão de {native_plan.global_limit} cópias por ID e limites por carta')
+        elif known:
             probe=deck_global_patch_probe(exe,global_copy_limit)
             if probe['status']=='candidato_unico_experimental':
                 counts['limite_global_deck_ps1']=1
@@ -160,10 +178,9 @@ def audit(project) -> dict:
                 blocked.append('Limite global PS1: '+probe['motivo'])
         else:
             blocked.append('Limite global MIPS de cópias exige SLUS original confirmado')
-    for key,items in project.effects.items():
-        if items:
-            counts['efeitos']+=len(items)
-            blocked.append(f'#{key}: {len(items)} efeito(s) sem rotina MIPS compilada no PS1')
+    counts['efeitos']=sum(map(len,project.effects.values()))
+    counts['efeitos_nativos_ps1']=len(native_plan.accepted)
+    supported.extend(f'#{cid}: {ACTIONS[action]} no PS1' for cid,action in native_plan.accepted)
     if project.new_cards:
         blocked.append(f'{len(project.new_cards)} carta(s) #723+: expansão de estruturas/reserva de IDs pendente')
     return {
@@ -174,22 +191,22 @@ def audit(project) -> dict:
         'nomes_curtos_fonte_original':'gravavel_se_couber_no_espaco_original',
         'arte_e_miniatura_722':'gravavel_com_paleta_original_e_WA_verificado',
         'fusoes_original':'preservado_sem_edicao',
-        'descricoes_coloridas':'gravavel_se_curta_e_usar_somente_glifos_F8_originais',
+        'descricoes_coloridas':'Cores e ícones do jogo. Drop x15 também aceita ícones do Studio e realocação de texto.',
         'raridade_e_cor_nomes':'PENDENTE',
-        'icones_personalizados':'PENDENTE',
+        'icones_personalizados':'Graváveis nas descrições no perfil Drop x15',
         'cartas_maiores_722':'PENDENTE_MIPS_MEMORIA_TABELAS',
         'tipo_god':'Tipo 24, rótulo e ícone nativos e roteamento de monstro disponíveis no perfil Drop x15 com as opções God24 ativas',
-        'buffs_auras_cemiterio':'PENDENTE_MIPS_EVENTOS',
-        'equipamentos_imunidades':'PENDENTE_MIPS_REGRAS; alvos de Equip stock podem ser gravados',
+        'buffs_auras_cemiterio':'Bônus contínuos de campo, deck e cemitério no Drop x15',
+        'equipamentos_imunidades':'Equipamentos com ATK e proteção, imunidades e indestrutibilidade no Drop x15',
         'rituais_tres_tributos_originais':'gravavel_na_tabela_WA_SEM_NOVOS_IDS',
         'armadilhas_ataque_681_686':'gravavel_no_SLUS_SE_TABELA_RETAIL',
         'bonus_terreno_tipo':'gravavel_no_SLUS_SE_TABELA_RETAIL',
-        'ataque_2x_3x_piercing_haste':'PENDENTE_MIPS_COMBATE',
-        'decks_e_regras_de_copias':'Limite GLOBAL 1–40: patch MIPS experimental sob assinatura; limites por carta: somente simulador',
+        'ataque_2x_3x_piercing_haste':'Ataques 2x/3x e perfuração no Drop x15',
+        'decks_e_regras_de_copias':'Limites 1–40 por carta no Drop x15; deck de 40 espaços',
         'descarte_e_dano_a_monstros':'PENDENTE_NOVAS_REGRAS',
       },
       'pendente_de_motor':blocked,
-      'observacao':'BIN/CUE parcial: Equip validado; limite global de cópias é experimental sob assinatura MIPS e precisa teste no ePSXe; efeitos inéditos de campo/cemitério/batalha ainda somente no simulador.',
+      'observacao':'Confira a lista de efeitos que o projeto pode gravar e as pendências desta base.',
     }
 
 
@@ -207,14 +224,13 @@ def explain_no_writable_changes(project, report: dict) -> str:
         f'O projeto tem {edited} carta(s) com edições salvas, mas nenhuma '
         'alteração compatível gerou bytes novos para o PS1.\n\n'
         f'Classes/cores alteradas: {counts["classes_cores"]}\n'
-        f'Efeitos apenas no simulador: {counts["efeitos"]}\n'
+        f'Efeitos com suporte no PS1: {counts.get("efeitos_nativos_ps1",0)} de {counts["efeitos"]}\n'
         f'Cartas adicionais: {counts["cartas_extras"]}\n\n'
         f'PENDÊNCIAS IDENTIFICADAS:\n{details}\n\n'
         'Para testar uma alteração no ePSXe, escolha uma carta original '
         '(#001–#722), mude seu ATK ou DEF, clique Salvar projeto e depois '
-        'Gerar jogo BIN/CUE.\n\n'
-        'Raridades, cores de nomes, efeitos, ícones personalizados e cartas '
-        'adicionais ainda não são executados pelo motor do PS1.'
+        'Gerar jogo BIN/CUE. O perfil Drop x15 também aceita as descrições '
+        'com ícones e os efeitos compatíveis identificados no relatório.'
     )
 
 

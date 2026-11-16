@@ -1,3 +1,24 @@
+# Studio FM v1.4.25 — Efeitos de duelo e descrições no PS1
+
+No **Yu-Gi-Oh! FM Original (Drop x15)**, o Studio grava as habilidades
+compatíveis ao gerar o BIN/CUE do projeto. Os ataques 2x/3x, as
+proteções, as auras, os bônus de ATK/DEF e os limites por carta passam
+a ser lidos pelo jogo. O limite por carta pode ser de 1 a 40 cópias
+e o deck tem 40 espaços.
+
+O editor de descrição exporta as sete cores do jogo e os dez ícones
+do Studio. A tela de detalhes aberta com **Triângulo** comporta até
+nove linhas de 21 colunas. Letras acentuadas ausentes na fonte do
+PS1 são simplificadas na cópia e anotadas no relatório de geração.
+
+Abra o projeto, salve as edições e selecione **Gerar jogo BIN/CUE**.
+Escolha a imagem original usada para importar o projeto. Abra a cópia
+gerada e comece um duelo novo. O relatório indica as rotinas conferidas
+e as ações que ainda dependem de implementação. Veja
+[Compatibilidade PS1](docs/COMPAT_PS1.md).
+
+---
+
 # Studio FM v1.4.24 — Nome e ícone do tipo God no PS1
 
 As cartas de tipo 24 mostram o ícone dourado do Studio na lista do baú

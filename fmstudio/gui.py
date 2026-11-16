@@ -215,7 +215,7 @@ class SpecificCardEffectDialog(tk.Toplevel):
         for key,v in [('ATK por cópia',self.attack),('DEF por cópia',self.defense)]:
             block=ttk.Frame(row);block.pack(side='left',padx=(0,16))
             ttk.Label(block,text=key).pack(anchor='w');ttk.Entry(block,width=15,textvariable=v).pack()
-        ttk.Label(pane,text='A descrição exibirá o NOME da carta, não o ID.\nO efeito será simulado; não será escrito no BIN do PS1.',
+        ttk.Label(pane,text='A descrição usa o nome da carta. O bônus pode ser gravado no BIN no perfil Drop x15.',
                   foreground='#edc47e').pack(anchor='w',pady=14)
         buttons=ttk.Frame(pane);buttons.pack(fill='x')
         ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left')
@@ -622,12 +622,12 @@ class Studio(tk.Tk):
         copies=tk.Frame(quick,bg=SURFACE)
         copies.pack(fill='x',pady=4)
         tk.Label(copies,text='Cópias da carta no deck (1–40):',bg=SURFACE,fg=TEXT).pack(side='left')
-        self.quick_vars['limite_copias']=tk.StringVar(value='3')
+        self.quick_vars['limite_copias']=tk.StringVar()
         check_copies=(self.register(lambda value: value=='' or (value.isdigit() and len(value)<=2)))
         ttk.Entry(copies,width=5,textvariable=self.quick_vars['limite_copias'],
                   validate='key',validatecommand=(check_copies,'%P')).pack(side='left',padx=7)
         self.quick_vars['limite_copias'].trace_add('write',lambda *_:self._on_quick_changed())
-        tk.Label(copies,text='∞ = até 40 cópias dentro do deck; mudança por carta somente no simulador.',
+        tk.Label(copies,text='Vazio usa o limite padrão. ∞ permite até 40 cópias.',
                  bg=SURFACE,fg=MUTED).pack(side='left',padx=(10,0))
         rows=[tk.Frame(quick,bg=SURFACE) for _ in range(3)]
         for quick_row in rows: quick_row.pack(fill='x',pady=2)
@@ -645,7 +645,7 @@ class Studio(tk.Tk):
             self.quick_vars[action]=v
             ttk.Checkbutton(rows[index // 3],text=names[action],variable=v,
                             command=self._on_quick_changed).pack(side='left',padx=(0,18))
-        tk.Label(quick,text='Deck do PS1 continua com 40 cartas. Limite individual funciona no simulador; limite global MIPS é experimental.',
+        tk.Label(quick,text='Drop x15 aceita limites por carta de 1 a 40 cópias. O deck tem 40 espaços.',
                  bg=SURFACE,fg=MUTED,font=('Segoe UI',9)).pack(anchor='w',pady=(3,0))
         holder=tk.Frame(body,bg=SURFACE)
         holder.pack(fill='both',expand=True)
@@ -1465,7 +1465,7 @@ class Studio(tk.Tk):
             return
         settings={k:v.get() for k,v in self.quick_vars.items()}
         try:
-            self.drafts.set_quick_abilities(self.selected_id, settings)
+            self.drafts.set_quick_abilities(self.selected_id, settings, default_copies=None)
         except ModError as exc:
             self._update_status(f'Habilidade inválida: {exc}')
             return
@@ -1476,9 +1476,9 @@ class Studio(tk.Tk):
     def _load_quick_settings(self, effects):
         self._loading_quick=True
         try:
-            values=quick_settings(effects)
+            values=quick_settings(effects, default_copies=None)
             for key,variable in self.quick_vars.items():
-                variable.set(values[key])
+                variable.set('' if values[key] is None else values[key])
         finally:
             self._loading_quick=False
 
@@ -1558,10 +1558,9 @@ class Studio(tk.Tk):
             return
         current=int(self.project.metadata.get('ps1_deck_global_limit',3))
         n=simpledialog.askinteger('Limite global no PS1',
-             'Número máximo de cópias de qualquer carta no deck (1–40).\n'
-             '3 = regra original; 40 = todas as 40 cartas podem ser iguais.\n'
-             'Não aumenta o deck físico além de 40 e NÃO implementa limites diferentes por carta.\n'
-             'A modificação MIPS é experimental e depende da assinatura do SLUS.',
+             'Limite padrão de cópias por carta (1–40). O deck tem 40 espaços.\n'
+             'A configuração original é 3 cópias, com 1 por peça de Exodia.\n'
+             'No Drop x15, o limite definido para uma carta tem prioridade.',
              initialvalue=current,minvalue=1,maxvalue=40,parent=self)
         if n is None:
             return
@@ -1998,7 +1997,7 @@ class Studio(tk.Tk):
         body.bind('<Configure>',lambda e:cv.configure(scrollregion=cv.bbox('all')))
         cv.bind('<Configure>',lambda e:cv.itemconfigure(wid,width=e.width))
         popup._icon_refs=[]
-        tk.Label(body,text='NOVOS ÍCONES (prévia; requerem patch de fontes PS1)',bg=BG,fg=ACCENT).pack(anchor='w',pady=8,padx=12)
+        tk.Label(body,text='Ícones do Studio (PS1 no perfil Drop x15)',bg=BG,fg=ACCENT).pack(anchor='w',pady=8,padx=12)
         for name,label in CUSTOM_ICONS.items():
             row=tk.Frame(body,bg=BG);row.pack(fill='x',padx=12,pady=2)
             photo=self.get_icon_image(name)
@@ -2334,7 +2333,7 @@ class Studio(tk.Tk):
         question = ('Será criada ou atualizada a cópia de teste do disco, sem modificar o original.\n'
                     'Mesmo nome de origem: substitui o teste anterior. Outro nome: cria outro arquivo.\n'
                     'Se o ePSXe estiver usando a imagem anterior, feche o jogo antes de substituí-la.\n\n'
-                    'Compatível para teste: estatísticas, textos curtos e artes em paleta original.\n'
+                    'Consulte as alterações compatíveis no relatório do projeto.\n'
                     + ('Ícone Deus na descrição: três caracteres são trocados só na cópia.\n'
                        if description_icon and not (god_chest and description_icon==god_cid) else '')
                     + ('GOD24: ATK/DEF e ícone dourado no baú. Tipo God nos detalhes da carta.\n'
@@ -2345,8 +2344,8 @@ class Studio(tk.Tk):
                     + ('GOD 24: gravação experimental do campo tipo (24) '
                        'autorizada; jogabilidade NÃO validada no ePSXe.\n'
                        if self.project.metadata.get('ps1_god_type_test_card_id') else '')
-                    + f'PENDÊNCIAS DE MOTOR: {len(pending)}. Novos efeitos, cartas extras e cores de nomes NÃO serão aplicados.\n\n'
-                    + ('\n'.join(pending[:3]) + '\n\n' if pending else '') + 'Gerar somente a cópia parcial de teste?')
+                    + (f'PENDÊNCIAS: {len(pending)}.\n' + '\n'.join(pending[:3]) + '\n\n' if pending else '')
+                    + 'Gerar a cópia BIN/CUE de teste?')
         if not messagebox.askyesno('Gerar cópia de teste', question, parent=self):
             return
         try:
@@ -2367,6 +2366,8 @@ class Studio(tk.Tk):
         duel=manifest.get('teste_god24_roteamento_duelo')
         duel_status=(f'{duel["pontos_aplicados"]}/{duel["total_pontos"]} pontos conferidos '
                      '(ePSXe pendente)' if duel else 'DESATIVADO')
+        runtime=manifest.get('efeitos_nativos_ps1') or {}
+        simplified=sum(bool(row.get('acentos_simplificados')) for row in manifest['descricoes_aplicadas'])
         messagebox.showinfo(f'Imagem de teste {action}',
             f'Imagem de teste {action} com sucesso.\n\n'
             f'BIN: {manifest["bin"]}\nCUE: {manifest["cue"]}\n'
@@ -2375,7 +2376,10 @@ class Studio(tk.Tk):
             f'Setores modificados: {manifest["setores_modificados"]}\n\n'
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
-            f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
+            f'Efeitos gravados no PS1: {len(runtime.get("efeitos",[]))}. '
+            f'Ícones de descrição: {len(manifest.get("icones_de_descricao_ps1",[]))}.\n'
+            + (f'Fonte PS1 simplificou acentos em {simplified} descrição(ões).\n' if simplified else '')
+            + f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             f'God24 ATK/DEF BAÚ: {"2 máscaras + 3 opcodes da lista" if manifest.get("teste_god24_atk_def_bau") else "DESATIVADO"}.\n'
             f'God24 EM DUELO: {duel_status}.\n'
             + ('Tipo God e ícone conferidos no BIN. Abra os detalhes com Triângulo.\n'
@@ -2400,7 +2404,7 @@ class Studio(tk.Tk):
                    not manifest.get('teste_god24_atk_def_bau') else '')
             + f'Tipo 24 God (gravação experimental): '
             f'{manifest.get("teste_tipo_god24",{}).get("status") if manifest.get("teste_tipo_god24") else "não habilitado"}.\n'
-            'Efeitos de jogo continuam somente no Studio.',parent=self)
+            'Confira o resultado no ePSXe.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
 
     def diagnose_equip(self):
@@ -2467,8 +2471,9 @@ class Studio(tk.Tk):
                     and report['god24_exibicao_tipo']['status']!='aplicado')
                 or (self.project.metadata.get('ps1_god_hand_preview',False)
                     and report['god24_roteamento_duelo']['status']!='aplicado'))
-            if report['divergentes'] or god24_unpatched:
-                messagebox.showwarning('BIN/CUE: God24 não verificado',info,parent=self)
+            if (report['divergentes'] or god24_unpatched
+                    or report['efeitos_nativos_ps1']['status']=='divergente'):
+                messagebox.showwarning('BIN/CUE diverge do projeto',info,parent=self)
             else:
                 messagebox.showinfo('BIN/CUE conferido (teste no ePSXe pendente)',
                                     info,parent=self)

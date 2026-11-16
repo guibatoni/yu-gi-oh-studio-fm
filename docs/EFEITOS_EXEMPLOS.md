@@ -1,4 +1,4 @@
-# Exemplos de efeitos para configurar no Studio v0.8.0
+# Exemplos de efeitos no Studio FM
 
 ## 1. Aura: concede +500 ATK / +300 DEF a todos os aliados do tipo Fada
 
@@ -20,7 +20,7 @@
 
 - Quando ativa: `continuo` · Ação: `bonus_deck_tipo` · Alvo: `proprio`
 - Valor ATK: `100` · Valor DEF: `50` · Tipo: `08 (Fairy/Fada)` · Escopo: `aliados`
-- O simulador conta a lista completa do deck configurada até 40, inclusive cartas compradas.
+- O cálculo conta o deck completo de 40 cartas, incluindo as cartas compradas.
 
 ## 5. Ao invocar, recuperar 150 LP por Fada no deck
 
@@ -53,8 +53,12 @@ Para a carta de equipamento, configure `evento=equipado`, `alvo=monstro_equipado
 - `equip_indestrutivel`: Valor = `0`.
 - `equip_atk`: Valor = `500` (ou outro X).
 
-Na aba Campo, anexe essa carta ao slot do monstro. A proteção acompanha o anexo e termina ao removê-lo. A simulação de imunidade cobre os **danos simulados** de origens mágicas/armadilhas, não todas as regras do PS1.
+Na aba Campo, anexe essa carta ao slot do monstro. No PS1, aplique uma
+carta de Equipamento compatível ao monstro durante o duelo. A proteção
+acompanha o monstro equipado até ele sair do campo.
 
 ## Importante
 
-Todas essas ações são DEFINIÇÕES/SIMULAÇÕES do editor e **não são executadas dentro do ePSXe**. O BIN/CUE do jogo original nunca é editado por essas ações. As fusões originais são preservadas.
+No perfil Drop x15, a opção **Gerar jogo BIN/CUE** grava os exemplos
+1 a 4 e o 9 na cópia do jogo. Os gatilhos dos exemplos 5 a 8 são
+executados pelo laboratório do Studio.

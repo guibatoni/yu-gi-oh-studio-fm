@@ -107,9 +107,9 @@ class DraftSession:
         items.append(check_effect(entry))
         self._stage_effects(cid, items)
 
-    def set_quick_abilities(self, cid: int, settings: dict) -> None:
+    def set_quick_abilities(self, cid: int, settings: dict, *, default_copies: int | None = 3) -> None:
         from .abilities import replace_quick_effects
-        items = replace_quick_effects(self.get_effects(cid), settings)
+        items = replace_quick_effects(self.get_effects(cid), settings, default_copies=default_copies)
         self._stage_effects(cid, items)
 
     def remove_effect(self, cid: int, index: int) -> None:

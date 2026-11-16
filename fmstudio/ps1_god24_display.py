@@ -89,6 +89,12 @@ SPRITE_PATCHED = (
     0x30620007,  # andi v0,v1,7: a ramificação baixa já tem o código em v1
 )
 
+
+def extended_sprite_words() -> tuple[int, ...]:
+    from .ps1_runtime_blob import ENTRY_POINTS
+    dispatch = 0x08000000 | ((ENTRY_POINTS['DescriptionIcon'] >> 2) & 0x03FFFFFF)
+    return SPRITE_PATCHED[:9] + (dispatch, 0) + SPRITE_PATCHED[11:]
+
 # 0x8327 é um alias de Dragon inalcançável pelo campo de 4 bits das estrelas.
 # O novo texto fica no preenchimento entre as strings e a tabela de glifos.
 NAME_POINTER = 0x801D5E4E - EXE_DELTA
@@ -120,7 +126,13 @@ def inspect(exe: bytes, wa: bytes | None = None) -> dict:
     regions = [exe[offset:offset + len(before)] for offset, before, _ in REGIONS]
     status = 'assinatura_divergente'
     if exe.startswith(b'PS-X EXE'):
-        if regions == [after for _, _, after in REGIONS]:
+        wanted = [after for _, _, after in REGIONS]
+        if regions[1] == struct.pack('<28I', *extended_sprite_words()):
+            from .ps1_runtime_blob import RUNTIME, RUNTIME_BASE
+            offset = RUNTIME_BASE - EXE_DELTA
+            if exe[offset:offset + len(RUNTIME)] == RUNTIME:
+                wanted[1] = regions[1]
+        if regions == wanted:
             if wa is None:
                 status = 'aguardando_textura'
             else:

@@ -99,6 +99,9 @@ def verify_image_stats(project, source):
     card_types_24=[{'id':c['id'],'ataque':c['ataque'],'defesa':c['defesa']}
                    for c in cards if c['tipo_id']==24]
     config=getattr(project,'metadata',{}) or {}
+    from .ps1_runtime import SOURCE_SHA256, compile_effects, verify_effects
+    plan=compile_effects(project,config.get('base_sha256',{}).get('slus')==SOURCE_SHA256)
+    runtime=verify_effects(exe,plan)
     cid=config.get('ps1_god_type_test_card_id')
     tested=cards[cid-1] if type(cid) is int and 1<=cid<=CARD_COUNT else None
     chest=inspect_god24_chest_mips(exe)
@@ -118,6 +121,7 @@ def verify_image_stats(project, source):
             'god24_mascara_da_mao':legacy_hand_patch,
             'god24_roteamento_duelo':duel_patch,
             'god24_exibicao_tipo':god_display,
+            'efeitos_nativos_ps1':runtime,
             'god24_teste_mao_ativado_no_projeto':bool(config.get('ps1_god_hand_preview')),
             'god24_teste_bau_ativado_no_projeto':bool(config.get('ps1_god_chest_preview')),
             'god24_total_cartas_no_bin':len(card_types_24),
@@ -135,6 +139,11 @@ def describe(result):
     text = [f'Imagem selecionada: {result["imagem"]}', '',
             f'Cartas numéricas conferidas: {result["total"]}',
             f'Corretas: {result["corretas"]} | Divergentes: {result["divergentes"]}']
+    runtime=result.get('efeitos_nativos_ps1',{})
+    if runtime.get('status')=='aplicado':
+        text.append(f'Efeitos nativos conferidos na cópia: {runtime["quantidade"]}.')
+    elif runtime.get('status')=='divergente':
+        text.append('A tabela de efeitos desta cópia diverge do projeto. Gere outro BIN/CUE.')
     if result.get('god24_tipo_gravado_e_verificado'):
         text.append('God 24 gravado como 5 bits: SIM.')
     if result.get('god24_total_cartas_no_bin') or result.get('god24_teste_bau_ativado_no_projeto'):

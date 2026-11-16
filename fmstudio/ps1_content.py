@@ -132,15 +132,18 @@ def patch_card_art(wa: bytes, cid: int, png:Path) -> tuple[bytes, list[dict]]:
     return bytes(result),modified
 
 
-_TEXT_CONTROL = re.compile(r'\{(f8 0[AB] [0-9A-Fa-f]{2}|color:[a-z]+|/color|card:\d{1,5})\}')
+_TEXT_CONTROL = re.compile(r'\{(f8 0[AB] [0-9A-Fa-f]{2}|color:[a-z]+|/color|card:\d{1,5}|icon:[a-z0-9_]+)\}')
 
 
-def _encode_description(value: str, cmap:dict[int,str], cards:dict[int,dict]) -> bytes:
-    """Compila apenas glifos originais, NL, cores e ícones F8 nativos."""
+def _encode_description(value: str, cmap:dict[int,str], cards:dict[int,dict], *,
+                        icon_codes=None, normalize=None) -> bytes:
+    """Compila glifos, quebras de linha e comandos de cor/ícone F8."""
     from .richtext import TEXT_COLORS
     from .expanded import display_name
     encoded=bytearray();where=0
     def append_plain(part):
+        if normalize is not None:
+            part = normalize(part)
         for ch in part:
             if ch=='\n':encoded.append(0xFE)
             else:encoded.extend(_encode_name(ch,cmap))
@@ -157,11 +160,16 @@ def _encode_description(value: str, cmap:dict[int,str], cards:dict[int,dict]) ->
         elif token.startswith('card:'):
             cid=int(token[5:]);name=display_name(cid,cards)
             append_plain(name)
+        elif token.startswith('icon:'):
+            name=token[5:]
+            if not icon_codes or name not in icon_codes:
+                raise ModError(f'Ícone {name!r} exige a extensão de descrições PS1.')
+            encoded.extend([0xF8,0x0B,icon_codes[name]])
         else:
             op,ctrl,arg=token.split()
             code=int(arg,16)
             if ctrl=='0A' and code>6:raise ModError('Código de cor fora da paleta retail.')
-            if ctrl=='0B' and code>0x26:raise ModError('Ícone não pertence à fonte original do PS1.')
+            if ctrl=='0B' and code>0x28:raise ModError('Ícone não pertence à fonte original do PS1.')
             encoded.extend([0xF8,int(ctrl,16),code])
         where=m.end()
     tail=value[where:]
@@ -171,8 +179,8 @@ def _encode_description(value: str, cmap:dict[int,str], cards:dict[int,dict]) ->
     return bytes(encoded)
 
 
-def description_patch_info(exe:bytes,cid:int,description:str,cards:dict[int,dict]) -> tuple[int,bytes]:
-    """Somente troca strings lineares curtas no próprio slot de descrição."""
+def description_slot(exe:bytes,cid:int) -> tuple[int,int]:
+    """Retorna a posição e a capacidade segura de uma descrição linear."""
     if not 1<=cid<=CARD_COUNT:raise ModError('Descrição de carta virtual requer expansão do motor.')
     table_start=exe_pos(STRING_TABLE,exe,0x400*2)
     offsets=[struct.unpack_from('<H',exe,table_start+2*i)[0] for i in range(0x100,0x400)]
@@ -192,6 +200,12 @@ def description_patch_info(exe:bytes,cid:int,description:str,cards:dict[int,dict
         if op==0xF8 and p+2<len(old) and old[p+1] in (0x0A,0x0B):p+=3;continue
         raise ModError('Descrição original contém controle/ramificação; edição não é segura.')
     else:raise ModError('Descrição original sem terminador em espaço livre.')
+    return at,end
+
+
+def description_patch_info(exe:bytes,cid:int,description:str,cards:dict[int,dict]) -> tuple[int,bytes]:
+    """Somente troca strings lineares curtas no próprio slot de descrição."""
+    at,end=description_slot(exe,cid)
     cmap,_=glyph_map(exe)
     raw=_encode_description(description,cmap,cards)
     if len(raw)>end:
