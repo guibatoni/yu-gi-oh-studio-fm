@@ -661,6 +661,7 @@ class Studio(tk.Tk):
         row_native.pack(fill='x')
         ttk.Button(row_native,text='Diagnosticar motor MIPS',command=self.diagnose_effect_engine).pack(side='left')
         ttk.Button(row_native,text='Limite global de cópias no PS1',command=self.configure_ps1_deck_limit).pack(side='left',padx=8)
+        ttk.Button(row_native,text='Teste MIPS: LP inicial',command=self.configure_ps1_initial_lp).pack(side='left',padx=8)
         tk.Label(native,text='Rituais retirados desta tela por enquanto. O diagnóstico identifica locais de cálculo de bônus, cemitério, proteção, combate e deck; não injeta habilidades não validadas.',
                  bg=SURFACE,fg=MUTED,wraplength=940,justify='left').pack(anchor='w',pady=(5,0))
         sim=tk.Frame(body,bg=SURFACE,padx=15,pady=12)
@@ -1316,6 +1317,44 @@ class Studio(tk.Tk):
             self._update_status(f'Limite global MIPS registrado: {n} cópias por ID.')
         except (OSError,ModError,ValueError) as exc:
             messagebox.showerror('Limite global de deck PS1',str(exc),parent=self)
+
+    def configure_ps1_initial_lp(self):
+        """Teste MIPS controlado, somente para duelos normais do PS1."""
+        if not self._ready_native_effect():
+            return
+        from .ps1_effects_lab import probe_initial_duel_lp
+        path=self.project.folder/'base'/'source_SLUS_014.11'
+        if not path.is_file():
+            messagebox.showerror('SLUS ausente','Importe a imagem original deste projeto.',parent=self)
+            return
+        current=int(self.project.metadata.get('ps1_starting_lp',8000))
+        n=simpledialog.askinteger('Teste MIPS: LP inicial',
+            'LP inicial dos dois jogadores em duelos normais.\n'
+            '8000 = padrão; 9000 = teste recomendado.\n'
+            'Múltiplos de 500 entre 500 e 9500.\n'
+            'Não altera 2P e não implementa habilidades inéditas.',
+            initialvalue=current,minvalue=500,maxvalue=9500,parent=self)
+        if n is None:
+            return
+        try:
+            status=probe_initial_duel_lp(path.read_bytes(),n)
+            if n!=8000 and status['status']!='retail_lp_detectado_sem_validacao_epsxe':
+                raise ModError(status['motivo'])
+            if not messagebox.askyesno('Confirmação de teste MIPS',
+                f'Gerar BIN/CUE de teste com {n} LP iniciais?\n'
+                'Só a cópia gerada será modificada; o BIN original é preservado.\n'
+                'Confirme no ePSXe sem carregar save state.\nContinuar?',
+                parent=self):
+                return
+            if n==8000:
+                self.project.metadata.pop('ps1_starting_lp',None)
+            else:
+                self.project.metadata['ps1_starting_lp']=n
+            self.project.save()
+            self._refresh_project()
+            self._update_status(f'LP inicial MIPS configurado: {n}.')
+        except (OSError,ModError,ValueError) as exc:
+            messagebox.showerror('Teste MIPS: LP inicial',str(exc),parent=self)
 
     def _ready_native_effect(self):
         if self._extract_running or not self._ensure_project():

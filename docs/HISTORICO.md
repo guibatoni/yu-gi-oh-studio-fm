@@ -1,3 +1,11 @@
+## v1.4.2 — Smoke test executável do motor PS1
+
+- Prova opcional de patch da instrução \`addiu $v0,$zero,8000\` em SLUS+0x7DD0.
+- Bloqueio em MODs sem opcode retail idêntico; nenhum código ou tabela realocados.
+- Guarda valor no projeto, gera somente cópia BIN/CUE, com manifesto verificável.
+- Testes com SLUS sintético, limite de valores e hash original preservado.
+- Ainda requer validação ePSXe; habilidades inéditas permanecem só no simulador.
+
 ## v1.4.1 — Grafo preliminar de chamadas MIPS
 
 - Adicionada varredura de referências diretas JAL para nove endereços de referência.

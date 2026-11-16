@@ -200,6 +200,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     patched_exe, deck_copies_written = patch_deck_global_limit(
         patched_exe, metadata.get('ps1_deck_global_limit'))
 
+    from .ps1_effects_lab import patch_initial_duel_lp
+    patched_exe, lp_written = patch_initial_duel_lp(patched_exe,metadata.get('ps1_starting_lp'))
+
     written_arts=[]
     patched_wa=None
     if requested_art:
@@ -348,6 +351,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'armadilhas_ps1_aplicadas':traps_written,
                 'terrenos_ps1_aplicados':terrain_written,
                 'limite_global_copias_ps1_aplicado':deck_copies_written,
+                'lp_inicial_mips_aplicado':lp_written,
                 'modo_equip_ps1':equip_mode,
                 'estrategia_equip_ps1':equip_strategy if (native_equips or replacements) else 'sem-equip',
                 'tamanho_bin':stage_bin.stat().st_size,

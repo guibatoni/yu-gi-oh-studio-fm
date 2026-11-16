@@ -53,6 +53,58 @@ def _range(exe: bytes, address: int, size: int) -> tuple[int, bytes]:
     return offset, exe[offset:offset+size]
 
 
+
+# Instrução retail corroborada: Duel_InitSideStates, SLUS+0x7DD0.
+LP_INIT_OFFSET = 0x7DD0
+LP_INIT_ORIGINAL = 0x24021F40  # addiu $v0,$zero,8000
+
+
+def probe_initial_duel_lp(exe: bytes, value: int | None = None) -> dict:
+    """Leitura apenas: exige a instrução retail exata antes de propor patch."""
+    if value is not None:
+        if (isinstance(value,bool) or not isinstance(value,int)
+                or value<500 or value>9500 or value%500):
+            raise ModError('LP inicial: use múltiplos de 500 entre 500 e 9500.')
+    if len(exe)<LP_INIT_OFFSET+4 or exe[:8]!=b'PS-X EXE':
+        return {'status':'incompativel','motivo':'SLUS PS-X EXE inválido ou truncado.'}
+    original=struct.unpack_from('<I',exe,LP_INIT_OFFSET)[0]
+    if original!=LP_INIT_ORIGINAL:
+        return {'status':'incompativel',
+                'instrucao_encontrada':f'0x{original:08X}',
+                'motivo':'Opcode de inicialização de LP é diferente da versão retail; '
+                         'não gravar neste MOD.'}
+    return {'status':'retail_lp_detectado_sem_validacao_epsxe',
+            'offset_slus':f'0x{LP_INIT_OFFSET:X}',
+            'instrucao_original':f'0x{original:08X}',
+            'lp_original':8000,'lp_solicitado':value,
+            'aviso':'Apenas duelos normais. Modo 2 jogadores usa outra rotina.'}
+
+
+def patch_initial_duel_lp(exe: bytes, value: int | None) -> tuple[bytes,list[dict]]:
+    """Smoke test de alteração real MIPS sem realocação, só em cópia SLUS."""
+    if value is None:
+        return exe,[]
+    proof=probe_initial_duel_lp(exe,value)
+    if value==8000:
+        return exe,[]
+    if proof['status']!='retail_lp_detectado_sem_validacao_epsxe':
+        raise ModError('Patch MIPS LP bloqueado: '+proof['motivo'])
+    out=bytearray(exe)
+    new=(LP_INIT_ORIGINAL&0xFFFF0000)|value
+    struct.pack_into('<I',out,LP_INIT_OFFSET,new)
+    if len(out)!=len(exe) or out[:LP_INIT_OFFSET]!=exe[:LP_INIT_OFFSET] or out[LP_INIT_OFFSET+4:]!=exe[LP_INIT_OFFSET+4:]:
+        raise ModError('Patch LP alterou bytes fora da instrução permitida.')
+    if struct.unpack_from('<I',out,LP_INIT_OFFSET)[0]!=new:
+        raise ModError('Verificação de retorno da instrução LP falhou.')
+    return bytes(out),[{'alteracao':'lp_inicial_duelo_normal',
+                        'offset_slus':f'0x{LP_INIT_OFFSET:X}',
+                        'instrucao_anterior':f'0x{LP_INIT_ORIGINAL:08X}',
+                        'instrucao_nova':f'0x{new:08X}',
+                        'lp_inicial':value,
+                        'status':'patch_retail_experimental_epsxe_pendente',
+                        'restricao':'Modo 2 jogadores não alterado.'}]
+
+
 def scan_direct_mips_calls(exe: bytes) -> dict:
     """Read-only JAL references to known locations in a PS-X EXE code segment.
 
@@ -252,6 +304,7 @@ def analyze_project_effects(project) -> dict:
         'sha256_executavel_origem':hashlib.sha256(exe).hexdigest(),
         'funcoes_encontradas':scan_effect_sites(exe),
         'referencias_chamadas_mips':scan_direct_mips_calls(exe),
+        'probe_lp_inicial':probe_initial_duel_lp(exe,project.metadata.get('ps1_starting_lp')),
         'perfil_limite_global_deck':deck_global_patch_probe(exe,limit),
         'grupos_programados_no_studio':grouped,
         'outros_efeitos':unknown,

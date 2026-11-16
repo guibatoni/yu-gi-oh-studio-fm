@@ -13,6 +13,7 @@ from fmstudio.duel_engine import DuelLab
 from fmstudio.ps1_effects_lab import (
     SITES, scan_effect_sites, scan_direct_mips_calls, deck_global_patch_probe, patch_deck_global_limit,
     analyze_project_effects, save_project_effect_analysis,
+    probe_initial_duel_lp, patch_initial_duel_lp,
 )
 from fmstudio.disc_build import build_test_disc
 from fmstudio.disc import DiscReader
@@ -80,6 +81,56 @@ class MipsEffectProbeTests(unittest.TestCase):
         struct.pack_into('<II',exe,0x18,EXE_DELTA+0x800,0xFFFFFFFC)
         self.assertEqual(scan_direct_mips_calls(bytes(exe))['status'],
                          'segmento_invalido')
+
+    def test_lp_patch_retains_original_and_changes_immediate(self):
+        exe=bytearray(stock_like_exe())
+        struct.pack_into('<I',exe,0x7DD0,0x24021F40)
+        original=bytes(exe)
+        self.assertEqual(probe_initial_duel_lp(original,9000)['status'],
+                         'retail_lp_detectado_sem_validacao_epsxe')
+        result,changes=patch_initial_duel_lp(original,9000)
+        self.assertEqual(len(changes),1)
+        self.assertEqual(struct.unpack_from('<I',result,0x7DD0)[0],0x24022328)
+        self.assertEqual(len(result),len(original))
+        self.assertEqual(original[:0x7DD0],result[:0x7DD0])
+        self.assertEqual(original[0x7DD4:],result[0x7DD4:])
+        self.assertEqual(struct.unpack_from('<I',original,0x7DD0)[0],0x24021F40)
+        self.assertEqual(patch_initial_duel_lp(original,8000),(original,[]))
+
+    def test_lp_patch_fails_closed_on_unknown_layout(self):
+        exe=stock_like_exe()
+        self.assertEqual(probe_initial_duel_lp(exe,9000)['status'],'incompativel')
+        with self.assertRaises(ModError):
+            patch_initial_duel_lp(exe,9000)
+        for amount in (0,400,9999,10000,True,'9000'):
+            with self.assertRaises(ModError):
+                probe_initial_duel_lp(exe,amount)
+        invalid=bytearray(exe)
+        struct.pack_into('<I',invalid,0x7DD0,0x24021F40)
+        invalid[0]=0
+        self.assertEqual(probe_initial_duel_lp(bytes(invalid),9000)['status'],
+                         'incompativel')
+
+    def test_lp_smoke_bin_pipeline_keeps_input_file_identical(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder=Path(tmp)
+            source=folder/'Drop-X15.bin'
+            exe=bytearray(stock_like_exe())
+            struct.pack_into('<I',exe,0x7DD0,0x24021F40)
+            original=bytes(exe)
+            write_disc(source,original,bytes(2048))
+            sha=hashlib.sha256(source.read_bytes()).hexdigest()
+            project=SimpleNamespace(folder=folder,arts={},metadata={
+                'base_sha256':{'slus':hashlib.sha256(original).hexdigest()},
+                'ps1_starting_lp':9000})
+            project.export=lambda:(folder/'exportacao',{})
+            result=build_test_disc(project,source)
+            self.assertEqual(result['lp_inicial_mips_aplicado'][0]['lp_inicial'],9000)
+            with DiscReader(result['bin']) as reader:
+                entry=next(x for x in reader.files() if x.path=='SLUS_014.11')
+                edited=b''.join(reader.read_entry(entry))
+            self.assertEqual(struct.unpack_from('<I',edited,0x7DD0)[0],0x24022328)
+            self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(),sha)
 
     def test_single_comparison_changes_only_immediate(self):
         original=stock_like_exe()

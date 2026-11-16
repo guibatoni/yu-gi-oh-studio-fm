@@ -1,3 +1,15 @@
+## v1.4.2 — Teste do pipeline de patch MIPS
+
+Primeira prova opt-in de mudança real de instrução MIPS: LP inicial do
+duelo normal (retail; 8000 -> 9000). Não implementa efeitos customizados,
+mas exercita a escrita do SLUS e a regeneração dos setores de disco em
+uma cópia, com verificação e bloqueio para assinatura incompatível.
+
+Próximo passo para a primeira habilidade inédita: localizar pontos de
+chamada \`Duel_CalcCardStats\` e o estado de cemitério, validar ABI/registradores,
+identificar área de código com segurança e testar a primeira rotina de bônus
+sem alterar as fusões ou o executável original.
+
 ## v1.4.1 — Referências JAL verificáveis (somente leitura)
 
 O relatório MIPS agora faz varredura de JAL estáticos para as nove rotinas

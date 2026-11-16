@@ -1,3 +1,20 @@
+# Studio FM v1.4.2 — Teste de escrita de instrução MIPS (LP inicial)
+
+Na aba **Efeitos**, o botão **Teste MIPS: LP inicial** permite opcionalmente
+gerar uma cópia BIN/CUE com 9000 LP iniciais em duelos normais, em vez de
+8000. Outros valores: múltiplos de 500 entre 500 e 9500.
+
+Somente a instrução retail \`addiu $v0,$zero,8000\` do
+\`Duel_InitSideStates\` em offset SLUS \`0x7DD0\` é alterada quando os
+quatro bytes originais conferem. Imagens com código incompatível são
+bloqueadas. O modo 2 jogadores não é alterado; a origem nunca é sobrescrita.
+
+É um **teste de execução MIPS no PS1 ainda não validado em ePSXe**, não
+uma habilidade inédita. Consulte
+https://github.com/Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled/blob/master/notes/modding-tutorial-evidence.md#initial-duel-life-points
+
+---
+
 # Studio FM v1.4.1 — Referências MIPS de chamadas (diagnóstico)
 
 O botão **Efeitos > Diagnosticar motor MIPS** agora registra, para cada
