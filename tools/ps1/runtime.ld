@@ -17,6 +17,13 @@ SECTIONS {
         . = ALIGN(4);
     }
     ASSERT(. <= 0x801CD7A0, "PS1 duel state exceeds reserved memory")
+    .runtime_mod 0x801CF500 : {
+        __runtime_mod_start = .;
+        KEEP(*(.runtime.mod))
+        . = ALIGN(4);
+        __runtime_mod_end = .;
+    }
+    ASSERT(__runtime_mod_end <= 0x801CF9B0, "PS1 decks and name colors conflict with the password code")
     .runtime_password 0x801CF9B0 : {
         __password_start = .;
         KEEP(*(.runtime.password))
