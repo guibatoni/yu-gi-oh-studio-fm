@@ -1,0 +1,33 @@
+name: Validar Studio FM 1.6.0
+on:
+  push:
+    branches: ['validation/studio-v1.6.0']
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar compilador e Tkinter
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gcc-mipsel-linux-gnu binutils-mipsel-linux-gnu python3-tk python3-pil xvfb xauth
+      - name: Compilar extensão MIPS do PS1
+        run: |
+          python3 tools/compile_ps1_runtime.py
+          echo FM_STUDIO_RUNTIME_BEGIN
+          cat fmstudio/ps1_runtime_blob.py
+          echo FM_STUDIO_RUNTIME_END
+      - name: Compilar Python e testar
+        run: |
+          python3 -m compileall -q app.py fmstudio tools tests
+          python3 -m unittest discover -s tests -v
+          python3 -S -m unittest discover -s tests -p test_ps1_god_icon.py -v
+      - name: Testar fluxos Tkinter
+        run: |
+          export PYTHONPATH=.
+          xvfb-run -a python3 tests/gui_expansion_smoke.py
+          xvfb-run -a python3 tests/gui_mod_smoke.py
+      - name: Empacotar versão fonte
+        run: python3 tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip

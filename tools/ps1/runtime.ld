@@ -17,5 +17,12 @@ SECTIONS {
         . = ALIGN(4);
     }
     ASSERT(. <= 0x801CD7A0, "PS1 duel state exceeds reserved memory")
+    .runtime_ext 0x801CFB00 : {
+        __runtime_ext_start = .;
+        KEEP(*(.runtime.extension))
+        . = ALIGN(4);
+        __runtime_ext_end = .;
+    }
+    ASSERT(__runtime_ext_end <= 0x801CFF00, "PS1 extension conflicts with the LP bank")
     /DISCARD/ : { *(.MIPS.abiflags .reginfo .pdr .comment .note.* .gnu.attributes .mdebug.*) }
 }
