@@ -1,20 +1,18 @@
-"""Laboratório de duelo: efeitos ativados por evento, deck, mãos e equipamentos.
-
-Este é um simulador de regras NOVAS, não as regras reais do PS1. Para dano
-em monstros é usada uma 'resistência' experimental com base em DEF (mínimo 1),
-independente dos cálculos originais de combate. A lista do deck é integral
-(40 cartas no máximo) e estática para a partida; não é o monte de compra.
-"""
+"""Estado e resolução de combate compartilhados pelo laboratório e pela partida."""
 from __future__ import annotations
 from collections import Counter
-from copy import deepcopy
+from copy import copy, deepcopy
 import re
 
-from .continuous import SIDES, resolve_field
+from .continuous import SIDES, project_stats, resolve_field
 from .core import ModError, check_effect, simulation_nonnegative_int
+from .guardian import guardian_bonuses
+from .mod_data import card_effects, opposite, validate_deck
+from .tables import DECK_SIZE
 
-MAX_DECK = 40
+MAX_DECK = DECK_SIZE
 MAX_HAND = 5
+POSITIONS = ('ataque', 'defesa')
 
 
 def parse_card_ids(text: str, *, maximum: int = MAX_DECK) -> list[int]:
@@ -32,7 +30,7 @@ def parse_card_ids(text: str, *, maximum: int = MAX_DECK) -> list[int]:
             raise ModError(f'Lista de cartas: formato inválido {chunk!r}. Use 1, 2x3, 16*2')
         cid = int(match.group(1))
         qty = int(match.group(2) or '1')
-        if cid < 1 or cid > 32766 or qty < 1 or qty > maximum or len(result)+qty > maximum:
+        if cid < 1 or qty < 1 or len(result)+qty > maximum:
             raise ModError(f'Lista de cartas: ID ou quantidade inválida em {chunk!r} (limite {maximum})')
         result.extend([cid]*qty)
     return result
@@ -44,7 +42,11 @@ class DuelLab:
     `cards`: registros {id: {tipo_id, defesa...}}, `effects`: por ID da carta.
     Qualquer evento só é aplicado quando trigger() é explicitamente invocado.
     """
-    def __init__(self, cards: dict, effects: dict, *, summoning_delay: bool = False, initial_lp: int = 8000):
+    state_fields = ('monsters', 'equipments', 'decks', 'graveyards', 'turns',
+                    'summoned_turn', 'hands', 'lp', 'damage', 'attacks_used', 'logs')
+
+    def __init__(self, cards: dict, effects: dict, *, summoning_delay: bool = False,
+                 initial_lp: int | dict = 8000, default_copies: int = 3):
         self.cards = cards
         self.effects = effects
         self.monsters: list[dict] = []
@@ -55,11 +57,27 @@ class DuelLab:
         self.turns = {side: 0 for side in SIDES}
         self.summoned_turn = {}  # (lado, slot, ID) -> turno em que entrou
         self.hands = {side: [] for side in SIDES}
-        self.starting_lp = simulation_nonnegative_int(initial_lp,'LP inicial do simulador')
-        self.lp = {side: self.starting_lp for side in SIDES}
+        values = initial_lp if isinstance(initial_lp, dict) else dict.fromkeys(SIDES, initial_lp)
+        self.initial_lp = {side: simulation_nonnegative_int(values[side], 'LP inicial') for side in SIDES}
+        self.starting_lp = self.initial_lp['jogador']  # API das versões anteriores
+        self.lp = dict(self.initial_lp)
+        self.default_copies = default_copies
         self.damage = {}  # (side,slot,card_id) => dano simulado permanente
         self.attacks_used = {}  # (side,slot,card_id) => ataques neste turno
         self.logs = []
+
+    def _snapshot(self):
+        return {key: deepcopy(getattr(self, key)) for key in self.state_fields}
+
+    def _restore(self, snapshot):
+        for key, value in snapshot.items():
+            setattr(self, key, value)
+
+    def fork(self):
+        branch = copy(self)
+        branch._restore(self._snapshot())
+        branch.logs = []
+        return branch
 
     def card(self, cid):
         c = self.cards.get(int(cid))
@@ -68,28 +86,9 @@ class DuelLab:
         return c
 
     def set_deck(self, side: str, ids: list[int]):
-        if side not in SIDES or len(ids) > MAX_DECK:
-            raise ModError('Deck: lado inválido ou mais de 40 cartas')
-        counts = Counter(ids)
-        for cid, quantity in counts.items():
-            self.card(cid)
-            per_card = 3
-            explicit = []
-            unlimited = False
-            for entry in self.effects.get(str(cid), self.effects.get(cid, [])):
-                if entry.get('acao') in ('sem_limite_deck','limite_copias_deck'):
-                    eff = check_effect(entry)
-                    if eff['acao'] == 'sem_limite_deck':
-                        unlimited = True
-                    else:
-                        explicit.append(eff['valor'])
-            if unlimited:
-                per_card = MAX_DECK
-            elif explicit:
-                per_card = min(explicit)  # Em conflito, aplica o limite mais restritivo.
-            if quantity > per_card:
-                raise ModError(f'Deck: carta #{cid} tem {quantity} cópias '
-                               f'(máximo configurado {per_card}, deck com até {MAX_DECK}).')
+        if side not in SIDES:
+            raise ModError('Deck: lado inválido.')
+        validate_deck(self.cards, self.effects, ids, self.default_copies)
         self.decks[side] = list(ids)
 
     def set_hand(self, side: str, ids: list[int]):
@@ -105,6 +104,16 @@ class DuelLab:
         for cid in ids: self.card(cid)
         self.graveyards[side] = list(ids)
 
+    def draw(self, side: str, quantity: int = 1) -> list[int]:
+        if side not in SIDES or quantity < 0:
+            raise ModError('Compra: lado ou quantidade inválida.')
+        deck, hand = self.decks[side], self.hands[side]
+        size = min(quantity, len(deck), MAX_HAND - len(hand))
+        drawn = deck[:size]
+        del deck[:size]
+        hand.extend(drawn)
+        return drawn
+
     def graveyard_type_counts(self):
         return {side: Counter(int(self.card(cid)['tipo_id']) for cid in ids)
                 for side, ids in self.graveyards.items()}
@@ -115,8 +124,7 @@ class DuelLab:
 
     def set_field(self, monsters: list[dict], equipments: list[dict] | None = None):
         # Resolve/valida tudo antes de substituir; se falhar, mantém o estado.
-        resolve_field(monsters,self.effects,deck_types=self.type_counts(),equipments=equipments or [],
-                      deck_cards=self.decks,cemetery_types=self.graveyard_type_counts())
+        resolve_field(monsters,self.effects,equipments=equipments or [], catalog=self.cards, zones=self.zones())
         new_keys={(m['lado'],int(m['slot']),int(m['card_id'])) for m in monsters}
         self.damage={key:v for key,v in self.damage.items() if key in new_keys}
         self.summoned_turn={key:v for key,v in self.summoned_turn.items() if key in new_keys}
@@ -127,9 +135,18 @@ class DuelLab:
         self.equipments=deepcopy(equipments or [])
 
     def resolve(self):
-        return resolve_field(self.monsters,self.effects,deck_types=self.type_counts(),
-                             equipments=self.equipments,deck_cards=self.decks,
-                             cemetery_types=self.graveyard_type_counts())
+        return resolve_field(self.monsters,self.effects,equipments=self.equipments,
+                             catalog=self.cards,zones=self.zones())
+
+    def zones(self):
+        return {'deck': self.decks, 'mao': self.hands, 'cemiterio': self.graveyards}
+
+    def effective_card(self, side: str, cid: int):
+        return project_stats(self.card(cid), cid, side, card_effects(self.effects, cid),
+                             self.monsters, catalog=self.cards, zones=self.zones())
+
+    def inspect_zone(self, side: str, zone: str):
+        return [self.effective_card(side, cid) for cid in self.zones()[zone][side]]
 
     def get(self, side: str, slot: int):
         for monster in self.monsters:
@@ -142,7 +159,13 @@ class DuelLab:
         if monster is None:
             return False
         self.monsters=[m for m in self.monsters if m is not monster]
-        self.equipments=[e for e in self.equipments if not (e['lado']==side and int(e['slot'])==int(slot))]
+        keep = []
+        for equip in self.equipments:
+            if equip['lado'] == side and int(equip['slot']) == int(slot):
+                self.graveyards[side].append(int(equip['card_id']))
+            else:
+                keep.append(equip)
+        self.equipments = keep
         self.graveyards[side].append(int(monster['card_id']))
         self.damage.pop((side,int(slot),int(monster['card_id'])),None)
         self.summoned_turn.pop((side,int(slot),int(monster['card_id'])),None)
@@ -157,21 +180,17 @@ class DuelLab:
         self.turns[side] += 1
         self.logs.append({'acao':'novo_turno','lado':side})
 
-    def attack(self, side: str, slot: int, *, target_slot: int | None = None,
-               against: str = 'defesa') -> dict:
-        """Simula combate: ataque versus DEF/ATK, perfurante e ataque direto.
-
-        Não reproduz todo o motor original do PS1 e não implementa fase de
-        bloqueadores de MTGA: 'não bloqueável' significa ataque direto mesmo
-        quando o adversário controla monstros.
-        """
-        if side not in SIDES or against not in ('ataque','defesa'):
+    def preview_attack(self, side: str, slot: int, *, target_slot: int | None = None,
+                       against: str | None = 'defesa', board: list[dict] | None = None) -> dict:
+        """Resolve the exchange without spending LP, cards or attacks."""
+        if side not in SIDES or (against is not None and against not in POSITIONS):
             raise ModError('Combate: lado ou posição alvo inválidos')
         source=self.get(side,slot)
-        if source is None or not source.get('face_up',True):
-            raise ModError('Combate: escolha uma criatura sua virada para cima')
-        enemy = 'adversario' if side == 'jogador' else 'jogador'
-        board,_ = self.resolve()
+        if source is None or not source.get('face_up',True) or source.get('posicao', 'ataque') != 'ataque':
+            raise ModError('Escolha um monstro virado para cima em posição de ataque.')
+        enemy = opposite(side)
+        if board is None:
+            board = self.resolve()[0]
         indexed={(m['lado'],m['slot']):m for m in board}
         attacker=indexed[(side,int(slot))]
         key=(side,int(slot),int(source['card_id']))
@@ -183,7 +202,7 @@ class DuelLab:
         if used >= maximum:
             raise ModError(f'Combate: limite de {maximum} ataque(s) por turno atingido; inicie novo turno')
         cost=0
-        for raw in self.effects.get(str(source['card_id']), self.effects.get(int(source['card_id']), [])):
+        for raw in card_effects(self.effects, int(source['card_id'])):
             if raw.get('acao') == 'perder_lp_por_ataque' and raw.get('evento') == 'atacar':
                 cost += check_effect(raw)['valor']
         if target_slot is not None and not 1 <= int(target_slot) <= 5:
@@ -198,11 +217,19 @@ class DuelLab:
         lost_attacker=0
         lost_defender=0
         destroyed=[]
-        atk=attacker['ataque']
+        if direct:
+            target = None
+        against = against or (target['posicao'] if target else 'ataque')
+        attacker_bonus, target_bonus = guardian_bonuses(attacker['guardian_id'], target['guardian_id']) if target else (0, 0)
+        attacker_values = (max(0, attacker['ataque'] + attacker_bonus),
+                           max(0, attacker['defesa'] + attacker_bonus))
+        target_values = (max(0, target['ataque'] + target_bonus),
+                         max(0, target['defesa'] + target_bonus)) if target else None
+        atk = attacker_values[0]
         if direct:
             lost_defender=atk
         elif against == 'defesa':
-            diff=atk-target['defesa']
+            diff=atk-target_values[1]
             if diff > 0:
                 if not target['indestrutivel']:
                     destroyed.append((enemy,target['slot']))
@@ -211,7 +238,7 @@ class DuelLab:
             elif diff < 0:
                 lost_attacker=-diff
         else:  # ataque versus ataque
-            diff=atk-target['ataque']
+            diff=atk-target_values[0]
             if diff>0:
                 lost_defender=diff
                 if not target['indestrutivel']:
@@ -225,22 +252,27 @@ class DuelLab:
                     destroyed.append((enemy,target['slot']))
                 if not attacker['indestrutivel']:
                     destroyed.append((side,attacker['slot']))
-        self.attacks_used[key]=used+1
-        old_self=self.lp[side]
-        old_enemy=self.lp[enemy]
-        self.lp[side]=max(0,old_self-cost-lost_attacker)
-        self.lp[enemy]=max(0,old_enemy-lost_defender)
-        for target_side,target_slot_to_destroy in destroyed:
-            self.remove(target_side,target_slot_to_destroy)
-        result={'acao':'ataque','origem':(side,slot),
+        return {'acao':'ataque','origem':(side,slot),
                 'alvo':('LP',enemy) if direct else (enemy,target_slot),
                 'posicao':against, 'ataques_usados':used+1,'ataques_max':maximum,
-                'custo_lp':min(cost,old_self),
-                'dano_lp_jogador':old_self-self.lp[side],
-                'dano_lp_oponente':old_enemy-self.lp[enemy],
+                'custo_lp':min(cost,self.lp[side]),
+                'dano_lp_jogador':min(self.lp[side], cost+lost_attacker),
+                'dano_lp_oponente':min(self.lp[enemy], lost_defender),
                 'perfurante':attacker['perfurante'],
                 'nao_bloqueavel':attacker['nao_bloqueavel'],
+                'atributos_atacante':attacker_values, 'atributos_alvo':target_values,
+                'bonus_guardian':(attacker_bonus, target_bonus),
                 'destruidos':destroyed}
+
+    def attack(self, side: str, slot: int, *, target_slot: int | None = None,
+               against: str | None = 'defesa') -> dict:
+        result = self.preview_attack(side, slot, target_slot=target_slot, against=against)
+        key = (side, int(slot), int(self.get(side, slot)['card_id']))
+        self.attacks_used[key] = result['ataques_usados']
+        self.lp[side] -= result['dano_lp_jogador']
+        self.lp[opposite(side)] -= result['dano_lp_oponente']
+        for target_side, target_slot_to_destroy in result['destruidos']:
+            self.remove(target_side, target_slot_to_destroy)
         self.logs.append(result)
         return result
 
@@ -284,24 +316,26 @@ class DuelLab:
             raise ModError('Escolha um monstro de origem virado para cima')
         if kind not in ('monstro','magia','armadilha'):
             raise ModError('Tipo de origem inválido')
-        opposing='adversario' if side=='jogador' else 'jogador'
+        return self.apply_event(int(source['card_id']), side, event, source_slot=slot,
+                                target_side=target_side, target_slot=target_slot, kind=kind)
+
+    def apply_event(self, cid, side, event, *, source_slot=None, target_side=None,
+                    target_slot=None, kind='monstro', strict=True):
+        opposing = opposite(side)
         target_side=target_side or opposing
         if target_side not in SIDES:
             raise ModError('Lado alvo inválido')
-        cid=int(source['card_id'])
-        summary=[]
         # Transação: um efeito inválido não pode aplicar cura/descarte parcial.
-        before=(deepcopy(self.monsters),deepcopy(self.equipments),
-                deepcopy(self.hands),dict(self.lp),dict(self.damage),list(self.logs))
-        effects=self.effects.get(str(cid),self.effects.get(cid,[]))
+        before=self._snapshot()
         try:
-            return self._apply_trigger(effects, event, side, opposing,
-                                       target_side, target_slot, kind, summary)
+            return self._apply_trigger(card_effects(self.effects, cid), event, side, opposing,
+                                       target_side, target_slot, kind, source_slot, strict)
         except (ModError,ValueError,KeyError,TypeError):
-            (self.monsters,self.equipments,self.hands,self.lp,self.damage,self.logs)=before
+            self._restore(before)
             raise
 
-    def _apply_trigger(self,effects,event,side,opposing,target_side,target_slot,kind,summary):
+    def _apply_trigger(self,effects,event,side,opposing,target_side,target_slot,kind,source_slot,strict):
+        summary=[]
         for raw in effects:
             if raw.get('evento') != event:
                 continue
@@ -321,13 +355,36 @@ class DuelLab:
                 removed=[]
                 for _ in range(min(value,len(self.hands[opposing]))):
                     removed.append(self.hands[opposing].pop())
+                self.graveyards[opposing].extend(removed)
                 summary.append({'acao':action,'quantidade':len(removed),'cartas':removed,
                                 'alvo':opposing})
             elif action=='dano_monstro_alvo':
-                if target_slot is None:
+                if target_slot is None or self.get(target_side,target_slot) is None:
+                    if not strict:
+                        continue
                     raise ModError('Selecione um slot para causar dano ao monstro alvo')
                 hit=self.hit_monster(target_side,target_slot,value,kind=kind)
                 summary.append({'acao':action,'alvo':(target_side,target_slot), **hit})
-            # Os efeitos convencionais antigos continuam no simulador original.
+            elif action in ('dano_lp', 'cura_lp'):
+                receiver = opposing if eff['alvo'] == 'inimigo' else side
+                delta = value if action == 'cura_lp' else -value
+                old = self.lp[receiver]
+                self.lp[receiver] = max(0, old + delta)
+                summary.append({'acao':action,'alvo':receiver,'valor':abs(self.lp[receiver]-old)})
+            elif action in ('aumentar_atk', 'reduzir_atk', 'aumentar_def', 'reduzir_def'):
+                receiver = opposing if eff['alvo'] == 'inimigo' else side
+                slot = target_slot if target_side == receiver and target_slot else source_slot if receiver == side else None
+                unit = self.get(receiver, slot) if slot is not None else None
+                if unit is None:
+                    if not strict:
+                        continue
+                    raise ModError('Escolha um monstro para alterar ATK/DEF.')
+                resolved = next(m for m in self.resolve()[0] if (m['lado'], m['slot']) == (receiver, slot))
+                if resolved.get('imune_' + kind):
+                    continue
+                key = 'modificador_' + action.rsplit('_', 1)[1]
+                delta = value if action.startswith('aumentar_') else -value
+                unit[key] = unit.get(key, 0) + delta
+                summary.append({'acao':action,'alvo':(receiver, slot),'valor':delta})
         self.logs.extend(summary)
         return summary

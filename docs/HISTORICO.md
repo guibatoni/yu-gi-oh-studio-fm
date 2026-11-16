@@ -1,3 +1,21 @@
+## v1.5.0 — Edição do Mod e partidas contra IA
+
+- Compra do topo de baralhos embaralhados, combate desde o primeiro
+  turno e IA com avaliação de LP, campo, fusões, Guardian Stars e
+  efeitos. A IA executa a troca 2 contra 1 e procura o ataque direto.
+- Bônus por cartas, tipo ou atributo nas zonas foram integrados às
+  prévias de mão e monte. LP, ATK, DEF e IDs usam precisão inteira.
+- A estrela Supreme, com o símbolo ✦, ganha +700 de ATK e DEF em
+  combate contra as estrelas clássicas.
+- Editor de drops por rank, decks dos duelistas, perfis iniciais e
+  LP por personagem. A configuração é salva no projeto e exportada em
+  `edicao_mod.json`.
+- Criação direta de cartas, filtros em Cartas e edição de receitas de
+  fusão, ritual e alvos de equipamento.
+- Exportação Drop x15 com ataques no primeiro turno, bônus de deck
+  calculados pelo monte restante, LP por lado e tabelas compatíveis de
+  duelistas e pools iniciais.
+
 ## v1.4.26 — Exportação de ícones sem Pillow
 
 - A geração de BIN/CUE lê os dez ícones de descrição com a biblioteca

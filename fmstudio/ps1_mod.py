@@ -1,0 +1,231 @@
+"""Drop x15 projection of match rules into the verified SLUS/WA layout."""
+from __future__ import annotations
+
+import hashlib
+import json
+import struct
+from dataclasses import dataclass
+
+from .core import ModError, _write_csv
+from .disc import DiscError, DiscReader
+from .mod_data import CONFIG_KEY, DROP_GROUPS, normalize_rules
+from .tables import (
+    CARD_COUNT, DECK_SIZE, DUELIST_BASE, DUELIST_COUNT, DUELIST_STRIDE, EXE_DELTA,
+    POOL_OFFSETS, POOL_TOTAL, STARTER_OFFSETS, STARTER_POOLS, STARTER_SIZE,
+    STARTER_STRIDE, decode_starters,
+)
+
+FIRST_TURN_PC = 0x80017B18
+FIRST_TURN_SOURCE = 0x34421000
+FIRST_TURN_PATCH = 0x34420000  # ori v0,v0,0 omits the first-turn attack lock
+INIT_CALL = 0x80017B08
+LP_CODE = 0x801CFF00
+LP_TABLE = 0x801CFFA0
+LP_BANK_END = 0x801D0000
+LP_MAX = 9999  # four digits in the PS1 HUD
+LEGACY_SCAN_COUNT = CARD_COUNT - 2
+_LP_INIT = 0x0C005D68
+_LP_JAL = 0x0C000000 | ((LP_CODE >> 2) & 0x03FFFFFF)
+_LP_WORDS = (
+    0x27BDFFF0, 0xAFBF000C, _LP_INIT, 0,  # save ra and initialize retail state
+    0x83880459, 0, 0x2D090028, 0x11200012, 0x00084040,  # signed opponent ID, skip link mode
+    0x3C09801C, 0x3529FFA0, 0x3C0A800E, 0x354A9FF0,  # table and side records
+    0x952B0000, 0, 0x11600003, 0, 0xA54B0014, 0xA54B0016,  # player LP and healing cap
+    0x01284821, 0x952B0002, 0, 0x11600003, 0, 0xA54B0034, 0xA54B0036,
+    0x8FBF000C, 0x27BD0010, 0x03E00008, 0,
+)
+
+
+@dataclass
+class ModPlan:
+    player_lp: int
+    life: list[int]
+    groups: dict[tuple[int, str], tuple[int, ...]]
+    starters: list[tuple[int, tuple[int, ...]]]
+    applied: list[str]
+    pending: list[str]
+
+    @property
+    def needs_wa(self):
+        return bool(self.groups or self.starters)
+
+    @property
+    def has_lp(self):
+        return bool(self.player_lp or any(self.life))
+
+
+def wa_sha(project):
+    path = project.folder / 'base' / 'resumo.json'
+    if path.is_file():
+        return (json.loads(path.read_text(encoding='utf-8')).get('source_sha256') or {}).get('DATA/WA_MRG.MRG')
+    return None
+
+
+def import_starter_tables(project, source):
+    """Populate the new CSV for projects extracted before this table was supported."""
+    try:
+        with DiscReader(source) as disc:
+            entries = {entry.path.upper(): entry for entry in disc.files() if not entry.is_dir}
+            slus = b''.join(disc.read_entry(entries['SLUS_014.11']))
+            wa = b''.join(disc.read_entry(entries['DATA/WA_MRG.MRG']))
+    except (DiscError, KeyError) as exc:
+        raise ModError('A imagem precisa conter SLUS_014.11 e DATA/WA_MRG.MRG.') from exc
+    if hashlib.sha256(slus).hexdigest() != project.metadata.get('base_sha256', {}).get('slus'):
+        raise ModError('Selecione a imagem usada para importar este projeto.')
+    expected = wa_sha(project)
+    if expected and hashlib.sha256(wa).hexdigest() != expected:
+        raise ModError('O WA_MRG da imagem diverge do projeto.')
+    rows = decode_starters(wa)
+    if not rows:
+        raise ModError('A imagem não apresenta as duas cópias compatíveis dos pools iniciais.')
+    _write_csv(project.folder/'base'/'decks_iniciais.csv', rows)
+
+
+def _retail_weights(weights, last_id):
+    if not weights or any(not 1 <= cid <= last_id for cid in weights):
+        raise ModError(f'O PS1 exige pesos positivos para cartas de 1 a {last_id}.')
+    total = sum(weights.values())
+    parts = {cid: divmod(weight * POOL_TOTAL, total) for cid, weight in weights.items()}
+    allocated = {cid: whole for cid, (whole, _) in parts.items()}
+    leftover = POOL_TOTAL - sum(allocated.values())
+    for cid in sorted(parts, key=lambda cid: (-parts[cid][1], cid))[:leftover]:
+        allocated[cid] += 1
+    for cid in sorted(allocated):
+        if not allocated[cid]:
+            donor = max(allocated, key=allocated.__getitem__)
+            allocated[donor] -= 1
+            allocated[cid] = 1
+    return tuple(allocated.get(cid,0) for cid in range(1,CARD_COUNT+1))
+
+
+def compile_mod(project, *, profile, wa_verified):
+    plan = ModPlan(0, [0] * DUELIST_COUNT, {}, [], [], [])
+    raw = getattr(project, 'metadata', {}).get(CONFIG_KEY)
+    if not raw:
+        return plan
+    config = normalize_rules(raw, {cid: project.get(cid) for cid in project.cards})
+    tables_ok = profile and wa_verified
+
+    def lp(value, label):
+        if value is None:
+            return 0
+        if not profile or value > LP_MAX:
+            plan.pending.append(f'{label}: LP {value} requer o Studio ou o perfil Drop x15 com até quatro dígitos.')
+            return 0
+        plan.applied.append(label)
+        return value
+
+    def group(opponent, kind, weights, name, last_id):
+        if not tables_ok:
+            plan.pending.append(f'{name}: exige a imagem Drop x15 vinculada ao projeto.')
+            return
+        try:
+            data = _retail_weights(weights, last_id)
+        except ModError as exc:
+            plan.pending.append(f'{name}: {exc}')
+            return
+        plan.groups[opponent, kind] = data
+        plan.applied.append(name)
+
+    plan.player_lp = lp(config.get('lp_jogador'), 'LP inicial do jogador')
+    for key, changes in config.get('duelistas', {}).items():
+        opponent = int(key)
+        plan.life[opponent] = lp(changes.get('lp'), f'LP do duelista #{opponent}')
+        if 'deck' in changes:
+            deck = changes['deck']
+            pools = deck['pools']
+            name = f'Pool do duelista #{opponent}'
+            if (deck['cartas'] or len(pools) != 1 or pools[0]['compras'] != DECK_SIZE
+                    or len(pools[0]['pesos']) * 3 < DECK_SIZE):
+                plan.pending.append(f'{name}: esta composição usa as regras do Studio.')
+            else:
+                group(opponent,'deck',pools[0]['pesos'],name,LEGACY_SCAN_COUNT)
+        for kind, weights in changes.get('drops', {}).items():
+            name = f'Drop #{opponent} {kind}'
+            if kind not in DROP_GROUPS:
+                plan.pending.append(f'{name}: este rank tem pesos individuais no Studio. O PS1 usa os grupos POW, TEC e B/C/D.')
+            else:
+                group(opponent,kind,weights,name,CARD_COUNT)
+
+    if 'pools_iniciais_ps1' in config:
+        rows = config['pools_iniciais_ps1']
+        try:
+            if not tables_ok or len(rows) > STARTER_POOLS or sum(row['compras'] for row in rows) != DECK_SIZE:
+                raise ModError('O Drop x15 usa até sete pools com 40 compras ao todo.')
+            staged = []
+            for i, row in enumerate(rows):
+                ids, draws = row['pesos'].keys(), row['compras']
+                used = sum(min(older['compras'], 3 * len(ids & older['pesos'].keys())) for older in rows[:i])
+                if 3 * len(ids) - used < draws:
+                    raise ModError('O limite original de três cópias pode impedir o sorteio de um dos pools.')
+                staged.append((draws, _retail_weights(row['pesos'], LEGACY_SCAN_COUNT)))
+            plan.starters = staged
+            plan.applied.append('Pools do deck inicial')
+        except ModError as exc:
+            plan.pending.append(f'Deck inicial: {exc}')
+    if config.get('iniciais'):
+        plan.pending.append('Perfis adicionais de deck inicial: disponíveis nas partidas do Studio.')
+    for kind, records in config.get('receitas', {}).items():
+        if records:
+            plan.pending.append(f'Relações de cartas ({kind}): compatíveis com as partidas do Studio.')
+    return plan
+
+
+def _replace_word(out, pc, before, after):
+    offset = pc - EXE_DELTA
+    if struct.unpack_from('<I',out,offset)[0] != before:
+        raise ModError(f'Rotina PS1 divergente em 0x{pc:08X}.')
+    struct.pack_into('<I',out,offset,after)
+
+
+def patch_executable(exe, plan, *, profile):
+    if not profile:
+        return exe
+    out = bytearray(exe)
+    _replace_word(out,FIRST_TURN_PC,FIRST_TURN_SOURCE,FIRST_TURN_PATCH)
+    if plan.has_lp:
+        start, end = LP_CODE - EXE_DELTA, LP_BANK_END - EXE_DELTA
+        if any(out[start:end]):
+            raise ModError('O banco reservado para LP do PS1 está ocupado.')
+        struct.pack_into(f'<{len(_LP_WORDS)}I',out,start,*_LP_WORDS)
+        struct.pack_into(f'<{DUELIST_COUNT+1}H',out,LP_TABLE-EXE_DELTA,plan.player_lp,*plan.life)
+        _replace_word(out,INIT_CALL,_LP_INIT,_LP_JAL)
+    return bytes(out)
+
+
+def verify_executable(exe, plan):
+    first_turn = exe[FIRST_TURN_PC-EXE_DELTA:FIRST_TURN_PC-EXE_DELTA+4] == struct.pack('<I',FIRST_TURN_PATCH)
+    life = not plan.has_lp or (
+        exe[INIT_CALL-EXE_DELTA:INIT_CALL-EXE_DELTA+4] == struct.pack('<I',_LP_JAL)
+        and exe[LP_CODE-EXE_DELTA:LP_CODE-EXE_DELTA+len(_LP_WORDS)*4] == struct.pack(f'<{len(_LP_WORDS)}I',*_LP_WORDS)
+        and exe[LP_TABLE-EXE_DELTA:LP_TABLE-EXE_DELTA+2*(DUELIST_COUNT+1)] ==
+        struct.pack(f'<{DUELIST_COUNT+1}H',plan.player_lp,*plan.life))
+    return first_turn, life
+
+
+def patch_wa(wa, plan):
+    out = bytearray(wa)
+    for (opponent, kind), weights in plan.groups.items():
+        start = DUELIST_BASE + DUELIST_STRIDE * opponent + POOL_OFFSETS[kind]
+        if start + CARD_COUNT * 2 > len(out):
+            raise ModError('Arquivo WA_MRG truncado na tabela de duelistas.')
+        struct.pack_into(f'<{CARD_COUNT}H', out, start, *weights)
+    if plan.starters:
+        if not decode_starters(wa):
+            raise ModError('As tabelas iniciais na imagem não têm a estrutura esperada.')
+        rows = plan.starters + [(0, (0,) * CARD_COUNT)] * (STARTER_POOLS - len(plan.starters))
+        for block in STARTER_OFFSETS:
+            if block + STARTER_SIZE > len(out):
+                raise ModError('Arquivo WA_MRG truncado nos pools iniciais.')
+            for i, (draws, weights) in enumerate(rows):
+                struct.pack_into(f'<{CARD_COUNT+1}H',out,block+i*STARTER_STRIDE,draws,*weights)
+    return bytes(out)
+
+
+def verify_wa(wa, plan):
+    if not plan.needs_wa:
+        return True
+    try:
+        return patch_wa(wa, plan) == wa
+    except ModError:
+        return False

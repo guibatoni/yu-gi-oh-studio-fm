@@ -48,7 +48,7 @@ class AdvancedTests(unittest.TestCase):
         self.assertEqual(parse_card_ids('1x3, #016*2; 4'), [1,1,1,16,16,4])
         self.assertEqual(parse_card_ids(''), [])
         with self.assertRaises(ModError):parse_card_ids('1x41')
-        with self.assertRaises(ModError):parse_card_ids('32767')
+        self.assertEqual(parse_card_ids('32767'),[32767])
         with self.assertRaises(ModError):parse_card_ids('1 and 2')
         with self.assertRaises(ModError):parse_card_ids('1,-2')
 

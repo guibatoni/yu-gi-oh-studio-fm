@@ -11,7 +11,7 @@ from pathlib import Path
 from .core import Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR, ONCE_ACTIONS
 from .drafts import DraftSession
 from .disc import DiscError
-from .tables import TYPE_NAMES, ATTR_NAMES, STAR_NAMES
+from .tables import CARD_COUNT, TYPE_NAMES, ATTR_NAMES, STAR_NAMES, SUPREME
 from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
 from .abilities import QUICK_ACTIONS, BOOLEAN_ACTIONS, quick_settings
 from . import __version__
@@ -19,6 +19,7 @@ from .rarities import RARITIES, DEFAULT_RARITY, name_style, rarity_options
 from .expanded import display_name, bonus_description, resolve_references
 from .richtext import NATIVE_ICONS, CUSTOM_ICONS, TEXT_COLORS, tokens
 from .updates import read_latest, start_updater, UpdateError
+from .guardian import SUPREME_COLOR, guardian_name
 
 BG = '#0d1220'
 SURFACE = '#171f32'
@@ -38,6 +39,11 @@ def caption_key(mapping, key):
     return mapping.get(key, key)
 
 
+def compact_number(value, width=13):
+    text = str(value)
+    return text if len(text) <= width else f'{text[:width-4]}…{text[-3:]}'
+
+
 class EffectDialog(tk.Toplevel):
     """Editor guiado de gatilhos, auras, efeitos por deck e equipamentos."""
     def __init__(self, master, on_save):
@@ -45,7 +51,7 @@ class EffectDialog(tk.Toplevel):
         self.on_save=on_save
         self.title('Criar efeito — Studio FM')
         self.configure(bg=BG)
-        self.geometry('610x690')
+        self.geometry('610x755')
         self.minsize(565,650)
         self.transient(master)
         self.grab_set()
@@ -83,6 +89,12 @@ class EffectDialog(tk.Toplevel):
         self.type_combo.current(0)
         self.type_combo.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
         self.type_combo.bind('<<ComboboxSelected>>',lambda e:self.vars['tipo_id'].set(self.type_ids[self.type_combo.current()]))
+        ttk.Label(form,text='Atributo contado').grid(row=row,column=0,sticky='w');row+=1
+        self.vars['atributo_id']=tk.IntVar(value=-1)
+        self.attribute_combo=ttk.Combobox(form,state='disabled',width=60,values=['Todos',*ATTR_NAMES])
+        self.attribute_combo.current(0)
+        self.attribute_combo.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
+        self.attribute_combo.bind('<<ComboboxSelected>>',lambda _e:self.vars['atributo_id'].set(self.attribute_combo.current()-1))
         ttk.Label(form,text='Quem participa da aura / contagem').grid(row=row,column=0,sticky='w');row+=1
         self.vars['escopo']=tk.StringVar(value='aliados')
         self.scope_combo=ttk.Combobox(form,state='disabled',width=60,values=[f'{k} — {label}' for k,label in SCOPES.items()])
@@ -131,7 +143,8 @@ class EffectDialog(tk.Toplevel):
         if key=='acao' and action=='descartar_alvo':
             self.vars['valor'].set('1')
         required={
-            'aura_tipo':'aliados_tipo', 'bonus_por_tipo':'proprio', 'bonus_deck_tipo':'proprio', 'bonus_cemiterio_tipo':'proprio',
+            'aura_tipo':'aliados_tipo', 'bonus_por_tipo':'proprio', 'bonus_deck_tipo':'proprio',
+            'bonus_mao_tipo':'proprio', 'bonus_cemiterio_tipo':'proprio',
             'cura_lp_deck_tipo':'proprio', 'dano_lp_deck_tipo':'inimigo',
             'descartar_alvo':'inimigo','dano_monstro_alvo':'monstro_alvo',
             'equip_imune_armadilha':'monstro_equipado',
@@ -150,6 +163,8 @@ class EffectDialog(tk.Toplevel):
         protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'})
         self.def_entry.configure(state='normal' if continuous else 'disabled')
         self.type_combo.configure(state='readonly' if typ else 'disabled')
+        self.attribute_combo.configure(state='readonly' if action in
+            ('bonus_deck_tipo','bonus_cemiterio_tipo','bonus_mao_tipo') else 'disabled')
         self.scope_combo.configure(state='readonly' if continuous else 'disabled')
         if protection:
             self.vars['valor'].set('0')
@@ -159,7 +174,9 @@ class EffectDialog(tk.Toplevel):
         if action=='bonus_cemiterio_tipo':
             help_text='Bônus contínuo: +X ATK e +Y DEF por cada carta do TIPO no cemitério. Atualiza quando cartas morrem ou saem do cemitério.'
         elif action=='bonus_deck_tipo':
-            help_text='Bônus contínuo X vezes o número de cartas do tipo no deck configurado (máximo 40). Não acumula a cada turno.'
+            help_text='Bônus contínuo por carta no monte de compra. Recalcula quando alguém compra.'
+        elif action=='bonus_mao_tipo':
+            help_text='Bônus contínuo por carta na mão. Recalcula após compras, invocações e descartes.'
         elif action in EFFECT_ACTIONS:
             help_text='Auras são recalculadas ao mudar o campo. "Todos os tipos" inclui qualquer criatura; posição e lado dependem do escopo.'
         elif action in ('cura_lp_deck_tipo','dano_lp_deck_tipo'):
@@ -172,7 +189,7 @@ class EffectDialog(tk.Toplevel):
             help_text='O efeito se mantém apenas enquanto a carta estiver equipada ao monstro no simulador.'
         else:
             help_text='Efeito ativado; mantenha os testes no simulador antes de planejar implementação no PS1.'
-        self.help.configure(text=help_text+' Nenhum efeito é gravado no BIN nesta versão.')
+        self.help.configure(text=help_text)
 
     def _submit(self):
         entry={key:v.get() for key,v in self.vars.items()}
@@ -189,7 +206,7 @@ class SpecificCardEffectDialog(tk.Toplevel):
     def __init__(self, master, cards, on_save):
         super().__init__(master)
         self.title('Efeito por carta específica')
-        self.geometry('590x460')
+        self.geometry('590x520')
         self.configure(bg=BG)
         self.transient(master)
         self.grab_set()
@@ -204,7 +221,8 @@ class SpecificCardEffectDialog(tk.Toplevel):
         if self.labels:self.combo.current(0)
         ttk.Label(pane,text='Contar cartas em:').pack(anchor='w')
         self.origin=tk.StringVar(value='campo')
-        for label,val in [('Campo (somente viradas para cima)','campo'),('Deck completo configurado','deck')]:
+        for label,val in [('Campo (cartas abertas)','campo'),('Monte de compra','deck'),
+                          ('Mão','mao'),('Cemitério','cemiterio')]:
             ttk.Radiobutton(pane,text=label,value=val,variable=self.origin).pack(anchor='w',pady=3)
         ttk.Label(pane,text='Escopo:').pack(anchor='w',pady=(7,3))
         self.scope=tk.StringVar(value='aliados')
@@ -215,7 +233,7 @@ class SpecificCardEffectDialog(tk.Toplevel):
         for key,v in [('ATK por cópia',self.attack),('DEF por cópia',self.defense)]:
             block=ttk.Frame(row);block.pack(side='left',padx=(0,16))
             ttk.Label(block,text=key).pack(anchor='w');ttk.Entry(block,width=15,textvariable=v).pack()
-        ttk.Label(pane,text='A descrição usa o nome da carta. O bônus pode ser gravado no BIN no perfil Drop x15.',
+        ttk.Label(pane,text='O nome da carta é inserido na descrição do efeito.',
                   foreground='#edc47e').pack(anchor='w',pady=14)
         buttons=ttk.Frame(pane);buttons.pack(fill='x')
         ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left')
@@ -349,6 +367,10 @@ class Studio(tk.Tk):
         self.drafts: DraftSession | None = None
         self.selected_id: int | None = None
         self.filter = tk.StringVar()
+        self.filter_type = tk.StringVar(value='Todos')
+        self.filter_star = tk.StringVar(value='Todas')
+        self.filter_from = tk.StringVar()
+        self.filter_to = tk.StringVar()
         self._loading = False
         self._update_messages = queue.Queue()
         self._extract_messages = queue.Queue()
@@ -357,7 +379,8 @@ class Studio(tk.Tk):
         self.vars = {}
         self._style()
         self._build()
-        self.filter.trace_add('write',lambda *_:self._refresh_cards())
+        for field in (self.filter, self.filter_type, self.filter_star, self.filter_from, self.filter_to):
+            field.trace_add('write',lambda *_:self._refresh_cards())
         self.bind('<Control-s>',lambda _ : self.save_project())
         self.bind('<Control-o>',lambda _ : self.open_project())
         self.protocol('WM_DELETE_WINDOW',self._on_close)
@@ -382,6 +405,8 @@ class Studio(tk.Tk):
         s.map('Treeview',background=[('selected','#265b67')],foreground=[('selected',TEXT)])
         s.configure('Treeview.Heading',background=SURFACE2,foreground=TEXT,font=('Segoe UI',9,'bold'),relief='flat')
         s.configure('TScrollbar',background=SURFACE2,troughcolor=BG)
+        s.configure('TLabelframe', background=BG, bordercolor=BORDER)
+        s.configure('TLabelframe.Label', background=BG, foreground=ACCENT)
 
     def _build(self):
         header = tk.Frame(self,bg=SURFACE,padx=18,pady=13)
@@ -414,11 +439,25 @@ class Studio(tk.Tk):
         sidebar.pack(side='left',fill='y',padx=(0,12))
         sidebar.pack_propagate(False)
         tk.Label(sidebar,text='BIBLIOTECA DE CARTAS',bg=SURFACE,fg=TEXT,font=('Segoe UI',11,'bold')).pack(anchor='w',padx=14,pady=(17,8))
-        ttk.Button(sidebar,text='+ Criar nova carta (ID acima de 722)',command=self.add_new_card).pack(fill='x',padx=12,pady=(0,9))
+        ttk.Button(sidebar,text='+ Nova carta',command=self.add_new_card).pack(fill='x',padx=12,pady=(0,9))
         search = ttk.Entry(sidebar,textvariable=self.filter)
         search.pack(fill='x',padx=12,pady=(0,10))
         search.insert(0,'')
-        tk.Label(sidebar,text='Pesquisar por ID ou nome da carta',bg=SURFACE,fg=MUTED,font=('Segoe UI',9)).pack(anchor='w',padx=14,pady=(0,8))
+        filters = tk.Frame(sidebar,bg=SURFACE)
+        filters.pack(fill='x',padx=12,pady=(0,8))
+        ttk.Label(filters,text='Tipo').grid(row=0,column=0,sticky='w')
+        ttk.Label(filters,text='Guardian Star').grid(row=0,column=1,sticky='w')
+        ttk.Combobox(filters,textvariable=self.filter_type,state='readonly',width=13,
+                     values=['Todos','Monstros',*(f'{i:02d} — {v}' for i,v in enumerate(TYPE_NAMES))]).grid(row=1,column=0,sticky='ew',padx=(0,5))
+        ttk.Combobox(filters,textvariable=self.filter_star,state='readonly',width=13,
+                     values=['Todas',*(f'{i:02d} — {guardian_name(i)}' for i,v in enumerate(STAR_NAMES) if v)]).grid(row=1,column=1,sticky='ew')
+        ttk.Label(filters,text='ID de / até').grid(row=2,column=0,sticky='w',pady=(6,0))
+        interval = tk.Frame(filters,bg=SURFACE)
+        interval.grid(row=2,column=1,sticky='e',pady=(6,0))
+        for field in (self.filter_from,self.filter_to):
+            ttk.Entry(interval,textvariable=field,width=6).pack(side='left',padx=(3,0))
+        filters.columnconfigure(0,weight=1)
+        filters.columnconfigure(1,weight=1)
         treeholder = tk.Frame(sidebar,bg=SURFACE)
         treeholder.pack(fill='both',expand=True,padx=8,pady=(0,8))
         self.tree = ttk.Treeview(treeholder,columns=('id','nome','atk','def'),show='headings',selectmode='browse')
@@ -444,9 +483,11 @@ class Studio(tk.Tk):
         self.tab_fusions = ttk.Frame(self.tabs)
         self.tab_proj = ttk.Frame(self.tabs)
         self.tab_extract = ttk.Frame(self.tabs)
+        self.tab_mod = ttk.Frame(self.tabs)
         self.tabs.add(self.tab_cards,text='  Cartas  ')
         self.tabs.add(self.tab_effects,text='  Efeitos  ')
         self.tabs.add(self.tab_fusions,text='  Fusões originais  ')
+        self.tabs.add(self.tab_mod,text='  Edição do Mod  ')
         self.tabs.add(self.tab_proj,text='  Projeto / Exportação  ')
         self.tabs.add(self.tab_extract,text='  Dados extraídos  ')
         self._cards_tab()
@@ -454,6 +495,8 @@ class Studio(tk.Tk):
         self._fusions_tab()
         self._project_tab()
         self._extract_tab()
+        from .mod_gui import ModEditor
+        self.mod_editor = ModEditor(self.tab_mod,self)
 
 
     def _form_entry(self,parent,label,key,row,width=22,kind='text'):
@@ -463,7 +506,8 @@ class Studio(tk.Tk):
             entry=ttk.Entry(parent,textvariable=var,width=width)
         else:
             choices={'type':TYPE_NAMES,'attr':ATTR_NAMES,'star':STAR_NAMES}[kind]
-            vals=[f'{i:02d} — {v or "Nenhuma"}' for i,v in enumerate(choices)]
+            vals=[f'{i:02d} — {guardian_name(i) if kind == "star" else v}'
+                  for i,v in enumerate(choices) if kind != 'star' or i == 0 or v]
             var=tk.StringVar()
             entry=ttk.Combobox(parent,values=vals,state='readonly',width=width,textvariable=var)
             # Evita que a roda do mouse altere o tipo enquanto a aba rola.
@@ -489,9 +533,6 @@ class Studio(tk.Tk):
         cv.bind('<Enter>',lambda evt:cv.bind_all('<MouseWheel>',lambda e:cv.yview_scroll(-1 if e.delta>0 else 1,'units')))
         cv.bind('<Leave>',lambda evt:cv.unbind_all('<MouseWheel>'))
 
-        tk.Label(body,text='EDITOR DE CARTAS',bg=BG,fg=TEXT,font=('Segoe UI',16,'bold')).pack(anchor='w')
-        tk.Label(body,text='Alterações de ATK/DEF, tipo, nível, atributo e estrelas podem gerar um SLUS auxiliar; nomes e descrições ainda são metadados.',
-                 bg=BG,fg=MUTED,font=('Segoe UI',9),wraplength=780,justify='left').pack(anchor='w',pady=(4,12))
         top=tk.Frame(body,bg=BG)
         top.pack(fill='x')
         self.preview = tk.Canvas(top,width=258,height=310,bg='#243454',highlightthickness=1,highlightbackground=BORDER)
@@ -505,7 +546,8 @@ class Studio(tk.Tk):
         self.art_image = self.preview.create_image(129,134,image=None)
         self.preview_type=self.preview.create_text(140,222,text='TIPO • ATRIBUTO',fill=TEXT,font=('Segoe UI',9))
         self.preview_god_icon=self.preview.create_image(38,221,image=None,state='hidden')
-        self.preview_stats=self.preview.create_text(128,274,text='ATK: —   DEF: —',fill=TEXT,font=('Segoe UI',12,'bold'))
+        self.preview_stars=self.preview.create_text(129,244,text='',fill=TEXT,font=('Segoe UI',9),width=226)
+        self.preview_stats=self.preview.create_text(129,278,text='ATK: —  DEF: —',fill=TEXT,font=('Segoe UI',11,'bold'),width=224)
         form=tk.Frame(top,bg=BG)
         form.pack(side='left',fill='both',expand=True)
         self.selected_caption=tk.Label(form,text='Selecione uma carta à esquerda',bg=BG,fg=ACCENT,font=('Segoe UI',12,'bold'))
@@ -514,25 +556,24 @@ class Studio(tk.Tk):
         grid.pack(fill='x')
         grid.columnconfigure(0,weight=1)
         grid.columnconfigure(1,weight=1)
-        left=ttk.Frame(grid)
-        right=ttk.Frame(grid)
-        left.grid(row=0,column=0,sticky='nsew')
-        right.grid(row=0,column=1,sticky='nsew')
-        self._form_entry(left,'Nome personalizado','nome',0)
-        self._form_entry(left,'Ataque (múltiplos de 10)','ataque',1)
-        self._form_entry(left,'Defesa (múltiplos de 10)','defesa',2)
-        self._form_entry(left,'Tipo','tipo_id',3,kind='type')
-        ttk.Button(left,text='Escolher tipo jogável (PS1)',command=self.choose_playable_monster_type).grid(row=8,column=0,sticky='w',pady=(5,2))
-        ttk.Button(left,text='Teste glifo na descrição (não no tipo)',command=self.toggle_god_icon_ps1).grid(row=11,column=0,sticky='w',pady=(6,2))
-        ttk.Button(left,text='PS1: Tipo God no baú (teste)',command=self.toggle_god24_chest_preview).grid(row=12,column=0,sticky='w',pady=(6,2))
-        ttk.Button(left,text='PS1: God24 em duelo (teste)',command=self.toggle_god24_hand_preview).grid(row=13,column=0,sticky='w',pady=(6,2))
-        ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
-        self.card_type_warning=ttk.Label(left,text='',wraplength=330)
-        self.card_type_warning.grid(row=10,column=0,sticky='w',pady=(1,6))
-        self._form_entry(right,'Atributo','atributo_id',0,kind='attr')
-        self._form_entry(right,'Nível (0 a 15)','nivel',1)
-        self._form_entry(right,'Guardian Star 1','guardian_1_id',2,kind='star')
-        self._form_entry(right,'Guardian Star 2','guardian_2_id',3,kind='star')
+        basic=ttk.LabelFrame(grid,text='Dados básicos e tipo',padding=(9,0,0,10))
+        combat=ttk.LabelFrame(grid,text='Status de combate',padding=(9,0,0,10))
+        stars=ttk.LabelFrame(grid,text='Atributo e Guardian Stars',padding=(9,0,0,10))
+        basic.grid(row=0,column=0,sticky='ew',padx=(0,6))
+        combat.grid(row=1,column=0,sticky='ew',padx=(0,6),pady=(6,0))
+        stars.grid(row=0,column=1,rowspan=2,sticky='nsew',padx=(6,0))
+        for section in (basic,combat,stars):
+            section.columnconfigure(0,weight=1)
+        self._form_entry(basic,'Nome','nome',0,width=15)
+        self._form_entry(basic,'Tipo','tipo_id',1,width=15,kind='type')
+        self._form_entry(combat,'ATK','ataque',0,width=15)
+        self._form_entry(combat,'DEF','defesa',1,width=15)
+        self._form_entry(stars,'Atributo','atributo_id',0,width=15,kind='attr')
+        self._form_entry(stars,'Nível (0 a 15)','nivel',1,width=15)
+        self._form_entry(stars,'Guardian Star 1','guardian_1_id',2,width=15,kind='star')
+        self._form_entry(stars,'Guardian Star 2','guardian_2_id',3,width=15,kind='star')
+        self.card_type_warning=ttk.Label(form,text='',wraplength=380)
+        self.card_type_warning.pack(anchor='w',pady=(7,0))
         color_line = tk.Frame(form,bg=BG)
         color_line.pack(fill='x',pady=(10,0))
         # cor_nome permanece no esquema para compatibilidade com projetos antigos;
@@ -549,10 +590,12 @@ class Studio(tk.Tk):
         self.color_sample.pack(side='left')
         self.class_caption=tk.Label(form,text='Classe: Comum',bg=BG,fg=MUTED,font=('Segoe UI',9))
         self.class_caption.pack(anchor='w',pady=(5,0))
-        tk.Label(form,text='Magic: verde • Trap: rosa • Equip: azul • God: azul-marinho. '
-                           'A escolha vale para nomes no Studio; o PS1 ainda não foi modificado.',
-                 bg=BG,fg=MUTED,font=('Segoe UI',9),wraplength=465,justify='left').pack(anchor='w',pady=(3,0))
         ttk.Button(form,text='Importar arte PNG (prévia)',command=self.import_art).pack(anchor='w',pady=(9,0))
+        links=ttk.LabelFrame(body,text='Efeitos e relações da carta',padding=8)
+        links.pack(fill='x',pady=(10,4))
+        ttk.Button(links,text='Efeitos e bônus',command=lambda:self.tabs.select(self.tab_effects)).pack(side='left',padx=(0,5))
+        ttk.Button(links,text='Fusões, ritual e equipamentos',command=self.edit_card_rules).pack(side='left',padx=5)
+        ttk.Button(links,text='Opções PS1',command=self.open_card_ps1_options).pack(side='right')
         tk.Label(body,text='Descrição com ícones, cores e referências a outras cartas (prévia no Studio)',bg=BG,fg=TEXT,font=('Segoe UI',10)).pack(anchor='w',pady=(12,3))
         desc_tools=ttk.Frame(body)
         desc_tools.pack(fill='x',pady=(0,5))
@@ -615,7 +658,7 @@ class Studio(tk.Tk):
         tk.Label(line,text='   Perde LP a cada ataque:',bg=SURFACE,fg=TEXT).pack(side='left',padx=(22,5))
         self.quick_vars['custo_lp']=tk.StringVar(value='0')
         validate=(self.register(lambda proposed: proposed == '' or
-                                (proposed.isdigit() and len(proposed) <= 4)))
+                                (proposed.isascii() and proposed.isdecimal())))
         ttk.Entry(line,width=9,textvariable=self.quick_vars['custo_lp'],
                   validate='key',validatecommand=(validate,'%P')).pack(side='left')
         self.quick_vars['custo_lp'].trace_add('write',lambda *_:self._on_quick_changed())
@@ -1079,6 +1122,7 @@ class Studio(tk.Tk):
             return
         self._stage_current()
         _label,color,kind=self._apply_name_color_preview()
+        self._preview_values(self.drafts.get_card(self.selected_id))
         # Atualização leve da linha (sem recriar a Treeview durante digitação).
         iid=str(self.selected_id)
         if self.tree.exists(iid):
@@ -1088,7 +1132,7 @@ class Studio(tk.Tk):
                                     background='#EAF0FA' if kind=='deus' else SURFACE)
             self.tree.item(iid,values=(f'{self.selected_id:03d}',
                  (row.get('nome') or '(nome não extraído)') + (' •' if self.selected_id in self.drafts.cards else ''),
-                 row.get('ataque',''),row.get('defesa','')),tags=(tag,))
+                 compact_number(row.get('ataque',''),8),compact_number(row.get('defesa',''),8)),tags=(tag,))
         self._update_pending_label()
 
     def _on_description_modified(self, _evt=None):
@@ -1118,18 +1162,39 @@ class Studio(tk.Tk):
             self.count_label.configure(text='Nenhuma carta importada')
             return
         q=self.filter.get().lower().strip()
+        type_filter=self.filter_type.get()
+        star_filter=self.filter_star.get()
+        try:
+            first=int(self.filter_from.get()) if self.filter_from.get().strip() else 1
+            last=int(self.filter_to.get()) if self.filter_to.get().strip() else None
+            if first < 1 or last is not None and last < first:
+                raise ValueError
+        except ValueError:
+            self.count_label.configure(text='Informe uma faixa de IDs válida.')
+            return
         count=0
         for cid in sorted(self.project.cards):
+            if cid < first or last is not None and cid > last:
+                continue
             c=self.drafts.get_card(cid) if self.drafts else self.project.get(cid)
             title=c.get('nome') or '(nome não extraído)'
             if q and q not in f'{cid:03d}' and q not in title.lower() and q not in f'#{cid:03d}':
+                continue
+            typ=int(c['tipo_id'])
+            if type_filter=='Monstros' and not (typ<20 or typ==24):
+                continue
+            if ' — ' in type_filter and typ!=int(type_filter.split(' — ',1)[0]):
+                continue
+            if ' — ' in star_filter and int(star_filter.split(' — ',1)[0]) not in (
+                    int(c['guardian_1_id']),int(c['guardian_2_id'])):
                 continue
             flag=' •' if self.drafts and cid in self.drafts.cards else (' ✎' if str(cid) in self.project.edits else '')
             _label,color,kind=name_style(c)
             tag=f'classe_{kind}'
             self.tree.tag_configure(tag,foreground=color,
                                     background='#EAF0FA' if kind=='deus' else SURFACE)
-            self.tree.insert('','end',iid=str(cid),values=(f'{cid:03d}',title+flag,c['ataque'],c['defesa']),tags=(tag,))
+            self.tree.insert('','end',iid=str(cid),values=(f'{cid:03d}',title+flag,
+                compact_number(c['ataque'],8),compact_number(c['defesa'],8)),tags=(tag,))
             count+=1
         self.count_label.configure(text=f'{count} cartas exibidas  •  {len(self.project.cards)} carregadas')
         if keep and self.tree.exists(keep):
@@ -1163,9 +1228,11 @@ class Studio(tk.Tk):
                 self.description.insert('1.0',c.get(key,'') or '')
             elif key in ('tipo_id','atributo_id','guardian_1_id','guardian_2_id'):
                 lookup={'tipo_id':TYPE_NAMES,'atributo_id':ATTR_NAMES,'guardian_1_id':STAR_NAMES,'guardian_2_id':STAR_NAMES}[key]
-                n=int(c[key]); self.vars[key].set(f'{n:02d} — {(lookup[n] if n<len(lookup) else '(não mapeado)') or "Nenhuma"}')
+                n=int(c[key])
+                label=guardian_name(n) if key.startswith('guardian_') else lookup[n] if n<len(lookup) else '(não mapeado)'
+                self.vars[key].set(f'{n:02d} — {label}')
             else:
-                self.vars[key].set(str(c.get(key,'') or ''))
+                self.vars[key].set(str(c.get(key,'')))
         self.description.edit_modified(False)
         self._loading=False
         self._update_card_type_warning()
@@ -1173,13 +1240,23 @@ class Studio(tk.Tk):
         ident=format_id(self.selected_id)
         self.selected_caption.configure(text=f'{ident}  {c.get("nome") or "Nome ainda não extraído"}')
         self.preview.itemconfigure(self.preview_name,text=(c.get('nome') or ident)[:42].upper(),fill=color)
-        self.preview.itemconfigure(self.preview_type,text=f'{TYPE_NAMES[int(c["tipo_id"])] if int(c["tipo_id"])<len(TYPE_NAMES) else "Tipo não mapeado"} • {ATTR_NAMES[int(c["atributo_id"])] if int(c["atributo_id"])<len(ATTR_NAMES) else "Atributo não mapeado"}')
-        self.preview.itemconfigure(self.preview_stats,text=f'ATK {c["ataque"]}   DEF {c["defesa"]}')
+        self._preview_values(c)
         self._load_art()
         self.render_description()
         self._refresh_effects()
         self._refresh_fusions()
         self._update_status(f'Carta {ident} selecionada • alterações pendentes na memória até Salvar projeto')
+
+    def _preview_values(self, card):
+        typ, attr = int(card['tipo_id']), int(card['atributo_id'])
+        type_name = TYPE_NAMES[typ] if typ<len(TYPE_NAMES) else 'Tipo reservado'
+        attribute = ATTR_NAMES[attr] if attr<len(ATTR_NAMES) else 'Atributo reservado'
+        self.preview.itemconfigure(self.preview_type,text=f'{type_name} • {attribute}')
+        stars = tuple(dict.fromkeys(int(card[key]) for key in ('guardian_1_id','guardian_2_id')))
+        self.preview.itemconfigure(self.preview_stars,text=' · '.join(guardian_name(star) for star in stars if star),
+                                   fill=SUPREME_COLOR if SUPREME in stars else TEXT)
+        self.preview.itemconfigure(self.preview_stats,text=(
+            f'ATK {compact_number(card["ataque"],11)}  DEF {compact_number(card["defesa"],11)}'))
 
     def _load_art(self):
         self.preview_img = None
@@ -1589,8 +1666,7 @@ class Studio(tk.Tk):
         from .core import simulation_nonnegative_int
         old=self.project.metadata.get('studio_initial_lp',8000)
         text=simpledialog.askstring('LP alto no simulador',
-            'LP inicial no Laboratório (até 64 dígitos, sem teto de jogo).\n'
-            'Isso NÃO altera o BIN/CUE ou os LP reais do PS1.',
+            'Informe o LP inicial do laboratório.',
             initialvalue=str(old),parent=self)
         if text is None:
             return
@@ -1959,23 +2035,48 @@ class Studio(tk.Tk):
         SpecificCardEffectDialog(self,cards,submit)
 
     def add_new_card(self):
-        if self._extract_running or not self.project or not self.project.cards:
-            messagebox.showinfo('Base ausente','Importe primeiro as 722 cartas de referência.',parent=self)
+        if self._extract_running or not self._ensure_project():
             return
         if self.selected_id:
             self._stage_current()
-        try:
-            cid=self.project.add_card(self.selected_id or 1)
-        except ModError as exc:
-            messagebox.showerror('Nova carta',str(exc),parent=self)
-            return
-        self.filter.set('')
-        self._refresh_cards()
+        from .mod_gui import NewCardDialog
+        NewCardDialog(self)
+
+    def select_new_card(self, cid):
+        self._clear_card_filters()
         self.selected_id=None
+        self._refresh_cards()
         self.tree.selection_set(str(cid))
         self.tree.see(str(cid))
         self._on_card_select()
-        self._update_status(f'Carta #{cid} criada e registrada no projeto (não adicionada ao BIN PS1).')
+        self.tabs.select(self.tab_cards)
+        self._update_status(f'Carta #{cid} criada e salva no projeto.')
+
+    def _clear_card_filters(self):
+        for var,value in ((self.filter,''),(self.filter_type,'Todos'),(self.filter_star,'Todas'),
+                          (self.filter_from,''),(self.filter_to,'')):
+            if var.get()!=value:
+                var.set(value)
+
+    def edit_card_rules(self):
+        if self.project and self.selected_id and not self._extract_running:
+            from .mod_gui import CardRelationsDialog
+            self._stage_current()
+            CardRelationsDialog(self,self.selected_id)
+
+    def open_card_ps1_options(self):
+        if not self.project or not self.selected_id:
+            return
+        window=tk.Toplevel(self)
+        window.title('Opções PS1 da carta')
+        window.transient(self)
+        content=ttk.Frame(window,padding=12)
+        content.pack(fill='both',expand=True)
+        for label,command in [('Tipo jogável no PS1',self.choose_playable_monster_type),
+                              ('Glifo God na descrição',self.toggle_god_icon_ps1),
+                              ('Tipo God no baú',self.toggle_god24_chest_preview),
+                              ('God24 em duelo',self.toggle_god24_hand_preview)]:
+            ttk.Button(content,text=label,command=command).pack(fill='x',pady=4)
 
     def insert_description_token(self, token: str):
         if not self.project or not self.selected_id:
@@ -2157,21 +2258,19 @@ class Studio(tk.Tk):
                 f'Extração profunda: {pr.metadata.get("deep_extraction", {}).get("completed", "ainda não realizada")}\n'
                 f'Executável SLUS local: {source}\n\n'
                 f'Avisos da extração ({len(pr.imported_notes)}):\n{notes}\n\n'
-                'FASES DE EXPORTAÇÃO\n'
-                '• Estatísticas: SLUS auxiliar se houver executável vinculado.\n'
-                '• Nomes, cores e descrições: apenas registro e prévia no Studio.\n'
-                '• Efeitos inéditos: simulação; alvos de Equip original: exportáveis ao PS1.\n'
-                '• Fusões: imutáveis, com verificação de integridade.\n'
-                '• Imagem BIN/CUE jogável: não gerada nesta versão.\n')
+                'EXPORTAÇÃO\n'
+                '• Exportar alterações grava os dados do Studio em JSON.\n'
+                '• Gerar jogo BIN/CUE aplica as regras compatíveis à cópia do jogo.\n'
+                '• Auditar compatibilidade mostra os recursos graváveis nesta base.\n')
         pane.insert('1.0',txt)
         pane.configure(state='disabled')
 
     def _refresh_all(self):
         self.proj_title.configure(text=self.project.metadata['nome'] if self.project else 'Nenhum projeto aberto')
         self.selected_id=None
+        self._clear_card_filters()
         self._refresh_cards()
         if self.project and self.project.cards:
-            self.filter.set('')
             item='1' if self.tree.exists('1') else self.tree.get_children()[0]
             self.tree.selection_set(item)
             self.tree.see(item)
@@ -2179,6 +2278,7 @@ class Studio(tk.Tk):
             self._load_card()
         self._refresh_project()
         self._refresh_extract()
+        self.mod_editor.refresh()
         self._update_pending_label()
 
     def verify(self):
@@ -2198,7 +2298,7 @@ class Studio(tk.Tk):
         if not self._ensure_project():
             return
         if not self.project.cards:
-            messagebox.showwarning('Sem base','Importe as 722 cartas antes da exportação.')
+            messagebox.showwarning('Sem cartas','Crie ou importe pelo menos uma carta.')
             return
         self._stage_current()
         if self.drafts and self.drafts.is_dirty:
@@ -2206,11 +2306,16 @@ class Studio(tk.Tk):
                 'Existem alterações pendentes. Clique Salvar projeto primeiro.',parent=self)
             return
         try:
-            folder,manifest=self.project.export()
+            from .core import ps1_stat_export_errors, ps1_unwritable_numeric_edits
+            incompatible=ps1_stat_export_errors(self.project) + ps1_unwritable_numeric_edits(self.project)
+            folder,manifest=self.project.export(include_ps1=False) if incompatible else self.project.export()
         except (OSError,ModError,ValueError) as exc:
             messagebox.showerror('Exportação bloqueada',str(exc))
             return
         self._update_status('Alterações exportadas: '+str(folder))
+        if incompatible:
+            messagebox.showinfo('Dados do Studio exportados',f'{folder}\n\n'+'\n'.join(incompatible[:6]),parent=self)
+            return
         if messagebox.askyesno(
             'Exportação concluída — gerar jogo de teste?',
             f'Pasta: {folder}\n\nCartas alteradas: {manifest["cartas_editadas"]}\n'
@@ -2367,6 +2472,7 @@ class Studio(tk.Tk):
         duel_status=(f'{duel["pontos_aplicados"]}/{duel["total_pontos"]} pontos conferidos '
                      '(ePSXe pendente)' if duel else 'DESATIVADO')
         runtime=manifest.get('efeitos_nativos_ps1') or {}
+        mod=manifest.get('edicao_do_mod_ps1',{})
         simplified=sum(bool(row.get('acentos_simplificados')) for row in manifest['descricoes_aplicadas'])
         messagebox.showinfo(f'Imagem de teste {action}',
             f'Imagem de teste {action} com sucesso.\n\n'
@@ -2378,6 +2484,8 @@ class Studio(tk.Tk):
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Efeitos gravados no PS1: {len(runtime.get("efeitos",[]))}. '
             f'Ícones de descrição: {len(manifest.get("icones_de_descricao_ps1",[]))}.\n'
+            + ('Ataques no primeiro turno ativos. ' if mod.get('ataque_primeiro_turno') else '')
+            + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
             + (f'Fonte PS1 simplificou acentos em {simplified} descrição(ões).\n' if simplified else '')
             + f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             f'God24 ATK/DEF BAÚ: {"2 máscaras + 3 opcodes da lista" if manifest.get("teste_god24_atk_def_bau") else "DESATIVADO"}.\n'

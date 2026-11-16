@@ -24,6 +24,11 @@ RITUAL_OFF, RITUAL_LEN = 0x34800, 0x800
 DUELIST_BASE = 0xE99800
 DUELIST_STRIDE = 0x1800
 POOL_OFFSETS = {"deck": 0x000, "pow": 0x5B4, "bcd": 0xB68, "tec": 0x111C}
+STARTER_OFFSETS = (0xF92BD4, 0xFBDBD4)
+STARTER_STRIDE = 0x5B8
+STARTER_POOLS = 7
+STARTER_SIZE = STARTER_STRIDE * STARTER_POOLS
+DECK_SIZE = 40
 PASSWORD_BASE = 0xFB9800
 TYPE_NAMES = (
     "Dragon", "Spellcaster", "Zombie", "Warrior", "Beast-Warrior", "Beast",
@@ -32,7 +37,10 @@ TYPE_NAMES = (
     "Magic", "Trap", "Ritual", "Equip", "God",
 )
 ATTR_NAMES = ("Light", "Dark", "Earth", "Water", "Fire", "Wind")
-STAR_NAMES = ("", "Mars", "Jupiter", "Saturn", "Uranus", "Pluto", "Neptune", "Mercury", "Sun", "Moon", "Venus")
+RETAIL_STAR_NAMES = ("", "Mars", "Jupiter", "Saturn", "Uranus", "Pluto", "Neptune", "Mercury", "Sun", "Moon", "Venus")
+# 11–15 may occur in imported data. Preserve them as reserved values.
+SUPREME = 16
+STAR_NAMES = RETAIL_STAR_NAMES + ("",) * 5 + ("Supreme",)
 # Nomes da grade retail, documentados externamente; NÃO decodificados desta imagem.
 DUELIST_NAMES_REFERENCE = (
     "Unused", "Simon Muran", "Teana", "Jono", "Villager 1", "Villager 2", "Villager 3", "Seto", "Heishin",
@@ -74,8 +82,8 @@ def decode_cards(slus: bytes) -> tuple[list[dict], list[str]]:
             "tipo_id": type_id, "tipo_referencia": TYPE_NAMES[type_id] if type_id < len(TYPE_NAMES) else "(não mapeado)",
             "atributo_id": attr, "atributo_referencia": ATTR_NAMES[attr] if attr < len(ATTR_NAMES) else "(não mapeado)",
             "nivel": lv_attr & 15, "guardian_1_id": s1,
-            "guardian_1_referencia": STAR_NAMES[s1] if s1 < len(STAR_NAMES) else "(não mapeado)",
-            "guardian_2_id": s2, "guardian_2_referencia": STAR_NAMES[s2] if s2 < len(STAR_NAMES) else "(não mapeado)",
+            "guardian_1_referencia": RETAIL_STAR_NAMES[s1] if s1 < len(RETAIL_STAR_NAMES) else "(não mapeado)",
+            "guardian_2_id": s2, "guardian_2_referencia": RETAIL_STAR_NAMES[s2] if s2 < len(RETAIL_STAR_NAMES) else "(não mapeado)",
             "valor_hex": f"{raw:08X}", "offset_no_slus": f"0x{first + (cid - 1) * 4:X}",
         })
     weird = sum(1 for c in cards if c["tipo_id"] > 23 or c["atributo_id"] > 5)
@@ -186,6 +194,24 @@ def decode_passwords(wa: bytes) -> list[dict]:
     return rows
 
 
+def decode_starters(wa: bytes) -> list[dict]:
+    """Read the seven weighted Name Entry rows when both disc copies agree."""
+    first, second = STARTER_OFFSETS
+    block = wa[first:first + STARTER_SIZE]
+    if len(block) != STARTER_SIZE or block != wa[second:second + STARTER_SIZE]:
+        return []
+    rows = []
+    for pool in range(STARTER_POOLS):
+        draws, *weights = struct.unpack_from(f'<{CARD_COUNT + 1}H', block, pool * STARTER_STRIDE)
+        if draws > DECK_SIZE or weights[-2:] != [0, 0] or (draws and sum(weights) != POOL_TOTAL):
+            return []
+        rows.extend({'grupo': pool, 'compras': draws, 'carta_id': cid, 'peso': weight}
+                    for cid, weight in enumerate(weights, 1) if weight)
+    if sum({row['grupo']: row['compras'] for row in rows}.values()) != DECK_SIZE:
+        return []
+    return rows
+
+
 def decode_all(slus: bytes, wa: bytes) -> tuple[dict, list[str]]:
     cards, notes = decode_cards(slus)
     _need(wa, WA_TERRAIN_BASE, (TERRAIN_COPIES - 1) * TERRAIN_STRIDE + RITUAL_OFF + RITUAL_LEN, "pacotes de campo")
@@ -207,4 +233,5 @@ def decode_all(slus: bytes, wa: bytes) -> tuple[dict, list[str]]:
         notes.append(f"{glitch_count} fusões sinalizadas como possível leitura excedente (glitch); revisar antes de editar")
     return {"cartas": cards, "fusoes": fusions, "equipamentos": equips,
             "rituais": rituals, "decks_drops": pools,
-            "resumo_duelistas": pool_summary, "senhas": passwords}, notes
+            "resumo_duelistas": pool_summary, "decks_iniciais": decode_starters(wa),
+            "senhas": passwords}, notes

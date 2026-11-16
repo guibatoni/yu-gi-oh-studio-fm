@@ -21,7 +21,7 @@ CUSTOM_ICONS={'perfurar':'Perfurante','ataque_2x':'2x ataque',
     'infinito':'Sem limite no deck','anti_trap':'Imune a trap',
     'anti_magia':'Imune a mágicas','indestrutivel':'Indestrutível',
     'god':'God', 'ataque_primeiro_turno':'Ataca no primeiro turno'}
-TOKEN = re.compile(r'(\{f8 0[AB] [0-9A-Fa-f]{2}\}|\{icon:[a-z0-9_]+\}|\{color:[a-z]+\}|\{/color\}|\{card:\d{1,5}\})')
+TOKEN = re.compile(r'(\{f8 0[AB] [0-9A-Fa-f]{2}\}|\{icon:[a-z0-9_]+\}|\{color:[a-z]+\}|\{/color\}|\{card:[0-9]+\})')
 
 def tokens(value: str, cards=None):
     """[(text, color, icon_name)] para prévia; ícones nativos não são embutidos em fontes locais."""

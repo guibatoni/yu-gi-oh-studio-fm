@@ -50,6 +50,13 @@ def inspect_god24_chest_mips(exe: bytes) -> dict:
 
 def verify_image_stats(project, source):
     from .ps1_god24_display import inspect as inspect_god_display
+    from .ps1_runtime import SOURCE_SHA256, compile_effects, verify_effects
+    from .ps1_mod import compile_mod, verify_executable, verify_wa, wa_sha
+    config=getattr(project,'metadata',{}) or {}
+    profile=config.get('base_sha256',{}).get('slus')==SOURCE_SHA256
+    mod_plan=compile_mod(project,profile=profile,
+                         wa_verified=bool(config.get('edicao_mod') and wa_sha(project)))
+    wa=b''
     try:
         with DiscReader(Path(source)) as image:
             entries = {e.path.upper():e for e in image.files() if not e.is_dir}
@@ -58,9 +65,10 @@ def verify_image_stats(project, source):
             exe = b''.join(image.read_entry(entries['SLUS_014.11']))
             cards, _ = decode_cards(exe)
             god_display = inspect_god_display(exe)
-            if god_display['status'] == 'aguardando_textura':
+            if god_display['status'] == 'aguardando_textura' or mod_plan.needs_wa:
                 entry = entries.get('DATA/WA_MRG.MRG')
                 wa = b''.join(image.read_entry(entry)) if entry else b''
+            if god_display['status'] == 'aguardando_textura':
                 god_display = inspect_god_display(exe, wa)
             image_path = str(image.path.resolve())
     except DiscError as exc:
@@ -98,10 +106,9 @@ def verify_image_stats(project, source):
                   if god24_experiment_enabled(project,r['id'])]
     card_types_24=[{'id':c['id'],'ataque':c['ataque'],'defesa':c['defesa']}
                    for c in cards if c['tipo_id']==24]
-    config=getattr(project,'metadata',{}) or {}
-    from .ps1_runtime import SOURCE_SHA256, compile_effects, verify_effects
-    plan=compile_effects(project,config.get('base_sha256',{}).get('slus')==SOURCE_SHA256)
+    plan=compile_effects(project,profile)
     runtime=verify_effects(exe,plan)
+    first_turn, life=verify_executable(exe,mod_plan)
     cid=config.get('ps1_god_type_test_card_id')
     tested=cards[cid-1] if type(cid) is int and 1<=cid<=CARD_COUNT else None
     chest=inspect_god24_chest_mips(exe)
@@ -122,6 +129,7 @@ def verify_image_stats(project, source):
             'god24_roteamento_duelo':duel_patch,
             'god24_exibicao_tipo':god_display,
             'efeitos_nativos_ps1':runtime,
+            'edicao_do_mod_ps1':{'ataque_primeiro_turno':first_turn,'lp':life,'tabelas':verify_wa(wa,mod_plan)},
             'god24_teste_mao_ativado_no_projeto':bool(config.get('ps1_god_hand_preview')),
             'god24_teste_bau_ativado_no_projeto':bool(config.get('ps1_god_chest_preview')),
             'god24_total_cartas_no_bin':len(card_types_24),
@@ -144,6 +152,11 @@ def describe(result):
         text.append(f'Efeitos nativos conferidos na cópia: {runtime["quantidade"]}.')
     elif runtime.get('status')=='divergente':
         text.append('A tabela de efeitos desta cópia diverge do projeto. Gere outro BIN/CUE.')
+    mod=result.get('edicao_do_mod_ps1',{})
+    if mod.get('ataque_primeiro_turno'):
+        text.append('Ataque no primeiro turno conferido no executável.')
+    if not mod.get('lp',True) or not mod.get('tabelas',True):
+        text.append('Os LP ou as tabelas de duelistas desta cópia divergem do projeto.')
     if result.get('god24_tipo_gravado_e_verificado'):
         text.append('God 24 gravado como 5 bits: SIM.')
     if result.get('god24_total_cartas_no_bin') or result.get('god24_teste_bau_ativado_no_projeto'):

@@ -6,11 +6,12 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from .tables import CARD_COUNT
+from .tables import CARD_COUNT, SUPREME
 from .ps1_content import name_patch_info, description_patch_info
 from .core import ACTIONS, ModError, god24_experiment_enabled
 from .ps1_god24_chest import SOURCE_SHA256 as GOD24_SOURCE_SHA256
 from .ps1_runtime import compile_effects
+from .ps1_mod import LP_CODE, LP_BANK_END, compile_mod
 
 
 def audit(project) -> dict:
@@ -31,7 +32,10 @@ def audit(project) -> dict:
     counts={'estatisticas':0,'nomes':0,'artes':0,'efeitos':0,'cartas_extras':len(project.new_cards),
             'descricoes':0,'classes_cores':0,'icones_especiais':0,'equipamentos_ps1':0,'equip_substituicoes':0,
             'rituais_ps1':0,'armadilhas_ps1':0,'terrenos_ps1':0,'limite_global_deck_ps1':0}
-    blocked=list(native_plan.pending); supported=[]
+    mod_plan=compile_mod(project,profile=native_profile,wa_verified=wa_pinned)
+    blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
+    if native_profile:
+        supported.append('Ataque no primeiro turno para os dois lados')
     descriptions={}
     for key,edits in sorted(project.edits.items(),key=lambda item:int(item[0])):
         cid=int(key); current=project.get(cid)
@@ -41,7 +45,9 @@ def audit(project) -> dict:
             if cid>CARD_COUNT or (int(current.get('tipo_id',0))>=24 and
                                   not god24_experiment_enabled(project,cid)) or int(current.get('atributo_id',0))>5:
                 blocked.append(f'#{cid}: atributos de carta virtual/God sem teste autorizado/atributo não original requerem patch de motor')
-            elif ('ataque' in numeric or 'defesa' in numeric) and any(
+            elif any(int(current.get(key,0)) == SUPREME for key in ('guardian_1_id','guardian_2_id')):
+                blocked.append(f'#{cid}: Supreme usa uma Guardian Star do Studio.')
+            elif any(
                     int(current[stat])>5110 or int(current[stat])%10
                     for stat in ('ataque','defesa')):
                 blocked.append(f'#{cid}: ATK/DEF acima de 5110 ou não múltiplos de 10; apenas simulador')
@@ -92,7 +98,8 @@ def audit(project) -> dict:
     if descriptions:
         from .ps1_text import patch_descriptions
         catalog={cid:project.get(cid) for cid in project.cards}
-        _,rows,icons,pending=patch_descriptions(exe,descriptions,catalog,start=native_plan.data_end)
+        _,rows,icons,pending=patch_descriptions(exe,descriptions,catalog,start=native_plan.data_end,
+                                               end=LP_CODE if mod_plan.has_lp else LP_BANK_END)
         counts['descricoes']=len(rows)
         counts['icones_especiais']=len(icons)
         for row in rows:

@@ -1,3 +1,22 @@
+## v1.5.0 — Regras do duelo e tabelas do Drop x15
+
+| Recurso | Studio | BIN/CUE Drop x15 |
+| --- | --- | --- |
+| Ataques no primeiro turno | Jogador e adversário podem atacar ao invocar em posição de ataque | Corrige a flag de abertura compartilhada pelos dois lados |
+| Bônus do deck e cemitério | Prévias na mão, no monte, no campo e no cemitério | Bônus de deck compatíveis usam o monte restante durante o cálculo em campo |
+| Guardian Star Supreme e cartas adicionais | Disponíveis no catálogo, nas receitas e nas partidas | As tabelas originais usam quatro bits para estrelas e IDs até 722 |
+| LP, ATK, DEF | Inteiros sem teto fixo | LP inicial de até quatro dígitos. ATK/DEF-base de 0 a 5110 em múltiplos de 10 |
+| Drops | Pesos individuais por rank ou por grupo | Grupos POW, TEC e B/C/D. Pesos arredondados para um total de 2048 |
+| Decks dos duelistas | Listas fixas e pools ponderados | Pool de 40 compras com cartas de #1 a #720 e limite de três cópias da rotina original |
+| Deck inicial | Perfis fixos e sorteio ponderado por perfil ou pool | Até sete pools, 40 compras ao todo, nas duas cópias da tabela de início |
+| IA adversária | Motor de partida do Studio | Rotinas de decisão originais do executável |
+
+O Studio verifica o hash do executável e do arquivo de tabelas da
+imagem vinculada, os opcodes e os dados lidos da nova cópia. O relatório
+mostra quais configurações pedem a simulação do Studio. Para reaproveitar
+um projeto antigo, os pools originais podem ser lidos pela aba
+**Edição do Mod** a partir do BIN/CUE da importação.
+
 ## v1.4.25 — Efeitos e descrições no Drop x15
 
 As rotinas a seguir são instaladas na cópia BIN/CUE a partir dos

@@ -3,8 +3,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from fmstudio.gui import Studio
-from fmstudio.core import Project, DEFAULT_NAME_COLOR
+from fmstudio.core import Project
 from fmstudio.drafts import DraftSession
+from fmstudio.rarities import DEFAULT_RARITY, RARITIES
 
 with TemporaryDirectory() as temp:
     root = Studio()
@@ -32,16 +33,14 @@ with TemporaryDirectory() as temp:
     assert root.vars['nome'].get()=='Dragão Vermelho',root.vars['nome'].get()
     assert root.vars['cor_nome'].get()=='#FF3355'
     assert root.vars['ataque'].get()=='3500'
-    assert root.preview.itemcget(root.preview_name,'fill')=='#FF3355'
+    assert root.preview.itemcget(root.preview_name,'fill')==RARITIES[DEFAULT_RARITY][1]
     assert root.drafts.count==1,root.drafts.count
     assert not p.edits
     root.deiconify()
     root.tabs.select(root.tab_cards)
     root.update()
-    from PIL import ImageGrab
-    ImageGrab.grab().crop((0,0,1390,825)).save('/mnt/data/FM_Mod_Studio_v0.6.0/preview_v06.png')
     assert root.save_project()
     assert p.edits['1']['cor_nome']=='#FF3355'
     assert not root.drafts.is_dirty
     root.destroy()
-print('Interface: troca de cartas sem perguntas, cor no nome e Ctrl+S/teste de salvamento: OK')
+print('Interface: navegação, cor da classe e persistência da cor legada: OK')

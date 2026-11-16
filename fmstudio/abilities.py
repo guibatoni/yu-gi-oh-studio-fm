@@ -43,9 +43,9 @@ def replace_quick_effects(existing: list[dict], settings: dict, *,
         copy_limit = default_copies if raw_limit in ('', None) else int(raw_limit)
     except (ValueError, TypeError) as exc:
         raise ModError('Ataques e custo de LP precisam ser números inteiros') from exc
-    if (attacks not in (1, 2, 3) or not 0 <= lp <= 9999
+    if (attacks not in (1, 2, 3) or lp < 0
             or (copy_limit is not None and not 1 <= copy_limit <= 40)):
-        raise ModError('Ataques: 1–3; LP: 0–9999; cópias por carta: 1–40')
+        raise ModError('Ataques: 1–3. LP: inteiro não negativo. Cópias por carta: 1–40.')
     result = [dict(e) for e in existing if e.get('acao') not in QUICK_ACTIONS]
     if attacks > 1:
         result.append(check_effect({'evento':'continuo','acao':'ataques_multiplos',

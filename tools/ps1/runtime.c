@@ -136,7 +136,7 @@ static int count_bonus(const Bonus *bonus, unsigned source_side)
             if (bonus->match < 32) count += duel.graveyard[side][bonus->match];
             else for (int i = 0; i < 32; i++) count += duel.graveyard[side][i];
         } else if (bonus->action == DECK_TYPE || bonus->action == DECK_ID) {
-            for (int i = 0; i < DECK_SIZE; i++) {
+            for (int i = AT(u8, SIDE(side) + 0x18); i < DECK_SIZE; i++) {
                 unsigned id = duel.deck[side][i];
                 if (id && (bonus->match == 0xFFFF ||
                            (by_id ? id : type_of(id)) == bonus->match)) count++;

@@ -132,7 +132,7 @@ def patch_card_art(wa: bytes, cid: int, png:Path) -> tuple[bytes, list[dict]]:
     return bytes(result),modified
 
 
-_TEXT_CONTROL = re.compile(r'\{(f8 0[AB] [0-9A-Fa-f]{2}|color:[a-z]+|/color|card:\d{1,5}|icon:[a-z0-9_]+)\}')
+_TEXT_CONTROL = re.compile(r'\{(f8 0[AB] [0-9A-Fa-f]{2}|color:[a-z]+|/color|card:[0-9]+|icon:[a-z0-9_]+)\}')
 
 
 def _encode_description(value: str, cmap:dict[int,str], cards:dict[int,dict], *,

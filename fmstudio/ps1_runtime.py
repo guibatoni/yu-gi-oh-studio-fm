@@ -22,7 +22,7 @@ PROTECTIONS = {
     'nao_bloqueavel': 16, 'ataque_primeiro_turno': 32,
     'equip_imune_armadilha': 2, 'equip_imune_magia_armadilha': 3, 'equip_indestrutivel': 4,
 }
-PLAY_ACTIONS = (EFFECT_ACTIONS | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
+PLAY_ACTIONS = ((EFFECT_ACTIONS - {'bonus_mao_tipo'}) | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
                 {'ataques_multiplos', 'perder_lp_por_ataque'})
 SUPPORTED = PLAY_ACTIONS | COPY_ACTIONS
 BONUS_CODES = {'aura_tipo': 1, 'bonus_por_tipo': 2, 'bonus_deck_tipo': 3,
@@ -80,6 +80,12 @@ def compile_effects(project, profile: bool) -> EffectPlan:
                 pending.append(f'#{cid}: {action} requer outra rotina de duelo no PS1.')
                 continue
             effect = check_effect(raw)
+            if effect.get('atributo_id', -1) != -1 or effect.get('origem_contagem') in ('mao', 'cemiterio'):
+                pending.append(f'#{cid}: {action} com esse filtro ou zona funciona no Studio.')
+                continue
+            if max(effect['valor'], effect.get('valor_def', 0)) > 9999:
+                pending.append(f'#{cid}: {action} excede 9999 pontos da rotina de efeitos PS1.')
+                continue
             needs_monster = action not in COPY_ACTIONS and action not in EQUIPMENT_ACTIONS
             if needs_monster and not (card_type < 20 or card_type == 24):
                 pending.append(f'#{cid}: {action} exige carta monstro no PS1.')
@@ -104,9 +110,15 @@ def compile_effects(project, profile: bool) -> EffectPlan:
             elif action == 'ataques_multiplos':
                 attacks = max(attacks, effect['valor'])
             elif action == 'perder_lp_por_ataque':
-                cost = min(9999, cost + effect['valor'])
+                if cost + effect['valor'] > 9999:
+                    pending.append(f'#{cid}: custo acumulado de ataque excede o limite do PS1.')
+                    continue
+                cost += effect['valor']
             elif action == 'equip_atk':
-                equip_attack = min(9999, equip_attack + effect['valor'])
+                if equip_attack + effect['valor'] > 9999:
+                    pending.append(f'#{cid}: bônus acumulado de Equip excede o limite do PS1.')
+                    continue
+                equip_attack += effect['valor']
             elif action == 'sem_limite_deck':
                 unlimited = True
             else:

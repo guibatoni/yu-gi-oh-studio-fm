@@ -51,9 +51,9 @@ def _measure(raw: bytes) -> set[int]:
 
 
 def patch_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
-                       *, start: int = DUEL_STATE) -> tuple[bytes, list[dict], set[str], list[str]]:
+                       *, start: int = DUEL_STATE, end: int = BANK_END) -> tuple[bytes, list[dict], set[str], list[str]]:
     """Reuse original string slots and allocate larger strings from the verified bank tail."""
-    if not DUEL_STATE <= start <= BANK_END:
+    if not DUEL_STATE <= start <= end <= BANK_END:
         raise ModError('Área de descrições PS1 fora do banco de texto.')
     cmap, _ = glyph_map(exe)
     font = set(cmap.values())
@@ -88,7 +88,7 @@ def patch_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
             moved = len(raw) > capacity
             if moved:
                 size = len(raw) + 1
-                if start + size > BANK_END:
+                if start + size > end:
                     raise ModError('O espaço para descrições maiores deste BIN está cheio.')
                 offset = exe_pos(start, exe, size)
                 if any(exe[offset:offset+size]):

@@ -4,6 +4,7 @@ from pathlib import Path
 from fmstudio.core import Project
 from fmstudio.drafts import DraftSession
 from fmstudio.gui import Studio
+from fmstudio.mod_gui import NewCardDialog
 from fmstudio.expanded import display_name
 from fmstudio.richtext import CUSTOM_ICONS
 
@@ -16,6 +17,8 @@ with TemporaryDirectory() as d:
     root.project=project;root.drafts=DraftSession(project)
     root._refresh_all();root.update()
     root.add_new_card();root.update()
+    dialog=next(child for child in root.winfo_children() if isinstance(child,NewCardDialog))
+    dialog.create();root.update()
     assert root.selected_id==723,root.selected_id
     assert len(root.project.cards)==2
     assert root.get_icon_image('perfurar').width()==16

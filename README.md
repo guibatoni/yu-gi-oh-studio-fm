@@ -1,3 +1,25 @@
+# Studio FM v1.5.0 — Partidas contra IA e Edição do Mod
+
+Em **Edição do Mod**, selecione um duelista para editar drops por rank,
+deck ou pools e LP inicial. Em **Decks iniciais** você pode montar
+perfis fixos, combinar cartas fixas com sorteios ponderados ou editar
+os pools lidos da imagem. Use **Simular duelo** para jogar com essas
+configurações. Projetos antigos podem carregar os pools iniciais com
+**Ler pools do BIN/CUE** na mesma aba.
+
+**Cartas** tem filtros por tipo, Guardian Star e faixa de ID.
+**Nova carta** usa o primeiro ID livre acima de 722. A estrela
+✦ **Supreme** dá +700 de ATK e DEF no combate contra qualquer uma das
+dez estrelas originais. Os atributos na mão, no campo e no monte
+acompanham as mudanças nas zonas. LP, ATK e DEF usam inteiros sem
+teto fixo no Studio.
+
+Para jogar no ePSXe, exporte a cópia a partir do Drop x15 original.
+O relatório da geração mostra quais regras cabem nas tabelas do
+console. Veja [compatibilidade do BIN/CUE](docs/COMPAT_PS1.md).
+
+---
+
 # Studio FM v1.4.26 — Exportação de ícones sem Pillow
 
 A geração de BIN/CUE com ícones de descrição funciona no modo Python

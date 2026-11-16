@@ -41,9 +41,10 @@ class QuickAbilities(unittest.TestCase):
         self.assertEqual(replace_quick_effects(a,{'ataques':1,'custo_lp':0}),[aura])
 
     def test_reject_conflicts_or_wrong_events(self):
-        for data in ({'ataques':4},{'ataques':0},{'custo_lp':10000},{'custo_lp':'x'}):
+        for data in ({'ataques':4},{'ataques':0},{'custo_lp':-1},{'custo_lp':'x'}):
             with self.subTest(data=data),self.assertRaises(ModError):
                 replace_quick_effects([],data)
+        self.assertEqual(quick_settings(replace_quick_effects([], {'custo_lp':10**90}))['custo_lp'],10**90)
         with self.assertRaises(ModError):
             check_effect({'evento':'invocar','acao':'monstro_indestrutivel','alvo':'proprio','valor':0})
         with self.assertRaises(ModError):

@@ -116,6 +116,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     """
     source_image=Path(source_image).resolve()
     from .ps1_runtime import SOURCE_SHA256, compile_effects, install_runtime
+    from .ps1_mod import LP_BANK_END, LP_CODE, compile_mod, patch_executable, patch_wa, wa_sha
     texts={int(cid):project.get(int(cid)).get('descricao','')
            for cid,rows in getattr(project,'edits',{}).items()
            if 'descricao' in rows and 1<=int(cid)<=722}
@@ -134,6 +135,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             wa_entry=entries.get('DATA/WA_MRG.MRG')
             requested_art={int(k):v for k,v in getattr(project,'arts',{}).items() if int(k)<=722}
             metadata=getattr(project,'metadata',{})
+            expected_wa=wa_sha(project) if metadata.get('edicao_mod') else None
+            mod_plan=compile_mod(project,profile=native_profile,wa_verified=bool(expected_wa))
             equip_mode=metadata.get('ps1_equip_mode','adicionar')
             if equip_mode not in ('adicionar','substituir'):
                 raise ModError('Modo de equipamento inválido no projeto.')
@@ -149,7 +152,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             native_terrain=metadata.get('ps1_terrain_boosts',{})
             god_test_card=metadata.get('ps1_god_icon_test_card_id')
             god_chest_enabled=metadata.get('ps1_god_chest_preview',False)
-            needs_wa=(requested_art or native_equips or replacements or native_rituals
+            needs_wa=(requested_art or native_equips or replacements or native_rituals or mod_plan.needs_wa
                       or god_test_card or god_chest_enabled
                       or (native_profile and any('{icon:' in desc for desc in texts.values())))
             original_wa=b''.join(reader.read_entry(wa_entry)) if needs_wa and wa_entry else None
@@ -160,6 +163,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if not expected or source_digest!=expected:
         raise ModError('SLUS da imagem não corresponde ao executável vinculado ao projeto.')
     native_plan=compile_effects(project,native_profile)
+    desc_bank_end=LP_CODE if mod_plan.has_lp else LP_BANK_END
+    if native_plan.data_end>desc_bank_end:
+        raise ModError('A tabela de efeitos excede o espaço disponível com os LP individuais.')
 
     from .core import god24_experiment_enabled
     god_type_test=metadata.get('ps1_god_type_test_card_id')
@@ -207,7 +213,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         if native_profile:
             from .ps1_text import patch_descriptions
             patched_exe,written_descriptions,description_icons,_=patch_descriptions(
-                patched_exe,texts,catalog,start=native_plan.data_end)
+                patched_exe,texts,catalog,start=native_plan.data_end,end=desc_bank_end)
         else:
             from .ps1_content import patch_descriptions
             for cid,desc in sorted(texts.items()):
@@ -366,6 +372,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_wa=patch_icons(patched_wa if patched_wa is not None else original_wa,description_icons)
     patched_exe,native_report=install_runtime(
         original_exe,patched_exe,native_plan,description_icons=bool(description_icons))
+    patched_exe=patch_executable(patched_exe,mod_plan,profile=native_profile)
+    if mod_plan.needs_wa:
+        if original_wa is None or hashlib.sha256(original_wa).hexdigest()!=expected_wa:
+            raise ModError('As tabelas de duelistas exigem o WA_MRG vinculado ao projeto.')
+        patched_wa=patch_wa(patched_wa if patched_wa is not None else original_wa,mod_plan)
 
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
@@ -440,6 +451,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'descricoes_aplicadas':written_descriptions,
                 'icones_de_descricao_ps1':sorted(description_icons),
                 'efeitos_nativos_ps1':native_report,
+                'edicao_do_mod_ps1':{'ataque_primeiro_turno':native_profile,'aplicado':mod_plan.applied,
+                                    'pendente':mod_plan.pending},
                 'artes_aplicadas':written_arts,
                 'equipamentos_ps1_aplicados':native_written,
                 'rituais_ps1_aplicados':ritual_written,
@@ -477,6 +490,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             if native_plan.data and checked['efeitos_nativos_ps1']['status']!='aplicado':
                 raise ModError('A tabela de efeitos do BIN diverge do projeto. '
                                'A cópia anterior foi preservada.')
+            if native_profile and not all(checked['edicao_do_mod_ps1'].values()):
+                raise ModError('As regras de duelo do BIN divergem do projeto. A cópia anterior foi preservada.')
             if god_chest_enabled:
                 if (checked['god24_mascaras_bau']['status']!='aplicado_2_de_2'
                         or checked['god24_renderizador_lista_bau']

@@ -12,8 +12,9 @@ Nao mova ou apague FM-Mod-Studio-Updater.exe: ele e necessario para as
 atualizacoes automáticas. Se uma atualizacao falhar, veja o arquivo:
 %LOCALAPPDATA%\FM-Mod-Studio\logs\atualizador.log
 
-IMPORTANTE: os efeitos novos sao simulações no editor, nao alteram o motor
-PS1 nesta etapa. Fusoes originais preservadas.
+Na aba Edicao do Mod, use Simular duelo para jogar com os decks, LP e
+regras do seu projeto. Gerar jogo BIN/CUE grava as regras compativeis
+que aparecem no relatorio de exportacao do Drop x15.
 
 Codigo e atualizacoes:
 https://github.com/guibatoni/yu-gi-oh-studio-fm

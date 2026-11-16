@@ -5,7 +5,10 @@ from tkinter import ttk, messagebox
 
 from .core import EVENTS, ModError
 from .duel_engine import DuelLab, parse_card_ids
-from .gui import BG, SURFACE, TEXT, MUTED, ACCENT, BORDER
+from .gui import BG, SURFACE, TEXT, MUTED, ACCENT, BORDER, compact_number
+from .guardian import guardian_options
+from .mod_data import starting_life
+from .duel_gui import fill_zone, show_exact, zone_tree
 
 
 class AdvancedFieldDialog(tk.Toplevel):
@@ -21,8 +24,7 @@ class AdvancedFieldDialog(tk.Toplevel):
         cards={cid:drafts.get_card(cid) for cid in project.cards}
         effects={str(cid):drafts.get_effects(cid) for cid in project.cards
                  if drafts.get_effects(cid)}
-        self.lab=DuelLab(cards,effects,summoning_delay=True,
-                          initial_lp=project.metadata.get('studio_initial_lp',8000))
+        self.lab=DuelLab(cards,effects,initial_lp=starting_life(project,1))
         self.choices={'— VAZIO —':None}
         self.by_id={}
         for cid,c in sorted(cards.items()):
@@ -41,16 +43,19 @@ class AdvancedFieldDialog(tk.Toplevel):
         title=tk.Frame(self,bg=BG)
         title.pack(fill='x',padx=16,pady=(13,7))
         tk.Label(title,text='LABORATÓRIO DE EFEITOS',font=('Segoe UI',15,'bold'),bg=BG,fg=TEXT).pack(anchor='w')
-        tk.Label(title,text='Deck completo (até 40 cartas) • efeitos ativados só por clique • equipamentos anexados ao monstro • tudo é SIMULAÇÃO, não um patch de PS1.',
+        tk.Label(title,text='Configure um cenário para testar combate, efeitos e bônus nas zonas.',
                  bg=BG,fg=MUTED,wraplength=1180,justify='left').pack(anchor='w',pady=(2,0))
         tabs=ttk.Notebook(self)
         tabs.pack(fill='both',expand=True,padx=16,pady=6)
         self.tab_board=ttk.Frame(tabs)
         self.tab_decks=ttk.Frame(tabs)
+        self.tab_zones=ttk.Frame(tabs)
         tabs.add(self.tab_board,text='Campo e equipamentos')
         tabs.add(self.tab_decks,text='Deck, mão e gatilhos')
+        tabs.add(self.tab_zones,text='Inspecionar zonas')
         self._board_ui()
         self._deck_ui()
+        self._zones_ui()
         self._output_ui()
         if initial_card in self.by_id:
             self.entries[0]['monster'].set(self.by_id[initial_card])
@@ -78,10 +83,12 @@ class AdvancedFieldDialog(tk.Toplevel):
                 ce.pack(side='left',padx=4)
                 face=tk.BooleanVar(value=True)
                 ttk.Checkbutton(row,variable=face,text='↑',command=self.evaluate).pack(side='left')
+                star2=tk.BooleanVar()
+                ttk.Checkbutton(row,variable=star2,text='★2',command=self.evaluate).pack(side='left')
                 info=tk.Label(panel,text='Vazio',bg=SURFACE,fg=MUTED,anchor='w',font=('Segoe UI',9))
                 info.pack(fill='x',padx=(23,0),pady=(0,3))
                 self.entries.append({'side':side,'slot':slot,'monster':monster,
-                                     'equip':equip,'face':face,'label':info})
+                                     'equip':equip,'face':face,'star2':star2,'label':info})
                 cm.bind('<<ComboboxSelected>>',lambda event:self.evaluate())
                 ce.bind('<<ComboboxSelected>>',lambda event:self.evaluate())
         container.columnconfigure(0,weight=1)
@@ -93,8 +100,7 @@ class AdvancedFieldDialog(tk.Toplevel):
         host=tk.Frame(self.tab_decks,bg=BG)
         host.pack(fill='both',expand=True,padx=14,pady=10)
         tk.Label(host,text='CARREGAR DECKS E MÃOS PARA SIMULAÇÃO',bg=BG,fg=TEXT,font=('Segoe UI',12,'bold')).pack(anchor='w')
-        tk.Label(host,text='IDs separados por vírgula. Ex.: 1x3, 16x2, 300 (repetições 1x3 = 3 cópias). '
-                 'Contagem usa o DECK configurado, não somente o monte restante.',
+        tk.Label(host,text='IDs separados por vírgula, como 1x3, 16x2, 300. A compra retira a primeira carta do monte.',
                  bg=BG,fg=MUTED,wraplength=1150,justify='left').pack(anchor='w',pady=(4,10))
         for side,caption in [('jogador','MEU DECK'),('adversario','DECK ADVERSÁRIO')]:
             panel=tk.Frame(host,bg=SURFACE,padx=12,pady=8)
@@ -108,7 +114,8 @@ class AdvancedFieldDialog(tk.Toplevel):
             h=tk.StringVar()
             self.hand_vars[side]=h
             ttk.Entry(panel,textvariable=h,width=28).pack(side='left')
-            self.lp_label[side]=tk.Label(panel,text='LP 8000',bg=SURFACE,fg=TEXT)
+            ttk.Button(panel,text='Comprar',command=lambda sd=side:self._draw(sd)).pack(side='left',padx=5)
+            self.lp_label[side]=tk.Label(panel,bg=SURFACE,fg=TEXT)
             self.lp_label[side].pack(side='left',padx=10)
             d.trace_add('write',lambda *_:self.evaluate())
             h.trace_add('write',lambda *_:self.evaluate())
@@ -172,6 +179,48 @@ class AdvancedFieldDialog(tk.Toplevel):
                             wrap='word',state='disabled',highlightthickness=1,highlightbackground=BORDER)
         self.output.pack(fill='both',expand=True,pady=(5,0))
 
+    def _zones_ui(self):
+        header=ttk.Frame(self.tab_zones)
+        header.pack(fill='x',padx=8,pady=6)
+        self.zone_side=tk.StringVar(value='jogador')
+        self.zone_name=tk.StringVar(value='mao')
+        for variable,values in ((self.zone_side,['jogador','adversario']),
+                                (self.zone_name,['mao','deck','cemiterio'])):
+            ttk.Combobox(header,state='readonly',textvariable=variable,values=values,width=15).pack(side='left',padx=6)
+            variable.trace_add('write',lambda *_:self._refresh_zone())
+        ttk.Button(header,text='LP completos',command=lambda:show_exact(
+            self,'Life Points','\n\n'.join(f'{side}: {self.lab.lp[side]}' for side in self.lp_label))).pack(side='right')
+        host=ttk.Frame(self.tab_zones)
+        host.pack(fill='both',expand=True,padx=8,pady=(0,7))
+        self.zone_view=zone_tree(host)
+        self.zone_view.bind('<Double-1>',lambda _e:self._inspect_zone())
+
+    def _refresh_zone(self):
+        if hasattr(self,'zone_view'):
+            fill_zone(self.zone_view,self.lab,self.zone_side.get(),self.zone_name.get())
+
+    def _inspect_zone(self):
+        selection=self.zone_view.selection()
+        if selection:
+            card=self.lab.effective_card(self.zone_side.get(),int(selection[0]))
+            show_exact(self,card.get('nome') or f'Carta #{card["id"]}',
+                       f'ATK {card["ataque"]}\nDEF {card["defesa"]}')
+
+    def _draw(self, side):
+        try:
+            self._sync()
+            self.lab.draw(side)
+            self._updating=True
+            try:
+                self.deck_vars[side].set(', '.join(map(str,self.lab.decks[side])))
+                self._last_hand[side]=', '.join(map(str,self.lab.hands[side]))
+                self.hand_vars[side].set(self._last_hand[side])
+            finally:
+                self._updating=False
+            self.evaluate()
+        except ModError as exc:
+            messagebox.showerror('Comprar carta',str(exc),parent=self)
+
     def _board(self):
         monsters=[]
         equipments=[]
@@ -182,7 +231,9 @@ class AdvancedFieldDialog(tk.Toplevel):
             if cid is not None:
                 c=self.lab.card(cid)
                 monsters.append({'lado':side,'slot':slot,'card_id':cid,'tipo_id':int(c['tipo_id']),
+                                 'atributo_id':int(c.get('atributo_id',-1)),
                                  'ataque':int(c['ataque']),'defesa':int(c['defesa']),
+                                 'guardian_id':guardian_options(c)[-1 if item['star2'].get() else 0],
                                  'face_up':bool(item['face'].get())})
                 if equip is not None:
                     equipments.append({'lado':side,'slot':slot,'card_id':equip})
@@ -221,12 +272,14 @@ class AdvancedFieldDialog(tk.Toplevel):
             if m['ataques_max']>1: protection.append(f'{m["ataques_max"]} ataques')
             if m.get('ataque_primeiro_turno'): protection.append('ataca no 1º turno')
             self_hp=max(1,int(m['defesa_base']))-self.lab.damage.get((entry['side'],entry['slot'],m['card_id']),0)
-            text=f'ATK {m["ataque"]} ({da:+}) · DEF {m["defesa"]} ({dd:+}) · HP* {self_hp} '
+            text=(f'ATK {compact_number(m["ataque"],10)} ({compact_number(f"{da:+}",9)}) · '
+                  f'DEF {compact_number(m["defesa"],10)} ({compact_number(f"{dd:+}",9)}) · HP* {compact_number(self_hp,9)} ')
             if protection:
                 text+=' · '+','.join(protection).replace('imune_','Imune ')
             entry['label'].configure(text=text,fg=ACCENT if da or dd or protection else MUTED)
         for side in self.lp_label:
-            self.lp_label[side].configure(text=f'LP {self.lab.lp[side]} / mão {len(self.lab.hands[side])}')
+            self.lp_label[side].configure(text=f'LP {compact_number(self.lab.lp[side],15)} / mão {len(self.lab.hands[side])}')
+        self._refresh_zone()
         lines=[f'Bônus / proteções aplicados: {len(events)}.']
         lines.append('Cemitério: '+' | '.join(f'{s}: {len(self.lab.graveyards[s])}' for s in ('jogador','adversario')))
         for event in events[:12]:
@@ -316,7 +369,7 @@ class AdvancedFieldDialog(tk.Toplevel):
 
     def reset_state(self):
         for side in ('jogador','adversario'):
-            self.lab.lp[side]=self.lab.starting_lp
+            self.lab.lp[side]=self.lab.initial_lp[side]
             self._last_hand[side]='__RESET__'
         self.lab.damage.clear()
         self.lab.attacks_used.clear()

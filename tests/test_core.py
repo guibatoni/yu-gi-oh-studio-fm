@@ -100,8 +100,8 @@ class StudioCoreTests(unittest.TestCase):
         self.assertEqual(state[0]['ataque'],big)
         with self.assertRaisesRegex(ModError,'9 bits'):
             self.p.export()
-        with self.assertRaises(ModError):
-            check_card_edit({'ataque':'1'*65})
+        huge='1'*5_000
+        self.assertEqual(str(check_card_edit({'ataque':huge})['ataque']),huge)
         with self.assertRaises(ModError):
             check_card_edit({'defesa':'-10'})
 

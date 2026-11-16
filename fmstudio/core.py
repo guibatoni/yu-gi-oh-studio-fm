@@ -7,10 +7,11 @@ import os
 import re
 import shutil
 import struct
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .tables import (CARD_COUNT, EXE_DELTA, LEVEL_ADDR, STATS_ADDR, decode_all,
+from .tables import (CARD_COUNT, EXE_DELTA, LEVEL_ADDR, STATS_ADDR, SUPREME, decode_all,
                      sha256, TYPE_NAMES, ATTR_NAMES, STAR_NAMES)
 from .disc import DiscReader, DiscError
 from .rarities import DEFAULT_RARITY, validate_rarity, name_style
@@ -34,6 +35,7 @@ ACTIONS = {
     'aura_tipo':'Aura: concede bônus ao tipo (ou todos)',
     'bonus_por_tipo':'Recebe bônus por cartas do tipo no campo',
     'bonus_deck_tipo':'Recebe bônus por cartas do tipo no deck',
+    'bonus_mao_tipo':'Recebe bônus por cartas do tipo na mão',
     'cura_lp_deck_tipo':'Recuperar LP por carta do tipo no deck',
     'dano_lp_deck_tipo':'Causar dano aos LP por carta do tipo no deck',
     'descartar_alvo':'Ao entrar: adversário descarta X cartas',
@@ -111,18 +113,26 @@ def _bounded_int(value, name, low, high, step=1):
     return v
 
 
-# O editor/simulador admite inteiros grandes, mas nunca os converte
-# silenciosamente em campos de 9 bits do PS1.
-STUDIO_MAX_INTEGER_DIGITS = 64
+# The editor loads local project files and uses the same exact decimal
+# representation for entry fields, CSV, JSON and combat logs.
+if hasattr(sys, 'set_int_max_str_digits'):
+    sys.set_int_max_str_digits(0)
+
 PS1_CARD_STAT_MAX = 5110
 
 
 def simulation_nonnegative_int(value, name: str) -> int:
     raw = str(value).strip()
-    if not re.fullmatch(r'[0-9]{1,64}',raw):
-        raise ModError(f'{name}: use inteiro não negativo de até '
-                       f'{STUDIO_MAX_INTEGER_DIGITS} dígitos (somente simulação).')
+    if not raw.isascii() or not raw.isdecimal():
+        raise ModError(f'{name}: informe um inteiro não negativo.')
     return int(raw)
+
+
+def positive_int(value, name: str) -> int:
+    result = simulation_nonnegative_int(value, name)
+    if result == 0:
+        raise ModError(f'{name}: informe um inteiro positivo.')
+    return result
 
 
 def ps1_stat_compatible(value) -> bool:
@@ -133,7 +143,7 @@ def ps1_stat_export_errors(project) -> list[str]:
     errors = []
     for key, fields in sorted(getattr(project,'edits',{}).items(),key=lambda x:int(x[0])):
         cid=int(key)
-        if cid>722 or not (set(fields)&{'ataque','defesa'}):
+        if cid>CARD_COUNT or not (set(fields)&set(NUMERIC)):
             continue
         current=project.get(cid)
         for stat in ('ataque','defesa'):
@@ -183,6 +193,9 @@ def ps1_unwritable_numeric_edits(project) -> list[str]:
                 f'Carta #{cid:03d} {name}: atributo {attr} não é suportado '
                 'na exportação retail PS1.'
             )
+        if any(int(current.get(key, 0)) >= SUPREME for key in ('guardian_1_id', 'guardian_2_id')):
+            errors.append(f'Carta #{cid:03d} {name}: Supreme está disponível no Studio. '
+                          'O campo de 4 bits do BIN/CUE exige uma estrela com ID de 0 a 15.')
     return errors
 
 
@@ -215,7 +228,7 @@ def check_card_edit(row: dict):
         elif key == 'nivel':
             cleaned[key] = _bounded_int(val, key, 0, 15)
         else:
-            cleaned[key] = _bounded_int(val, key, 0, 15)
+            cleaned[key] = _bounded_int(val, key, 0, SUPREME)
     return cleaned
 
 
@@ -238,7 +251,7 @@ def check_effect(entry: dict):
     if action == 'perder_lp_por_ataque':
         if event != 'atacar' or target != 'proprio':
             raise ModError('Perda de LP exige evento "Ao atacar" e alvo próprio')
-        amount = _bounded_int(entry.get('valor'), 'custo de LP por ataque',1,9999)
+        amount = positive_int(entry.get('valor'), 'custo de LP por ataque')
         return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
     if action == 'sem_limite_deck':
         if event != 'regra_deck' or target != 'proprio' or str(entry.get('valor',0)) != '0':
@@ -253,15 +266,15 @@ def check_effect(entry: dict):
         raise ModError('Evento de deck exclusivo das regras de cópias')
     if action == 'bonus_por_carta_id':
         if event != 'continuo' or target != 'proprio':
-            raise ModError('Bônus por carta exige campo e alvo próprio')
-        ref = _bounded_int(entry.get('carta_referencia_id'), 'Carta de referência',1,32766)
-        atk = _bounded_int(entry.get('valor',0),'Bônus de ATK',0,9999)
-        defense = _bounded_int(entry.get('valor_def',0),'Bônus de DEF',0,9999)
+            raise ModError('Bônus por carta exige gatilho contínuo e alvo próprio')
+        ref = positive_int(entry.get('carta_referencia_id'), 'Carta de referência')
+        atk = simulation_nonnegative_int(entry.get('valor',0),'Bônus de ATK')
+        defense = simulation_nonnegative_int(entry.get('valor_def',0),'Bônus de DEF')
         if atk==0 and defense==0:
             raise ModError('Informe bônus de ATK ou DEF')
         source = str(entry.get('origem_contagem','campo'))
-        if source not in ('campo','deck'):
-            raise ModError('Origem precisa ser campo ou deck')
+        if source not in ('campo','deck','mao','cemiterio'):
+            raise ModError('Escolha campo, deck, mão ou cemitério')
         scope = str(entry.get('escopo','aliados'))
         if scope not in SCOPES:
             raise ModError('Escopo inválido')
@@ -274,20 +287,25 @@ def check_effect(entry: dict):
         required = 'aliados_tipo' if action == 'aura_tipo' else 'proprio'
         if target != required:
             raise ModError(f'Efeito contínuo exige alvo: {required}')
-        atk = _bounded_int(entry.get('valor', 0), 'Bônus ATK', 0, 9999)
-        defense = _bounded_int(entry.get('valor_def', 0), 'Bônus DEF', 0, 9999)
+        atk = simulation_nonnegative_int(entry.get('valor', 0), 'Bônus ATK')
+        defense = simulation_nonnegative_int(entry.get('valor_def', 0), 'Bônus DEF')
         if atk == 0 and defense == 0:
             raise ModError('Bônus contínuo precisa aumentar ATK ou DEF')
         typ = _bounded_int(entry.get('tipo_id', -1), 'Tipo (-1 para todos)', -1, 24)
         scope = str(entry.get('escopo','aliados'))
         if scope not in SCOPES:
             raise ModError('Escopo inválido')
-        return {'evento':event,'acao':action,'alvo':target,'valor':atk,
-                'valor_def':defense,'tipo_id':typ,'escopo':scope,'observacao':note}
+        result = {'evento':event,'acao':action,'alvo':target,'valor':atk,
+                  'valor_def':defense,'tipo_id':typ,'escopo':scope,'observacao':note}
+        if action in ('bonus_deck_tipo', 'bonus_cemiterio_tipo', 'bonus_mao_tipo'):
+            attribute = _bounded_int(entry.get('atributo_id', -1), 'Atributo', -1, 15)
+            if attribute >= 0:
+                result['atributo_id'] = attribute
+        return result
     if action in EQUIPMENT_ACTIONS:
         if event != 'equipado' or target != 'monstro_equipado':
             raise ModError('Equipamentos exigem gatilho "Enquanto equipado" e alvo equipado')
-        amount = _bounded_int(entry.get('valor',0), 'ATK do equipamento', 0, 9999)
+        amount = simulation_nonnegative_int(entry.get('valor',0), 'ATK do equipamento')
         if action == 'equip_atk' and amount == 0:
             raise ModError('Equipamento de ATK requer valor maior que zero')
         if action != 'equip_atk' and amount:
@@ -302,15 +320,15 @@ def check_effect(entry: dict):
                    'descartar_alvo':'inimigo','dano_monstro_alvo':'monstro_alvo'}[action]
         if target != correct:
             raise ModError('Alvo incompatível com o efeito selecionado')
-        limit = 5 if action == 'descartar_alvo' else 9999
-        amount = _bounded_int(entry.get('valor'), 'valor do efeito', 1, limit)
+        amount = (_bounded_int(entry.get('valor'), 'cartas descartadas', 1, 5)
+                  if action == 'descartar_alvo' else positive_int(entry.get('valor'), 'valor do efeito'))
         item = {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
         if action in DECK_ACTIONS:
             item['tipo_id'] = _bounded_int(entry.get('tipo_id',-1),'Tipo do deck',-1,24)
         return item
     if target in ('aliados_tipo','monstro_alvo','monstro_equipado'):
         raise ModError('Alvo não permitido para efeito comum')
-    amount = _bounded_int(entry.get('valor'), 'valor do efeito', 1, 9999)
+    amount = positive_int(entry.get('valor'), 'valor do efeito')
     return {'evento':event, 'acao':action, 'alvo':target, 'valor':amount,'observacao':note}
 
 
@@ -372,17 +390,18 @@ class Project:
 
     def _load_base(self):
         file = self.folder / 'base' / 'cartas.csv'
+        self.cards = {}
         if file.is_file():
-            self.cards = {}
             for row in _read_csv(file):
-                cid = _bounded_int(row.get('id'), 'ID da carta', 1, CARD_COUNT)
+                cid = positive_int(row.get('id'), 'ID da carta')
                 if cid in self.cards:
                     raise ModError(f'Carta repetida: {cid}')
                 self.cards[cid] = row
         fusions = self.folder / 'base' / 'fusoes.csv'
         for key, card in self.new_cards.items():
-            cid = _bounded_int(key, 'ID da nova carta', CARD_COUNT+1, 32766)
-            if cid in self.cards: raise ModError(f'ID duplicado: {cid}')
+            cid = positive_int(key, 'ID da nova carta')
+            if cid <= CARD_COUNT or cid in self.cards:
+                raise ModError(f'ID de carta adicional inválido ou duplicado: {cid}')
             self.cards[cid] = dict(card)
         self.fusions = _read_csv(fusions) if fusions.exists() else []
         meta = self.folder / 'base' / 'resumo.json'
@@ -393,9 +412,9 @@ class Project:
         if not (source / 'cartas.csv').is_file() or not (source / 'fusoes.csv').is_file():
             raise ModError('Selecione a pasta com cartas.csv E fusoes.csv (ex.: analysis\\tabelas)')
         rows = _read_csv(source / 'cartas.csv')
-        ids = [int(row['id']) for row in rows]
-        if len(ids) != CARD_COUNT or len(set(ids)) != CARD_COUNT or set(ids) != set(range(1, CARD_COUNT+1)):
-            raise ModError('A base deve conter exatamente 722 IDs de cartas únicos (1–722)')
+        ids = [positive_int(row.get('id'), 'ID da carta') for row in rows]
+        if len(set(ids)) != len(ids) or not set(range(1, CARD_COUNT+1)).issubset(ids):
+            raise ModError('A base deve conter os IDs originais 1–722 e IDs adicionais únicos.')
         if self.cards and (self.edits or self.effects):
             raise ModError('Projeto já editado: crie outro projeto para trocar a base')
         base = self.folder / 'base'
@@ -403,7 +422,8 @@ class Project:
         stale_exe = base / 'source_SLUS_014.11'
         if stale_exe.is_file():
             stale_exe.unlink()
-        for name in ('cartas.csv','fusoes.csv','equipamentos.csv','rituais.csv','decks_drops.csv','resumo_duelistas.csv','senhas.csv','resumo.json'):
+        for name in ('cartas.csv','fusoes.csv','equipamentos.csv','rituais.csv','decks_drops.csv',
+                     'resumo_duelistas.csv','decks_iniciais.csv','senhas.csv','resumo.json'):
             f = source / name
             if f.is_file() and f.resolve() != (base / name).resolve():
                 shutil.copy2(f, base / name)
@@ -481,7 +501,7 @@ class Project:
         if self.cards:
             from .tables import decode_cards
             checked,_=decode_cards(slus)
-            if len(checked)!=len(self.cards):
+            if len(checked)!=sum(cid <= CARD_COUNT for cid in self.cards):
                 raise ModError('O SLUS selecionado possui quantidade de cartas diferente do projeto')
             for item in checked:
                 existing=self.cards[item['id']]
@@ -524,6 +544,8 @@ class Project:
                     raise ModError('WA_MRG.MRG da imagem diverge das fusões originais do projeto. '
                                    'Importação bloqueada para evitar misturar MODs.')
         if progress:progress('Decodificando nomes, descrições, diálogos e demais textos...')
+        from .tables import decode_starters
+        _write_csv(self.folder/'base'/'decks_iniciais.csv', decode_starters(wa))
         results,warnings=extract_texts(slus)
         base=self.folder/'base'
         staging=base/'_extracao_em_andamento'
@@ -643,19 +665,26 @@ class Project:
         base.update(self.edits.get(str(cid),{}))
         return base
 
-    def add_card(self, copy_from: int, *, name: str | None = None) -> int:
-        """Cria carta virtual acima de 722; NUNCA altera tabelas do SLUS original."""
-        if copy_from not in self.cards:
+    def add_card(self, copy_from: int | None = None, *, name: str | None = None,
+                 type_id: int | None = None, card_id: int | None = None) -> int:
+        """Cria uma carta Studio a partir de um modelo ou em branco."""
+        if copy_from is not None and copy_from not in self.cards:
             raise ModError('Escolha uma carta válida para servir como modelo.')
-        cid = max([CARD_COUNT] + list(self.cards)) + 1
-        if cid > 32766:
-            raise ModError('Limite de ID do projeto (32766) atingido')
-        source = self.get(copy_from)
-        card = dict(source)
-        card.update({'id':cid, 'nome':name or f'Nova carta {cid}',
-                     'descricao':'', 'cor_nome':DEFAULT_NAME_COLOR,
-                     'raridade':DEFAULT_RARITY,
-                     'modelo_base_id': int(copy_from), 'virtual':True})
+        cid = CARD_COUNT + 1
+        if card_id is None:
+            while cid in self.cards:
+                cid += 1
+        else:
+            cid = positive_int(card_id, 'ID da nova carta')
+            if cid <= CARD_COUNT or cid in self.cards:
+                raise ModError(f'Escolha um ID livre acima de {CARD_COUNT}.')
+        card = self.get(copy_from) if copy_from is not None else dict.fromkeys(NUMERIC, 0)
+        if type_id is not None:
+            card['tipo_id'] = type_id
+        card.update(check_card_edit({'nome':name or f'Nova carta {cid}'[:100], 'descricao':'',
+                                     'cor_nome':DEFAULT_NAME_COLOR, 'raridade':DEFAULT_RARITY,
+                                     **{key: card[key] for key in NUMERIC}}))
+        card.update({'id':cid, 'modelo_base_id':copy_from, 'virtual':True})
         self.cards[cid] = card
         self.new_cards[str(cid)] = card
         try:
@@ -757,9 +786,11 @@ class Project:
         if event not in EVENTS or event == 'continuo':
             raise ModError('Para efeitos contínuos, utilize o simulador de campo')
         stats = card_override if card_override is not None else self.get(cid)
+        lp = simulation_nonnegative_int(self.metadata.get('edicao_mod', {}).get(
+            'lp_jogador', self.metadata.get('studio_initial_lp', 8000)), 'LP inicial')
         state = {'ataque':int(stats['ataque']), 'defesa':int(stats['defesa']),
                  'ataque_adversario':1800, 'defesa_adversario':1500,
-                 'lp_jogador':8000,'lp_adversario':8000}
+                 'lp_jogador':lp,'lp_adversario':8000}
         applied = []
         for eff in (effects_override if effects_override is not None else self.effects.get(str(cid), [])):
             if eff['evento'] != event:
@@ -806,8 +837,14 @@ class Project:
             for eff in arr:
                 if eff.get('acao') == 'bonus_por_carta_id' and int(eff.get('carta_referencia_id',0)) not in self.cards:
                     issues.append(f'Carta {cid}: referência #{eff.get("carta_referencia_id")} ausente')
+        if 'edicao_mod' in self.metadata:
+            from .mod_data import normalize_rules
+            try:
+                normalize_rules(self.metadata['edicao_mod'], {cid: self.get(cid) for cid in self.cards})
+            except (ModError, KeyError, TypeError, AttributeError) as exc:
+                issues.append(f'Edição do Mod: {exc}')
         orig_fusions = self.folder/'base'/'fusoes.csv'
-        if self.cards and not orig_fusions.exists():
+        if any(cid <= CARD_COUNT for cid in self.cards) and not orig_fusions.exists():
             issues.append('Faltam as fusões da base. Importação incompleta!')
         if orig_fusions.exists() and self.metadata.get('base_sha256',{}).get('fusoes') != sha256(orig_fusions):
             issues.append('Arquivo de fusões originais alterado externamente!')
@@ -816,18 +853,18 @@ class Project:
             issues.append('Arquivo-base de cartas alterado externamente!')
         return issues
 
-    def export(self):
+    def export(self, *, include_ps1: bool = True):
         issues = self.validate()
         if issues:
             raise ModError('Exportação bloqueada:\n'+'\n'.join(issues[:12]))
         # Não gere BIN incompleto quando a classe/tipo inviabiliza o patch.
-        incompatible=ps1_unwritable_numeric_edits(self)
+        incompatible=ps1_unwritable_numeric_edits(self) if include_ps1 else []
         if incompatible:
             raise ModError('Exportação PS1 bloqueada para evitar perda de '
                            'ATK/DEF ou classificação da carta.\n'
                            +'\n'.join(incompatible[:10]))
         # Não exporte dados truncados pelo campo PS1 de nove bits.
-        oversized=ps1_stat_export_errors(self)
+        oversized=ps1_stat_export_errors(self) if include_ps1 else []
         if oversized:
             raise ModError('Exportação PS1 bloqueada: ATK/DEF de 9 bits. '
                            'Os valores altos continuam salvos e funcionam no simulador.\n'
@@ -845,17 +882,18 @@ class Project:
                        'cor_nome': name_style(self.get(cid))[1]}
             for cid in sorted(self.cards)
         })
-        _write_json_atomic(output/'novas_cartas.json',
-                           {'status':'EDITOR_APENAS_SEM_SUPORTE_PS1', 'cartas':{str(k):self.get(int(k)) for k in self.new_cards}})
+        _write_json_atomic(output/'novas_cartas.json', {
+            'status':'EDITOR_APENAS_SEM_SUPORTE_PS1',
+            'cartas':{str(cid):self.get(cid) for cid in self.cards if cid > CARD_COUNT}})
         from .richtext import native_text_only
         from .expanded import resolve_references
         textual={}
-        for cid in sorted(self.cards):
-            card=self.get(cid)
+        catalog = {cid:self.get(cid) for cid in sorted(self.cards)}
+        for cid, card in catalog.items():
             desc=card.get('descricao','')
             if desc:
                 compiled, warnings=native_text_only(desc)
-                textual[str(cid)]={'descricao_resolvida':resolve_references(compiled,{k:self.get(k) for k in self.cards}),
+                textual[str(cid)]={'descricao_resolvida':resolve_references(compiled,catalog),
                                    'avisos':warnings}
         _write_json_atomic(output/'textos_e_codigos.json',{'status':'METADADOS_SEM_PATCH_BIN', 'cartas':textual})
         _write_json_atomic(output/'efeitos_planejados.json',
@@ -871,8 +909,11 @@ class Project:
                     'tipo_god_status':('TIPO_24_GRAVADO_EXPERIMENTAL_NAO_VALIDADO_EPSXE'
                                        if any(god24_experiment_enabled(self,int(k))
                                               for k in self.edits) else 'EDITOR_ONLY')}
+        if 'edicao_mod' in self.metadata:
+            _write_json_atomic(output/'edicao_mod.json', self.metadata['edicao_mod'])
+            manifest['arquivos'].append('edicao_mod.json')
         source = self.folder/'base'/'source_SLUS_014.11'
-        if source.exists() and any(row['id'] <= CARD_COUNT and any(k in NUMERIC for k in row) for row in changes):
+        if include_ps1 and source.exists() and any(row['id'] <= CARD_COUNT and any(k in NUMERIC for k in row) for row in changes):
             data = bytearray(source.read_bytes())
             if hashlib.sha256(data).hexdigest() != self.metadata.get('base_sha256',{}).get('slus'):
                 raise ModError('Executável original diverge do hash salvo; exportação bloqueada')
