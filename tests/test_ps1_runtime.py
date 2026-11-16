@@ -11,7 +11,7 @@ from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_spr
 from fmstudio.ps1_runtime import (
     CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, NAME_COLOR_CONFIG, RUNTIME_EXT_BASE,
     RUNTIME_MOD_BASE, SUMMON_DAMAGE,
-    _jump, _option_calls, _rule_patches, compile_effects, install_runtime, verify_effects,
+    _jump, _option_calls, _rule_patches, _valid_original_drop_entry, compile_effects, install_runtime, verify_effects,
 )
 from fmstudio.ps1_text import ICON_CODES, patch_descriptions
 from test_ps1_content import sample_exe, where
@@ -131,6 +131,10 @@ class TestNativeRules(unittest.TestCase):
         self.assertEqual(len(unsupported.pending), 3)
 
 
+    def test_drop_gateway_accepts_an_absolute_jump_and_rejects_relative_branch(self):
+        self.assertTrue(_valid_original_drop_entry(struct.pack('<II', _jump(0x80023F00), 0x24420001)))
+        self.assertFalse(_valid_original_drop_entry(struct.pack('<II', 0x10400017, 0)))
+
     def test_fixed_deck_and_name_colors_verify_exact_bytes(self):
         self.project.effects = {}
         self.project.cards = {
@@ -153,9 +157,10 @@ class TestNativeRules(unittest.TestCase):
         source = bytearray(sample_exe())
         for pc, old, _ in _rule_patches(plan):
             struct.pack_into(f'<{len(old)}I', source, where(pc), *old)
-        for pc, _, target, _ in _option_calls(plan):
-            struct.pack_into('<I', source, where(pc), _jump(target, link=True))
-            struct.pack_into('<I', source, where(pc + 8), _jump(target, link=True))
+        for index, (pc, _, target, _) in enumerate(_option_calls(plan)):
+            location = pc + index * 16
+            struct.pack_into('<I', source, where(location), _jump(target, link=True))
+            struct.pack_into('<I', source, where(location + 8), _jump(target, link=True))
         struct.pack_into('<II', source, where(DROP_ENTRY), 0x27BDFFF0, 0xAFBF000C)
         original = bytes(source)
         with patch('fmstudio.ps1_runtime.SOURCE_SHA256', hashlib.sha256(original).hexdigest()):

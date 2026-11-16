@@ -321,11 +321,13 @@ def _call_sites(exe, start, end, target):
 
 
 def _valid_original_drop_entry(raw):
-    """The trampoline can execute ordinary instructions, without relocating branches."""
+    """Allow ordinary displaced instructions or a same-region jump with its delay slot."""
     if len(raw) != 8:
         return False
-    for word in struct.unpack('<II', raw):
+    for index, word in enumerate(struct.unpack('<II', raw)):
         opcode = word >> 26
+        if index == 0 and opcode == 2:
+            continue
         if opcode == 0 and (word & 63) in (0, 2, 3, 4, 6, 7, 0x21, 0x23, 0x24, 0x25, 0x26, 0x2A, 0x2B):
             continue
         if opcode not in (8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 35, 36, 37, 40, 41, 43):

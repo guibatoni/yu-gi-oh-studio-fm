@@ -35,8 +35,8 @@ plan = compile_effects(project, True, fixed_decks=mod.fixed_decks)
 source = bytearray(0x1D0000)
 for pc, old, _ in _rule_patches(plan):
     struct.pack_into(f'<{len(old)}I', source, pc-EXE_DELTA, *old)
-for pc, _, target, _ in _option_calls(plan):
-    struct.pack_into('<I', source, pc-EXE_DELTA, _jump(target, link=True))
+for index, (pc, _, target, _) in enumerate(_option_calls(plan)):
+    struct.pack_into('<I', source, pc + index * 16 - EXE_DELTA, _jump(target, link=True))
 # Chosen instructions let us observe that the stock fallback executes the displaced pair.
 struct.pack_into('<II', source, DROP_ENTRY-EXE_DELTA, 0x24820060, 0x24420007)
 original = bytes(source)
