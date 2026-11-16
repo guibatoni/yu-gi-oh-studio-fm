@@ -41,12 +41,15 @@ def audit_god24_build_deck_rows(exe: bytes) -> dict:
     um MOD pode modificar seus bytes.
     """
     from .tables import EXE_DELTA
+    from .ps1_god24_row_patch import inspect as inspect_row_patch
+    row_patch=inspect_row_patch(exe)
     report={
         'status':'nao_examinado',
         'funcao':'func_80031874',
+        'god24_patch_lista':row_patch,
         'endereco_ram':f'0x{BUILD_DECK_ROW_RENDER_RAM:08X}',
         'tamanho_funcao':BUILD_DECK_ROW_RENDER_SIZE,
-        'patch_mips_nesta_funcao_aplicado':False,
+        'patch_mips_nesta_funcao_aplicado':row_patch['status']=='aplicado_3_de_3',
         'v1415_mascaras_nao_cobrem_esta_funcao':True,
         'potenciais_comparacoes_tipo_20':[],
         'aviso':'O jogo desenha ATK/DEF da lista com row[2] < 20. '
@@ -111,7 +114,9 @@ def audit_god24_build_deck_rows(exe: bytes) -> dict:
             'status':'candidato_requer_rastreamento_de_registradores'
         })
     report['total_comparacoes_imediato_20']=count
-    report['status']='analisado_sem_hook' if count else 'sem_comparacao_20_localizada'
+    report['status']=('patch_lista_3_de_3_pendente_epsxe'
+                      if row_patch['status']=='aplicado_3_de_3' else
+                      'analisado_sem_hook' if count else 'sem_comparacao_20_localizada')
     report['proxima_validacao']='Rastrear o LBU row[2] e o branch após '
     report['proxima_validacao']+='a comparação; instalar condição tipo<20 '
     report['proxima_validacao']+='OU tipo==24 sem incluir 20–23.'

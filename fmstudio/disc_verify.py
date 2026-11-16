@@ -126,6 +126,12 @@ def describe(result):
         text.append('  '+status['status']+' ('+str(status['total_aplicados'])+'/2)')
         rows=result['god24_renderizador_lista_bau']
         text.append('  RENDERIZADOR REAL DAS LINHAS: func_80031874 — '+rows['status'])
+        row_test=rows.get('god24_patch_lista',{})
+        text.append('  PATCH DA LISTA DE OITO LINHAS: '+
+                    row_test.get('status','indisponível'))
+        for item in row_test.get('instrucoes',[]):
+            text.append('    '+item['offset_slus']+' = '+
+                        item['encontrado']+' ('+item['estado']+')')
         text.append('  Comparações tipo<20 nesta rotina: '+
                     str(rows.get('total_comparacoes_imediato_20','indisponível')))
         for candidate in rows['potenciais_comparacoes_tipo_20'][:3]:
@@ -140,8 +146,12 @@ def describe(result):
             text.append(f"  Carta #{tw['id']:03d}: tipo {tw['tipo_id']}, "
                         f"ATK {tw['ataque']}, DEF {tw['defesa']}")
         if status['status']=='aplicado_2_de_2':
-            text.append('  As duas máscaras NÃO modificam func_80031874, '
-                        'que desenha a lista atual do baú.')
+            if row_test.get('status')=='aplicado_3_de_3':
+                text.append('  2/2 máscaras e 3/3 opcodes confirmados no BIN. '
+                            'Verifique os atributos no ePSXe.')
+            else:
+                text.append('  As duas máscaras não alteram func_80031874. '
+                            'Aplique o patch da lista e gere outro BIN.')
             text.append('  As máscaras estão no BIN. Se ATK/DEF continuam '
                         'ocultos no ePSXe, confirme o BIN aberto e verifique '
                         'outros caminhos de desenho.')

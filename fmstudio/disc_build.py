@@ -317,8 +317,12 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             raise ModError('God24 baú: tipo 24 não está autorizado para teste.')
         types=(int(project.get(cid)['tipo_id']) for cid in project.cards
                if type(cid) is int and 1<=cid<=722)
+        kinds=list(types)
         patched_exe,god_chest_report=patch_god24_chest_preview(
-            original_exe,patched_exe,types)
+            original_exe,patched_exe,kinds)
+        from .ps1_god24_row_patch import apply as patch_real_list
+        patched_exe,row_report=patch_real_list(original_exe,patched_exe,kinds)
+        god_chest_report['renderizador_lista_bau']=row_report
 
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
@@ -423,10 +427,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             if checked['divergentes']:
                 raise ModError('BIN de teste diverge dos atributos do projeto. '
                                'A cópia anterior foi preservada.')
-            if (metadata.get('ps1_god_chest_preview',False)
-                    and checked['god24_mascaras_bau']['status']!='aplicado_2_de_2'):
-                raise ModError('God24: as duas máscaras não foram confirmadas '
-                               'na imagem reempacotada. BIN anterior preservado.')
+            if metadata.get('ps1_god_chest_preview',False):
+                if (checked['god24_mascaras_bau']['status']!='aplicado_2_de_2'
+                        or checked['god24_renderizador_lista_bau']
+                        ['god24_patch_lista']['status']!='aplicado_3_de_3'):
+                    raise ModError('God24: falta confirmação de 2/2 máscaras ou '
+                                   '3/3 opcodes do renderizador no BIN final. '
+                                   'A cópia anterior foi preservada.')
             checked['imagem']=str(bin_file)
             result['verificacao_atributos']=checked
         stage_meta.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')

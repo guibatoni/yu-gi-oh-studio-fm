@@ -1,3 +1,14 @@
+## v1.4.18 — Patch experimental do renderizador verdadeiro do baú
+
+- Função func_80031874 corrigida na cópia BIN: três instruções MIPS.
+- Offset 0x222F8: LBU do tipo em $at; 0x22304: ANDI $at,0x17;
+  0x2230C: SLTIU $v0,$at,20.
+- Load delays, SH do sprite, branch e delay slot preservados.
+- 0–23 classificados como no PS1 original; 24 ganha teste visual.
+- Tipos 25–31 bloqueados; assinatura exata dos 11 opcodes obrigatória.
+- Verificador do BIN informa readback 3/3 além das máscaras anteriores 2/2.
+- Sem alteração de ícone, invocação ou combate; ePSXe pendente.
+
 ## v1.4.17 — Alvo real de ATK/DEF do baú
 
 - \`func_80031874\` confirmado no decompilador PS1 como renderizador

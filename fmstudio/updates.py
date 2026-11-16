@@ -40,7 +40,7 @@ SOURCE_FILES = frozenset({
     'assets/icons/nao_bloqueavel.png', 'assets/icons/infinito.png', 'assets/icons/anti_trap.png',
     'assets/icons/anti_magia.png', 'assets/icons/indestrutivel.png', 'assets/icons/god.png',
     'assets/icons/atlas_16x16.png', 'assets/icons/ataque_primeiro_turno.png',
-    'fmstudio/disc_build.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'fmstudio/ps1_god_icon.py', 'fmstudio/ps1_god24_hook.py', 'fmstudio/ps1_god24_chest.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
+    'fmstudio/disc_build.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'fmstudio/ps1_god_icon.py', 'fmstudio/ps1_god24_hook.py', 'fmstudio/ps1_god24_chest.py', 'fmstudio/ps1_god24_row_patch.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
     'fmstudio/disc.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_effects_lab.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
     'fmstudio/gui.py', 'fmstudio/updates.py',
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
@@ -56,7 +56,7 @@ SOURCE_REQUIRED = frozenset({
     'assets/icons/nao_bloqueavel.png', 'assets/icons/infinito.png', 'assets/icons/anti_trap.png',
     'assets/icons/anti_magia.png', 'assets/icons/indestrutivel.png', 'assets/icons/god.png',
     'assets/icons/atlas_16x16.png', 'assets/icons/ataque_primeiro_turno.png',
-    'fmstudio/disc_build.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_god_icon.py', 'fmstudio/ps1_god24_hook.py', 'fmstudio/ps1_god24_chest.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_effects_lab.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
+    'fmstudio/disc_build.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_god_icon.py', 'fmstudio/ps1_god24_hook.py', 'fmstudio/ps1_god24_chest.py', 'fmstudio/ps1_god24_row_patch.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_effects_lab.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/updates.py', 'INICIAR_FM_MOD_STUDIO.bat',
 })
 MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
 MAX_FILE_BYTES = 200 * 1024 * 1024

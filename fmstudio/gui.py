@@ -1249,7 +1249,7 @@ class Studio(tk.Tk):
         return True
 
     def toggle_god24_chest_preview(self):
-        """Ativa explicitamente duas máscaras MIPS de apresentação do baú."""
+        """Ativa duas máscaras e três opcodes do renderizador da lista."""
         if not self._ready_native_effect() or not self.selected_id:
             return
         self._stage_current()
@@ -1277,8 +1277,8 @@ class Studio(tk.Tk):
                         'Não é seguro ativar a máscara.',parent=self)
                     return
         if not messagebox.askyesno('God24 no baú — teste MIPS',
-            'Testar a exibição de ATK/DEF God24 modificando SOMENTE duas '
-            'máscaras da cópia SLUS?\n\n'
+            'Testar ATK/DEF God24 com duas máscaras e três instruções '
+            'no renderizador da lista (func_80031874)?\n\n'
             'Tipos 0–23 preservados; sem alteração nos combates, na '
             'invocação ou no ícone. O funcionamento no ePSXe ainda precisa '
             'ser confirmado. Somente o SLUS original do seu mod será aceito. '
@@ -2256,7 +2256,7 @@ class Studio(tk.Tk):
                 'God24 — patch do baú desativado',
                 f'A carta #{god_cid:03d} tem tipo God24, mas o teste '
                 'de ATK/DEF no baú está DESATIVADO.\n\n'
-                'SIM: aplicar duas máscaras MIPS experimentais à cópia BIN/CUE.\n'
+                'SIM: aplicar duas máscaras e o patch da lista à cópia BIN/CUE.\n'
                 'NÃO: gerar sem o patch (ATK/DEF podem continuar em branco).\n'
                 'CANCELAR: não gerar.\n\n'
                 'O ícone Deus, a invocação e o combate continuam pendentes.',
@@ -2316,7 +2316,7 @@ class Studio(tk.Tk):
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
-            f'God24 ATK/DEF BAÚ: {"2 máscaras aplicadas" if manifest.get("teste_god24_atk_def_bau") else "DESATIVADO"}.\n'
+            f'God24 ATK/DEF BAÚ: {"2 máscaras + 3 opcodes da lista" if manifest.get("teste_god24_atk_def_bau") else "DESATIVADO"}.\n'
             f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             f'Método: {manifest.get("estrategia_equip_ps1","não aplicado")}.\n'
             f'Rituais: {len(manifest.get("rituais_ps1_aplicados",[]))}; '
@@ -2397,7 +2397,9 @@ class Studio(tk.Tk):
                                    encoding='utf-8')
             info = describe(report) + f'\n\nRelatório: {destination}'
             god24_unpatched=bool(report.get('god24_total_cartas_no_bin')) and (
-                report['god24_mascaras_bau']['status']!='aplicado_2_de_2')
+                report['god24_mascaras_bau']['status']!='aplicado_2_de_2'
+                or report['god24_renderizador_lista_bau']['god24_patch_lista']
+                ['status']!='aplicado_3_de_3')
             if report['divergentes'] or god24_unpatched:
                 messagebox.showwarning('BIN/CUE: God24 não verificado',info,parent=self)
             else:

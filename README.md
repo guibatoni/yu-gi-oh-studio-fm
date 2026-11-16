@@ -1,3 +1,28 @@
+# Studio FM v1.4.18 — God24 na lista real do baú (teste experimental)
+
+O diagnóstico do usuário confirmou que as duas máscaras antigas estavam
+presentes no BIN, mas a função func_80031874 ainda escondia ATK/DEF do
+Time Wizard tipo 24. A opção de teste do baú agora inclui um patch de
+três instruções nessa rotina, nos offsets 0x222F8, 0x22304 e 0x2230C.
+
+A sequência usa o registrador temporário $at e respeita o load delay
+do processador MIPS R3000A. Mantém o store de posição do sprite,
+branch e branch delay inalterados. O resultado lógico deve mostrar
+ATK/DEF dos tipos 0–19 e 24, sem mudar a classificação dos tipos 20–23.
+Tipos 25–31 continuam proibidos neste experimento.
+
+O patch exige SHA-256 idêntico ao SLUS importado e sequência exata
+de 11 opcodes; modifica apenas três palavras no executável copiado.
+O BIN é relido antes de substituir a última imagem: exige as duas
+máscaras originais e as três instruções novas. O verificador informa
+aplicado_3_de_3, ausente, parcial ou divergente.
+
+ATENÇÃO: não é validação no ePSXe. É um patch experimental da tela
+do baú, sem ícone próprio e sem mudanças nas regras de invocação,
+fusões ou combate. A imagem original permanece intacta.
+
+---
+
 # Studio FM v1.4.17 — Investigar renderizador REAL do baú
 
 Após as capturas de God24 sem ATK/DEF, identificamos a causa da
