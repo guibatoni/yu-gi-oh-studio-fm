@@ -503,7 +503,8 @@ class Studio(tk.Tk):
         self.preview.create_rectangle(22,64,236,202,fill='#111928',outline='#796d59')
         self.art_placeholder = self.preview.create_text(129,134,text='ARTE DA CARTA\n(NÃO IMPORTADA)',fill='#7589a9',font=('Segoe UI',10),justify='center')
         self.art_image = self.preview.create_image(129,134,image=None)
-        self.preview_type=self.preview.create_text(128,222,text='TIPO • ATRIBUTO',fill=TEXT,font=('Segoe UI',9))
+        self.preview_type=self.preview.create_text(140,222,text='TIPO • ATRIBUTO',fill=TEXT,font=('Segoe UI',9))
+        self.preview_god_icon=self.preview.create_image(38,221,image=None,state='hidden')
         self.preview_stats=self.preview.create_text(128,274,text='ATK: —   DEF: —',fill=TEXT,font=('Segoe UI',12,'bold'))
         form=tk.Frame(top,bg=BG)
         form.pack(side='left',fill='both',expand=True)
@@ -522,6 +523,7 @@ class Studio(tk.Tk):
         self._form_entry(left,'Defesa (múltiplos de 10)','defesa',2)
         self._form_entry(left,'Tipo','tipo_id',3,kind='type')
         ttk.Button(left,text='Escolher tipo jogável (PS1)',command=self.choose_playable_monster_type).grid(row=8,column=0,sticky='w',pady=(5,2))
+        ttk.Button(left,text='Teste no BIN: símbolo Deus',command=self.toggle_god_icon_ps1).grid(row=11,column=0,sticky='w',pady=(6,2))
         ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
         self.card_type_warning=ttk.Label(left,text='',wraplength=330)
         self.card_type_warning.grid(row=10,column=0,sticky='w',pady=(1,6))
@@ -1027,6 +1029,10 @@ class Studio(tk.Tk):
         self.class_caption.configure(text=f'Classe: {label}  •  {color}',fg=MUTED)
         # O azul-marinho não fica legível no fundo escuro do cartão.
         self.preview.itemconfigure(self.preview_name_plate,state='normal' if kind=='deus' else 'hidden')
+        god_image=self.get_icon_image('god') if kind=='deus' else None
+        self.preview.itemconfigure(self.preview_god_icon,
+            image=god_image if god_image else '',
+            state='normal' if god_image else 'hidden')
         self.preview.itemconfigure(self.preview_name,
             text=(self.vars['nome'].get() or format_id(self.selected_id))[:42].upper(),fill=color)
         self.rarity_combo.configure(state='disabled' if kind in ('trap','magica','equip') or
@@ -1237,6 +1243,55 @@ class Studio(tk.Tk):
         self._update_pending_label()
         self._update_status(f'Projeto salvo! {count} carta(s) alterada(s), com backup do projeto.json.')
         return True
+
+    def toggle_god_icon_ps1(self):
+        """Opt-in para glifo Deus de texto em uma cópia de BIN, não tipo 24."""
+        if not self._ready_native_effect() or not self.selected_id:
+            return
+        cid=int(self.selected_id)
+        current=self.project.metadata.get('ps1_god_icon_test_card_id')
+        if current==cid:
+            if not messagebox.askyesno(
+                    'Desativar teste de ícone Deus',
+                    'Desativar teste visual do símbolo Deus no próximo BIN/CUE? '
+                    'Não altera o último disco já gerado.', parent=self):
+                return
+            self.project.metadata.pop('ps1_god_icon_test_card_id',None)
+            self.project.save()
+            self._refresh_project()
+            self._update_status('Teste de símbolo Deus desativado.')
+            return
+        if not 1 <= cid <= 722:
+            messagebox.showerror('Ícone Deus','Escolha uma carta original #001–#722.',parent=self)
+            return
+        card=self.project.get(cid)
+        if not 0 <= int(card['tipo_id']) < 20:
+            messagebox.showwarning(
+                'Tipo God 24 ainda não é jogável no PS1',
+                'Para testar só o símbolo visual, escolha qualquer tipo de '
+                'monstro PS1 (00–19) para esta carta e salve. '
+                'O tipo God 24 precisa de mudanças adicionais no motor.',
+                parent=self)
+            return
+        if not messagebox.askyesno(
+                'Teste real do símbolo Deus no ePSXe',
+                f'Adicionar um símbolo Deus 16x16 ao texto da carta #{cid:03d} '
+                'no próximo BIN/CUE de teste?\n\n'
+                'Apenas a cópia de teste terá os 3 PRIMEIROS CARACTERES da '
+                'descrição substituídos pelo símbolo. O projeto, a descrição '
+                'original e o BIN fonte continuam intactos.\n\n'
+                'O símbolo aparecerá na descrição da carta para testar a '
+                'fonte nativa. NÃO substituirá o ícone de tipo na interface '
+                'nem implementará o tipo God 24.\n\n'
+                'A imagem só será gerada se o slot gráfico estiver vazio e '
+                'o código for compatível. Continuar?', parent=self):
+            return
+        self.project.metadata['ps1_god_icon_test_card_id']=cid
+        self.project.save()
+        self._refresh_project()
+        self._update_status(
+            f'Ícone Deus nativo configurado para teste visual na carta #{cid:03d}. '
+            'Gere BIN/CUE para validar no ePSXe.')
 
     def choose_playable_monster_type(self):
         """Permite trocar o tipo de QUALQUER monstro sem reverter o Time Wizard."""
@@ -1978,6 +2033,7 @@ class Studio(tk.Tk):
                 f'Limiar Trap PS1: {len(pr.metadata.get("ps1_trap_thresholds",{}))}\n'
                 f'Bônus terreno PS1: {len(pr.metadata.get("ps1_terrain_boosts",{}))}\n'
                 f'Limite global deck MIPS: {pr.metadata.get("ps1_deck_global_limit",3)} cópias\n'
+                f'Ícone Deus no BIN (teste no texto): {pr.metadata.get("ps1_god_icon_test_card_id","desativado")}\n'
                 f'Artes PNG vinculadas: {len(pr.arts)} (somente prévia)\n'
                 f'Extração profunda: {pr.metadata.get("deep_extraction", {}).get("completed", "ainda não realizada")}\n'
                 f'Executável SLUS local: {source}\n\n'
@@ -2094,7 +2150,7 @@ class Studio(tk.Tk):
                 +'\n\nNenhum BIN/CUE foi modificado.',parent=self)
             return
         report = audit(self.project)
-        if not report['gravavel_hoje']:
+        if not report['gravavel_hoje'] and not self.project.metadata.get('ps1_god_icon_test_card_id'):
             dest = save_audit(self.project)
             messagebox.showwarning(
                 'Nenhuma alteração compatível para gerar o jogo',
@@ -2114,6 +2170,10 @@ class Studio(tk.Tk):
                     'Mesmo nome de origem: substitui o teste anterior. Outro nome: cria outro arquivo.\n'
                     'Se o ePSXe estiver usando a imagem anterior, feche o jogo antes de substituí-la.\n\n'
                     'Compatível para teste: estatísticas, textos curtos e artes em paleta original.\n'
+                    + ('Ícone Deus: prova visual no TEXTO de uma carta; '
+                       'três caracteres originais são trocados só na cópia. '
+                       'Não implementa o tipo God 24.\n'
+                       if self.project.metadata.get('ps1_god_icon_test_card_id') else '')
                     f'PENDÊNCIAS DE MOTOR: {len(pending)}. Novos efeitos, cartas extras e cores de nomes NÃO serão aplicados.\n\n'
                     + ('\n'.join(pending[:3]) + '\n\n' if pending else '') + 'Gerar somente a cópia parcial de teste?')
         if not messagebox.askyesno('Gerar cópia de teste', question, parent=self):
@@ -2148,6 +2208,8 @@ class Studio(tk.Tk):
             f'Armadilhas: {len(manifest.get("armadilhas_ps1_aplicadas",[]))}; '
             f'Terrenos: {len(manifest.get("terrenos_ps1_aplicados",[]))}.\n'
             f'Regra de deck MIPS: {len(manifest.get("limite_global_copias_ps1_aplicado",[]))} patch(es).\n'
+            f'Ícone Deus (teste visual na descrição): '
+            f'{manifest.get("teste_visual_icone_deus",{}).get("status") if manifest.get("teste_visual_icone_deus") else "não habilitado"}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
 

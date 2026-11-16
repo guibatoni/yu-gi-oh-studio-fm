@@ -1,3 +1,31 @@
+# Studio FM v1.4.7 — Primeiro teste de ícone Deus dentro do BIN/CUE
+
+O ícone \`assets/icons/god.png\` já existia, mas só funcionava no Studio.
+Agora ele aparece na prévia da carta de raridade Deus, ao lado do tipo.
+
+O botão **Cartas > Teste no BIN: símbolo Deus** cria um teste experimental
+*opt-in* de um glifo 16×16 na fonte original do jogo. O Studio converte
+o PNG para 4bpp usando a paleta que já está no WA_MRG.MRG. Tenta inserir
+na célula \`0x29\` da segunda página da fonte, e **recusa gravar** se
+qualquer byte do slot estiver ocupado. O código de texto \`F8 0B 29\` é
+inserido na descrição da carta selecionada, substituindo os 3 primeiros
+caracteres somente na cópia BIN/CUE experimental.
+
+A descrição do projeto, os dados de ATK/DEF, a ISO de origem, os outros
+ícones e as imagens anteriores não são sobrescritos. A cópia recebe
+manifestações do glifo e do texto modificados e é relida após a escrita.
+
+**Escopo limitado e explícito:** o símbolo deve ser procurado na
+*descrição da carta* no ePSXe. Ainda não é o ícone permanente do tipo
+na interface nem um tipo God 24 jogável. O código de desenho existente
+sugere que a célula 0x29 é endereçável, mas isso precisa de confirmação
+visual real no ePSXe. Se a célula não estiver vazia, o Studio cancela o
+BIN sem afetar a última cópia.
+
+O jogo deve ser aberto novamente a partir da cópia gerada, sem save state.
+
+---
+
 # Studio FM v1.4.6 — Tipo personalizado de monstro, sem voltar ao original
 
 O Studio não obriga mais o Time Wizard #016 a ser Spellcaster (tipo 01).

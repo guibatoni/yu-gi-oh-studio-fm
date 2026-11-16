@@ -1,3 +1,17 @@
+## v1.4.7 — Teste nativo de símbolo Deus no texto de uma carta
+
+- Usa o PNG \`god.png\` já distribuído pelo Studio.
+- Novas rotinas de conversão 16×16 RGBA -> índices 4bpp usando CLUT existente.
+- Alvo experimental \`WA_MRG.MRG\`, segunda página de fonte, célula 0x29;
+  falha de forma segura caso qualquer byte da célula já esteja em uso.
+- Insere \`F8 0B 29\` nos primeiros 3 bytes da descrição de UMA carta,
+  somente na cópia gerada; não muda tipo, ATK, DEF nem texto salvo no projeto.
+- A prévia agora exibe o símbolo na carta de raridade Deus.
+- Novo controle opt-in de ativar/desativar por carta. Exportação verifica hash
+  WA original e relê os arquivos gerados antes de substituir imagem anterior.
+- Testes sintéticos para isolamento de bytes, slot preenchido e código textual.
+- Tipo God 24/ícone permanente de tipo ainda dependem de hooks validados.
+
 ## v1.4.6 — Escolha de tipo, sem reversão forçada para Spellcaster
 
 - Removido o botão que fazia o usuário voltar a Spellcaster para poder

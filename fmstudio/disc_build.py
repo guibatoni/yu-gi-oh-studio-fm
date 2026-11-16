@@ -142,7 +142,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                             if metadata.get('ps1_rituals_enabled',False) else {})
             native_traps=metadata.get('ps1_trap_thresholds',{})
             native_terrain=metadata.get('ps1_terrain_boosts',{})
-            original_wa=b''.join(reader.read_entry(wa_entry)) if (requested_art or native_equips or replacements or native_rituals) and wa_entry else None
+            god_test_card=metadata.get('ps1_god_icon_test_card_id')
+            original_wa=b''.join(reader.read_entry(wa_entry)) if (requested_art or native_equips or replacements or native_rituals or god_test_card) and wa_entry else None
     except DiscError as exc:
         raise ModError(f'Imagem original inválida: {exc}') from exc
 
@@ -274,6 +275,39 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_wa,ritual_written=patch_rituals(
             patched_wa if patched_wa is not None else original_wa,native_rituals)
 
+    god_icon_report=None
+    if god_test_card is not None:
+        from .ps1_god_icon import patch_god_glyph, patch_god_icon_description, god_icon_asset
+        if isinstance(god_test_card,bool) or not isinstance(god_test_card,int):
+            raise ModError('ID inválido do teste God; reconfigure o projeto.')
+        if not 1 <= god_test_card <= 722:
+            raise ModError('O ícone God experimental exige ID de carta 1–722.')
+        card=project.get(god_test_card)
+        if not 0 <= int(card['tipo_id']) <= 19:
+            raise ModError('O teste de ícone Deus não implementa o tipo God 24. '
+                           'Selecione primeiro um tipo de monstro PS1 entre 00 e 19.')
+        if original_wa is None:
+            raise ModError('O teste de ícone Deus exige DATA/WA_MRG.MRG no BIN de origem.')
+        provenance=project.folder/'base'/'resumo.json'
+        origin_hash=''
+        if provenance.is_file():
+            origin_hash=(json.loads(provenance.read_text(encoding='utf-8'))
+                         .get('source_sha256') or {}).get('DATA/WA_MRG.MRG','')
+        if not origin_hash or hashlib.sha256(original_wa).hexdigest()!=origin_hash:
+            raise ModError('Teste God: WA_MRG.MRG não corresponde ao arquivo importado '
+                           'ou o hash de origem está ausente.')
+        patched_wa,glyph_report=patch_god_glyph(
+            patched_wa if patched_wa is not None else original_wa,god_icon_asset())
+        patched_exe,description_report=patch_god_icon_description(
+            patched_exe,god_test_card)
+        god_icon_report={'card_id':god_test_card,
+                         'glifo':glyph_report,
+                         'descricao_temporaria':description_report,
+                         'status':'prototipo_visual_pendente_epsxe',
+                         'aviso':'Ícone God temporário NA DESCRIÇÃO da carta. '
+                                 'Não cria o tipo God 24 nem altera o ícone de '
+                                 'tipo permanente do motor.'}
+
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
             from .ps1_compat import save_audit, explain_no_writable_changes
@@ -352,6 +386,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'terrenos_ps1_aplicados':terrain_written,
                 'limite_global_copias_ps1_aplicado':deck_copies_written,
                 'lp_inicial_mips_aplicado':lp_written,
+                'teste_visual_icone_deus':god_icon_report,
                 'modo_equip_ps1':equip_mode,
                 'estrategia_equip_ps1':equip_strategy if (native_equips or replacements) else 'sem-equip',
                 'tamanho_bin':stage_bin.stat().st_size,
