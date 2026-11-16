@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from fmstudio.disc import SYNC
 from fmstudio.disc_verify import verify_image_stats, describe
+from fmstudio.core import ModError
 from fmstudio.tables import STATS_ADDR, LEVEL_ADDR, EXE_DELTA
 
 

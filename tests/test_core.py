@@ -47,7 +47,7 @@ class StudioCoreTests(unittest.TestCase):
         source_sha=hashlib.sha256(self.file.read_bytes()).hexdigest()
         # Reproduz captura do usuário: Time Wizard com ATK 3000 e tipo God.
         self.p.set_card(16, {'ataque':3000, 'tipo_id':24})
-        with self.assertRaisesRegex(ModError,'QUALQUER tipo de monstro'):
+        with self.assertRaisesRegex(ModError,'teste PS1 explícito'):
             self.p.export()
         self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),source_sha)
         # A escolha do usuário prevalece: NÃO é necessário voltar para Spellcaster.
