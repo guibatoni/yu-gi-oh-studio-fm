@@ -20,7 +20,6 @@ def audit(project) -> dict:
     pinned=project.metadata.get('base_sha256',{}).get('slus')
     known=bool(exe and pinned and hashlib.sha256(exe).hexdigest()==pinned)
     native_profile=known and ps1_supports_god24(project)
-    native_plan=compile_effects(project,native_profile)
     wa_summary=project.folder/'base'/'resumo.json'
     wa_pinned=False
     if wa_summary.is_file():
@@ -33,10 +32,15 @@ def audit(project) -> dict:
             'descricoes':0,'classes_cores':0,'icones_especiais':0,'equipamentos_ps1':0,'equip_substituicoes':0,
             'rituais_ps1':0,'armadilhas_ps1':0,'terrenos_ps1':0,'limite_global_deck_ps1':0}
     mod_plan=compile_mod(project,profile=native_profile,wa_verified=wa_pinned)
+    native_plan=compile_effects(project,native_profile,fixed_decks=mod_plan.fixed_decks)
+    counts['nomes_tier_ps1'] = native_plan.name_colors
+    counts['decks_fixos_ps1'] = len(native_plan.fixed_decks)
     blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
     if native_profile:
         supported.append('Bloqueio de ataque na abertura com exceção por carta')
     supported.extend(f'Drops do deck do duelista #{opponent}' for opponent in native_plan.deck_drops)
+    if native_plan.name_colors:
+        supported.append(f'Cores de tier em {native_plan.name_colors} nomes de cartas no PS1')
     if native_plan.password_prefix is not None:
         supported.append(f'Passwords por ID no BIN/CUE com prefixo {native_plan.password_prefix:05d}')
     descriptions={}
@@ -90,7 +94,8 @@ def audit(project) -> dict:
                 blocked.append(f'#{cid}: descrição exige SLUS verificado')
         if changed & {'raridade','cor_nome'}:
             counts['classes_cores']+=1
-            blocked.append(f'#{cid}: cor/raridade do nome não implementada no renderizador do PS1')
+            if not native_profile or cid > CARD_COUNT:
+                blocked.append(f'#{cid}: cores de tier no BIN/CUE exigem carta original e perfil Drop x15.')
     if descriptions:
         from .ps1_text import patch_descriptions
         catalog={cid:project.get(cid) for cid in project.cards}
@@ -195,7 +200,7 @@ def audit(project) -> dict:
         'arte_e_miniatura_722':'gravavel_com_paleta_original_e_WA_verificado',
         'fusoes_original':'preservado_sem_edicao',
         'descricoes_coloridas':'Cores e ícones do jogo. Drop x15 também aceita ícones do Studio e realocação de texto.',
-        'raridade_e_cor_nomes':'PENDENTE',
+        'raridade_e_cor_nomes':'Cores de tier salvo por carta no Drop x15',
         'icones_personalizados':'Graváveis nas descrições no perfil Drop x15',
         'cartas_maiores_722':'PENDENTE_MIPS_MEMORIA_TABELAS',
         'tipo_god':'O tipo 24 ativa automaticamente o nome, o ícone e o roteamento de monstro no Drop x15.',
@@ -205,7 +210,7 @@ def audit(project) -> dict:
         'armadilhas_ataque_681_686':'gravavel_no_SLUS_SE_TABELA_RETAIL',
         'bonus_terreno_tipo':'gravavel_no_SLUS_SE_TABELA_RETAIL',
         'ataque_2x_3x_piercing_haste':'Ataques 2x/3x e perfuração no Drop x15',
-        'decks_e_regras_de_copias':'Limites 1–40 por carta no Drop x15; deck de 40 espaços',
+        'decks_e_regras_de_copias':'Deck fixo de 40 cartas ou pool de 40 compras no Drop x15',
         'descarte_e_dano_a_monstros':'PENDENTE_NOVAS_REGRAS',
       },
       'pendente_de_motor':blocked,

@@ -10,7 +10,7 @@ from .core import ModError
 from .duel_ai import play_ai_turn, posture
 from .expanded import display_name
 from .guardian import guardian_name
-from .gui import ACCENT, BORDER, SURFACE, TEXT, compact_number
+from .gui import ACCENT, BORDER, ROW_ALT, SURFACE, TEXT, card_row_tags, compact_number
 from .mod_data import RANK_GROUPS, drops_from_deck
 from .passwords import grant_card, original_passwords
 from .tables import DUELIST_NAMES_REFERENCE
@@ -19,6 +19,7 @@ from .tables import DUELIST_NAMES_REFERENCE
 def zone_tree(parent):
     cols = ('id', 'nome', 'atk', 'def', 'copias')
     tree = ttk.Treeview(parent, columns=cols, show='headings', height=6)
+    tree.tag_configure('stripe', background=ROW_ALT)
     for key, label, width in zip(cols, ('ID', 'Carta', 'ATK efetivo', 'DEF efetiva', 'Cópias'),
                                  (70, 215, 115, 115, 65)):
         tree.heading(key, text=label)
@@ -37,11 +38,12 @@ def fill_zone(tree, game, side, zone):
     copies = Counter(card['id'] for card in cards)
     by_id = {card['id']: card for card in cards}
     ids = sorted(by_id) if zone == 'deck' else by_id
-    for cid in ids:
+    for index, cid in enumerate(ids):
         row = by_id[cid]
         tree.insert('', 'end', iid=str(cid), values=(compact_number(cid),
             display_name(cid, game.cards), compact_number(row['ataque']),
-            compact_number(row['defesa']), copies[cid]))
+            compact_number(row['defesa']), copies[cid]),
+            tags=card_row_tags(tree, game.cards.get(cid), index))
     if old and tree.exists(old[0]):
         tree.selection_set(old[0])
 
@@ -102,6 +104,7 @@ class MatchDialog(tk.Toplevel):
             ttk.Label(panel, textvariable=lp).pack(anchor='w', pady=(0, 4))
             cols = ('posição', 'carta', 'atk', 'def', 'estrela')
             tree = ttk.Treeview(panel, columns=cols, show='headings', height=5, selectmode='browse')
+            tree.tag_configure('stripe', background=ROW_ALT)
             for key, title, width in zip(cols, ('Slot', 'Carta', 'ATK', 'DEF', 'Guardian'), (62, 165, 75, 75, 95)):
                 tree.heading(key, text=title)
                 tree.column(key, width=width, minwidth=38, stretch=key == 'carta')
@@ -257,12 +260,14 @@ class MatchDialog(tk.Toplevel):
                     continue
                 slot = unit['slot']
                 shown = side == 'jogador' or unit['face_up']
+                card = self.game.cards.get(unit['card_id']) if shown else None
                 name = display_name(unit['card_id'], self.game.cards) if shown else 'Virada para baixo'
                 tree.insert('', 'end', iid=str(slot), values=(
                     f'{slot} · {"ATQ" if unit["posicao"] == "ataque" else "DEF"}', name,
                     compact_number(unit['ataque'],9) if shown else '—',
                     compact_number(unit['defesa'],9) if shown else '—',
-                    guardian_name(unit['guardian_id']) if shown else '—'))
+                    guardian_name(unit['guardian_id']) if shown else '—'),
+                    tags=card_row_tags(tree, card, slot - 1))
             if old and tree.exists(old[0]):
                 tree.selection_set(old[0])
         for zone, tree in self.zones.items():

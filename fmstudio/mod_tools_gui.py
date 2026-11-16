@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 from .core import ModError, ps1_supports_god24
 from .deck_generator import DIFFICULTIES, SUPPORT_TYPES, generate_deck
 from .expanded import display_name
-from .gui import ACCENT, ROW_ALT, compact_number
+from .gui import ACCENT, ROW_ALT, card_row_tags, compact_number
 from .mod_data import CONFIG_KEY, MONSTER_TYPES, STOCK_STARTER, deck_copy_limit
 from .passwords import (
     PS1_ID_PREFIX, chest_cards, grant_card, id_code, import_original_passwords, ps1_id_code,
@@ -91,7 +91,7 @@ class PasswordPanel(ttk.Frame):
                 continue
             self.tree.insert('', 'end', iid=str(cid),
                              values=(compact_number(cid), name, code, '—' if extra is None else extra),
-                             tags=('stripe',) if index % 2 else ())
+                             tags=card_row_tags(self.tree, self.cards.get(cid), index))
             index += 1
         if self.by_id:
             prefix = self.project.metadata.get(PS1_ID_PREFIX)
@@ -236,7 +236,7 @@ class PasswordsDialog(tk.Toplevel):
         for index, (key, count) in enumerate(sorted(chest_cards(self.project).items(), key=lambda item: int(item[0]))):
             cid = int(key)
             self.chest.insert('', 'end', iid=key, values=(compact_number(cid), display_name(cid, self.cards), count),
-                              tags=('stripe',) if index % 2 else ())
+                              tags=card_row_tags(self.chest, self.cards.get(cid), index))
         self.profile.configure(values=list(self.project.metadata.get(CONFIG_KEY, {}).get('iniciais', {})))
 
     def _grant(self, cid):
@@ -375,9 +375,10 @@ class DeckGeneratorDialog(tk.Toplevel):
             return
         self.deck = result
         self.list.delete(*self.list.get_children())
-        for cid, amount in sorted(Counter(result.cards).items()):
+        for index, (cid, amount) in enumerate(sorted(Counter(result.cards).items())):
             self.list.insert('', 'end', values=(amount, compact_number(cid), display_name(cid, self.cards),
-                                                 TYPE_NAMES[int(self.cards[cid]['tipo_id'])]))
+                                                TYPE_NAMES[int(self.cards[cid]['tipo_id'])]),
+                             tags=card_row_tags(self.list, self.cards[cid], index))
         routes = [
             f'{display_name(a, self.cards)} + {display_name(b, self.cards)} → {display_name(result, self.cards)}'
             for a, b, result in result.fusions[:3]

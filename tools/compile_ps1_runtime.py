@@ -20,6 +20,8 @@ ENTRIES = (
     'StopDefense', 'Raigeki', 'Reveal', 'StatPenalty', 'Swords',
     'FieldActions', 'Placement', 'ConfirmPlacement', 'DeckCopyGate',
     'DescriptionIcon', 'SpellUsed', 'CollectTargets', 'SelectDeckDrop', 'UpdatePasswordShop',
+    'DealConfiguredDecks', 'RetailCardDrop', 'InsertTierName', 'EndTierName',
+    'SortTierGlyph', 'SortTierPolygon',
 )
 FLAGS = ('-march=r3000', '-mabi=32', '-msoft-float', '-mno-abicalls', '-fno-pic',
          '-G0', '-ffreestanding', '-fno-builtin', '-fno-stack-protector',
@@ -54,6 +56,7 @@ def main():
         content = section_bytes('.runtime')
         extension = section_bytes('.runtime_ext')
         password = section_bytes('.runtime_password')
+        mod = section_bytes('.runtime_mod')
 
     pieces = ['"""Gerado por tools/compile_ps1_runtime.py a partir de tools/ps1."""\n',
               f'RUNTIME_SHA256 = {hashlib.sha256(content).hexdigest()!r}',
@@ -64,7 +67,8 @@ def main():
     pieces.extend(('}', 'RUNTIME = bytes.fromhex("""'))
     pieces.extend(content[i:i+32].hex(' ') for i in range(0, len(content), 32))
     for label, binary, symbol in (('RUNTIME_EXT', extension, '__runtime_ext'),
-                                  ('RUNTIME_PASSWORD', password, '__password')):
+                                  ('RUNTIME_PASSWORD', password, '__password'),
+                                  ('RUNTIME_MOD', mod, '__runtime_mod')):
         pieces.extend(('""")', '',
                        f'{label}_SHA256 = {hashlib.sha256(binary).hexdigest()!r}',
                        f'{label}_BASE = 0x{symbols[symbol + "_start"]:08X}',

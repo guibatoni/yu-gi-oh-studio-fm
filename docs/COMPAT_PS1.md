@@ -1,3 +1,16 @@
+## v1.7.1 — Decks e tiers no Drop x15
+
+| Configuração | Resultado no BIN/CUE |
+| --- | --- |
+| Deck fixo de 40 cartas originais | A composição do duelista passa pelo embaralhamento do jogo |
+| Pool ponderado de 40 compras | O jogo monta o deck com os pesos exportados |
+| Dropar Cartas do Próprio Deck | Sorteio entre as 40 cartas carregadas para o oponente |
+| Raridade do nome | Nome com a cor do tier. Magias, armadilhas, equipamentos e God usam a cor do tipo |
+
+O relatório de verificação confere a composição gravada, as rotinas de
+embaralhamento e drops e a tabela de cores. Decks fixos com menos de 40 cartas
+e decks com IDs adicionais são jogáveis no Studio.
+
 ## v1.7.0 — Passwords por ID e drops do próprio deck
 
 | Recurso | Studio | BIN/CUE Drop x15 |

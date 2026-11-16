@@ -25,6 +25,24 @@ class ModProjectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ModError, 'trava original'):
             patch_executable(source, plan, profile=True)
 
+    def test_full_fixed_deck_keeps_exact_ids_and_counts(self):
+        cards = {cid: {'tipo_id': 0} for cid in (*range(1, 41), 722)}
+        cards[723] = {'tipo_id': 24, 'virtual': True}
+        deck = [*range(1, 38), 722, 722, 722]
+        project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={'edicao_mod': {
+            'duelistas': {
+                '1': {'deck': {'cartas': deck}},
+                '2': {'deck': {'cartas': deck[:-1]}},
+                '3': {'deck': {'cartas': [*deck[:-1], 723]}},
+            }
+        }})
+        plan = compile_mod(project, profile=True, wa_verified=False)
+        self.assertEqual(plan.fixed_decks, {1: tuple(deck)})
+        self.assertFalse(plan.needs_wa)
+        self.assertTrue(any('39/40' in note for note in plan.pending))
+        self.assertTrue(any('IDs originais #001–#722' in note for note in plan.pending))
+        self.assertEqual(compile_mod(project, profile=False, wa_verified=True).fixed_decks, {})
+
     def test_pools_lp_and_opening_turn_verify_without_truncating_studio_settings(self):
         cards = {i:{'tipo_id':0} for i in range(1, 30)}
         project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={'edicao_mod':{

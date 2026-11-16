@@ -1,3 +1,20 @@
+# Studio FM v1.7.1 — Decks fixos no Drop x15 e nomes por tier
+
+Em **Edição do Mod → Deck do oponente**, escolha o duelista e salve **40/40**
+cartas fixas. **Cópias a inserir** controla as cópias adicionadas a cada
+clique. Gere o BIN/CUE a partir do Drop x15 original e confira os duelistas
+aplicados pelo botão **Verificar BIN/CUE**.
+
+Com **Dropar Cartas do Próprio Deck** ativo, o sorteio usa a composição
+carregada no começo do duelo. As cópias já compradas ou descartadas
+continuam no conjunto de recompensas.
+
+Defina a raridade no editor da carta para colorir seu nome nas listas do
+Studio e no visualizador de cartas do Drop x15. Magias, armadilhas,
+equipamentos e God usam suas cores de tipo.
+
+---
+
 # Studio FM v1.7.0 — Cartas, decks e recompensas
 
 Crie e salve uma carta com ID livre em **Nova carta**. Em **Edição do Mod →

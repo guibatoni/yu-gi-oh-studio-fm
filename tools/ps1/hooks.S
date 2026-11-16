@@ -72,3 +72,14 @@ CollectOriginal:
     sw $s2, 24($sp)
     j 0x8002C9BC
     nop
+
+
+.section .runtime.mod,"ax",@progbits
+.align 2
+.globl RetailCardDrop
+RetailCardDrop:
+    # The installer copies the two original non-branch entry instructions.
+    nop
+    nop
+    j 0x80021818
+    nop

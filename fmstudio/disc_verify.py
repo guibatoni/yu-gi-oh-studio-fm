@@ -112,8 +112,14 @@ def verify_image_stats(project, source):
     actual_gods={c['id'] for c in card_types_24}
     verified_gods=[cid for cid in expected_gods if cid in actual_gods]
     god24_enabled=profile and bool(expected_gods)
-    plan=compile_effects(project,profile)
-    runtime=verify_effects(exe,plan)
+    plan=compile_effects(project,profile,fixed_decks=mod_plan.fixed_decks)
+    original = None
+    project_folder = getattr(project, 'folder', None)
+    if plan.data and project_folder is not None:
+        original_exe = project_folder / 'base' / 'source_SLUS_014.11'
+        if original_exe.is_file():
+            original = original_exe.read_bytes()
+    runtime = verify_effects(exe, plan, original=original)
     opening_lock, life=verify_executable(exe,mod_plan)
     tested=cards[expected_gods[0]-1] if expected_gods else None
     chest=inspect_god24_chest_mips(exe)
@@ -158,13 +164,18 @@ def describe(result):
     runtime=result.get('efeitos_nativos_ps1',{})
     if runtime.get('status')=='aplicado':
         text.append(f'Efeitos nativos conferidos na cópia: {runtime["quantidade"]}.')
+        if runtime.get('decks_fixos'):
+            ids = ', '.join(f'#{opponent:02d}' for opponent in runtime['decks_fixos'])
+            text.append(f'Decks fixos de 40 cartas conferidos para os duelistas {ids}.')
+        if runtime.get('nomes_tier'):
+            text.append(f'Cores de tier conferidas nos nomes de {runtime["nomes_tier"]} cartas.')
         if runtime.get('drops_do_deck'):
             text.append(f'Drops do próprio deck conferidos para {len(runtime["drops_do_deck"])} duelista(s).')
         prefix = runtime.get('password_id_prefix')
         if prefix is not None:
             text.append(f'Passwords por ID usam {prefix:05d} + os três dígitos do ID da carta.')
     elif runtime.get('status')=='divergente':
-        text.append('A tabela de efeitos desta cópia diverge do projeto. Gere outro BIN/CUE.')
+        text.append('Regras nativas, decks ou cores desta cópia divergem do projeto. Gere outro BIN/CUE.')
     mod=result.get('edicao_do_mod_ps1',{})
     if mod.get('bloqueio_turno_inicial') is True:
         text.append('Trava de ataque no primeiro turno conferida no executável.')

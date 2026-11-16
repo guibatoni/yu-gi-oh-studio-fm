@@ -4,11 +4,11 @@ from __future__ import annotations
 import hashlib
 import json
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .core import ModError, _write_csv
 from .disc import DiscError, DiscReader
-from .mod_data import CONFIG_KEY, DROP_GROUPS, normalize_rules
+from .mod_data import CONFIG_KEY, DROP_GROUPS, normalize_rules, validate_deck
 from .tables import (
     CARD_COUNT, DECK_SIZE, DUELIST_BASE, DUELIST_COUNT, DUELIST_STRIDE, EXE_DELTA,
     POOL_OFFSETS, POOL_TOTAL, STARTER_OFFSETS, STARTER_POOLS, STARTER_SIZE,
@@ -43,6 +43,7 @@ class ModPlan:
     starters: list[tuple[int, tuple[int, ...]]]
     applied: list[str]
     pending: list[str]
+    fixed_decks: dict[int, tuple[int, ...]] = field(default_factory=dict)
 
     @property
     def needs_wa(self):
@@ -106,7 +107,8 @@ def compile_mod(project, *, profile, wa_verified):
     raw = getattr(project, 'metadata', {}).get(CONFIG_KEY)
     if not raw:
         return plan
-    config = normalize_rules(raw, {cid: project.get(cid) for cid in project.cards})
+    cards = {cid: project.get(cid) for cid in project.cards}
+    config = normalize_rules(raw, cards)
     tables_ok = profile and wa_verified
 
     def lp(value, label):
@@ -136,13 +138,30 @@ def compile_mod(project, *, profile, wa_verified):
         plan.life[opponent] = lp(changes.get('lp'), f'LP do duelista #{opponent}')
         if 'deck' in changes:
             deck = changes['deck']
-            pools = deck['pools']
-            name = f'Pool do duelista #{opponent}'
-            if (deck['cartas'] or len(pools) != 1 or pools[0]['compras'] != DECK_SIZE
-                    or len(pools[0]['pesos']) * 3 < DECK_SIZE):
-                plan.pending.append(f'{name}: esta composição usa as regras do Studio.')
+            fixed, pools = deck['cartas'], deck['pools']
+            if not pools:
+                name = f'Deck fixo do duelista #{opponent}'
+                try:
+                    if not profile:
+                        raise ModError('requer o executável Drop x15.')
+                    if len(fixed) != DECK_SIZE:
+                        raise ModError(f'complete as {DECK_SIZE} vagas ({len(fixed)}/{DECK_SIZE}).')
+                    if any(cid > CARD_COUNT or cards[cid].get('virtual') for cid in fixed):
+                        raise ModError('o BIN/CUE aceita os IDs originais #001–#722.')
+                    copies = int(project.metadata.get('ps1_deck_global_limit', 3))
+                    validate_deck(cards, getattr(project, 'effects', {}), fixed, copies)
+                except ModError as exc:
+                    plan.pending.append(f'{name}: {exc}')
+                else:
+                    plan.fixed_decks[opponent] = tuple(fixed)
+                    plan.applied.append(name)
             else:
-                group(opponent,'deck',pools[0]['pesos'],name,LEGACY_SCAN_COUNT)
+                name = f'Pool do duelista #{opponent}'
+                if (fixed or len(pools) != 1 or pools[0]['compras'] != DECK_SIZE
+                        or len(pools[0]['pesos']) * 3 < DECK_SIZE):
+                    plan.pending.append(f'{name}: use um pool de 40 compras ou 40 cartas fixas para o BIN/CUE.')
+                else:
+                    group(opponent, 'deck', pools[0]['pesos'], name, LEGACY_SCAN_COUNT)
         for kind, weights in changes.get('drops', {}).items():
             name = f'Drop #{opponent} {kind}'
             if kind not in DROP_GROUPS:

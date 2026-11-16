@@ -47,6 +47,16 @@ def compact_number(value, width=13):
     return text if len(text) <= width else f'{text[:width-4]}…{text[-3:]}'
 
 
+def card_row_tags(tree, card, index):
+    if card is None:
+        return ('stripe',) if index % 2 else ()
+    _, color, kind = name_style(card)
+    tag = f'classe_{kind}_{index % 2}'
+    shade = '#EAF0FA' if kind == 'deus' else (ROW_ALT if index % 2 else SURFACE)
+    tree.tag_configure(tag, foreground=color, background=shade)
+    return (tag,)
+
+
 class EffectDialog(tk.Toplevel):
     """Editor guiado de gatilhos, auras, efeitos por deck e equipamentos."""
     def __init__(self, master, on_save):
@@ -1270,12 +1280,8 @@ class Studio(tk.Tk):
                     int(c['guardian_1_id']),int(c['guardian_2_id'])):
                 continue
             flag=' •' if self.drafts and cid in self.drafts.cards else (' ✎' if str(cid) in self.project.edits else '')
-            _label,color,kind=name_style(c)
-            tag=f'classe_{kind}_{count % 2}'
-            self.tree.tag_configure(tag,foreground=color,
-                                    background='#EAF0FA' if kind=='deus' else ROW_ALT if count % 2 else SURFACE)
             self.tree.insert('','end',iid=str(cid),values=(compact_number(f'{cid:03d}', 7),title+flag,
-                compact_number(c['ataque'],8),compact_number(c['defesa'],8)),tags=(tag,))
+                compact_number(c['ataque'],8),compact_number(c['defesa'],8)),tags=card_row_tags(self.tree, c, count))
             count+=1
         self.count_label.configure(text=f'{count} cartas exibidas  •  {len(self.project.cards)} carregadas')
         if keep and self.tree.exists(keep):
@@ -2439,6 +2445,10 @@ class Studio(tk.Tk):
             + ('Ataque na abertura restrito pela habilidade da carta.\n'
                if mod.get('bloqueio_turno_inicial') else '')
             + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
+            + (f'Decks fixos de 40 cartas: {len(runtime["decks_fixos"])} duelista(s).\n'
+               if runtime.get('decks_fixos') else '')
+            + (f'Nomes com cor de tier: {runtime["nomes_tier"]} carta(s).\n'
+               if runtime.get('nomes_tier') else '')
             + (f'Drops do próprio deck: {len(runtime["drops_do_deck"])} duelista(s).\n'
                if runtime.get('drops_do_deck') else '')
             + (f'Passwords por ID: {runtime["password_id_prefix"]:05d} + os três dígitos do ID.\n'

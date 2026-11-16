@@ -7,10 +7,10 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .core import ModError, positive_int, simulation_nonnegative_int
+from .core import ModError, positive_int, ps1_supports_god24, simulation_nonnegative_int
 from .duel_engine import MAX_DECK, parse_card_ids
 from .expanded import display_name
-from .gui import ACCENT, MUTED, ROW_ALT, compact_number
+from .gui import ACCENT, MUTED, ROW_ALT, card_row_tags, compact_number
 from .mod_data import (
     CONFIG_KEY, DROP_FROM_DECK, DROP_GROUPS, MONSTER_TYPES, RANK_GROUPS, STOCK_STARTER,
     base_tables, deal_deck, drop_weights, drops_from_deck, duelist_profile, match_recipes,
@@ -81,7 +81,7 @@ class WeightTable(ttk.Frame):
         for index, (cid, weight) in enumerate(sorted(self.weights.items())):
             self.tree.insert('', 'end', iid=str(cid), values=(
                 compact_number(cid), display_name(cid, self.cards), compact_number(weight),
-                _probability(weight, total)), tags=('stripe',) if index % 2 else ())
+                _probability(weight, total)), tags=card_row_tags(self.tree, self.cards.get(cid), index))
         if keep and self.tree.exists(keep[0]):
             self.tree.selection_set(keep[0])
         self.tree.yview_moveto(top)
@@ -141,6 +141,7 @@ class DeckProfileEditor(ttk.Frame):
 
         self.query = tk.StringVar()
         self.kind = tk.StringVar(value='Todos os tipos')
+        self.add_quantity = tk.StringVar(value='1')
         self.quantity = tk.StringVar(value='1')
         self.total = tk.StringVar()
         self.feedback = tk.StringVar()
@@ -189,15 +190,19 @@ class DeckProfileEditor(ttk.Frame):
 
         controls = ttk.Frame(self.fixed_pane)
         controls.pack(fill='x', pady=2)
-        ttk.Label(controls, text='Cópias').pack(side='left', padx=(0, 4))
-        ttk.Spinbox(controls, from_=1, to=MAX_DECK, width=4,
-                    textvariable=self.quantity).pack(side='left', padx=(0, 5))
+        ttk.Label(controls, text='Cópias a inserir').pack(side='left', padx=(0, 4))
+        self.add_count = ttk.Spinbox(controls, from_=1, to=MAX_DECK, width=3, textvariable=self.add_quantity)
+        self.add_count.pack(side='left', padx=(0, 4))
         self.add_btn = ttk.Button(controls, text='＋ Adicionar', style='Accent.TButton',
                                   command=lambda: self.change_card('add'))
-        self.set_btn = ttk.Button(controls, text='Ajustar cópias', command=lambda: self.change_card('set'))
+        self.add_btn.pack(side='left', padx=(0, 10))
+        ttk.Label(controls, text='Total da carta').pack(side='left', padx=(0, 4))
+        ttk.Spinbox(controls, from_=1, to=MAX_DECK, width=3,
+                    textvariable=self.quantity).pack(side='left', padx=(0, 4))
+        self.set_btn = ttk.Button(controls, text='Ajustar', command=lambda: self.change_card('set'))
         self.remove_btn = ttk.Button(controls, text='− Remover', style='Danger.TButton',
                                      command=lambda: self.change_card('remove'))
-        for button in (self.add_btn, self.set_btn, self.remove_btn):
+        for button in (self.set_btn, self.remove_btn):
             button.pack(side='left', padx=(0, 4))
         ttk.Label(self.fixed_pane, text='IDs (ex. 16x2, 723)').pack(anchor='w', pady=(3, 0))
         ttk.Entry(self.fixed_pane, textvariable=self.fixed).pack(fill='x')
@@ -250,7 +255,7 @@ class DeckProfileEditor(ttk.Frame):
         tree.delete(*tree.get_children())
         for index, (cid, values) in enumerate(rows):
             tree.insert('', 'end', iid=str(cid), values=values,
-                        tags=('stripe',) if index % 2 else ())
+                        tags=card_row_tags(tree, self.cards.get(cid), index))
         if selected and tree.exists(selected[0]):
             tree.selection_set(selected[0])
         tree.yview_moveto(top)
@@ -261,7 +266,11 @@ class DeckProfileEditor(ttk.Frame):
         try:
             fixed = parse_card_ids(self.fixed.get(), maximum=MAX_DECK)
             pools = self._pool_slots()
+            space = MAX_DECK - len(fixed) - pools
             self.total.set(f'{len(fixed) + pools}/{MAX_DECK} cartas · {len(fixed)} fixas + {pools} de pools')
+            self.add_count.configure(to=max(space, 1))
+            if space == 1 and self.add_quantity.get() != '1':
+                self.add_quantity.set('1')
         except (ModError, ValueError):
             fixed = []
             self.total.set('Revise os IDs ou as compras dos pools')
@@ -298,22 +307,26 @@ class DeckProfileEditor(ttk.Frame):
         self.tabs.select(self.fixed_pane)
         self.feedback.set('Deck em branco. Adicione cartas e salve.')
 
-    def change_card(self, action, cid=None):
+    def change_card(self, action, cid=None, *, copies=None):
         selection = self.catalog.selection() if action == 'add' else self.deck.selection()
         if cid is None and not selection:
             return
         cid = cid if cid is not None else int(selection[0])
         try:
             ids = parse_card_ids(self.fixed.get(), maximum=MAX_DECK)
-            amount = positive_int(self.quantity.get(), 'Cópias') if action != 'remove' else 0
-            occupied = self._pool_slots()
-            if amount > MAX_DECK:
-                raise ModError(f'Informe até {MAX_DECK} cópias.')
-            if action != 'add':
+            if action == 'add':
+                amount = positive_int(self.add_quantity.get() if copies is None else copies, 'Cópias a inserir')
+            else:
                 ids = [other for other in ids if other != cid]
+                amount = positive_int(self.quantity.get(), 'Total de cópias') if action == 'set' else 0
+            space = MAX_DECK - len(ids) - self._pool_slots()
+            if amount > space:
+                if space == 1:
+                    raise ModError('Há uma vaga no deck. Informe uma cópia.')
+                if space <= 0:
+                    raise ModError('Deck cheio. Libere uma vaga nas cartas fixas ou nos pools.')
+                raise ModError(f'Há {space} vagas neste deck. Informe até {space} cópias.')
             ids.extend([cid] * amount)
-            if len(ids) + occupied > MAX_DECK:
-                raise ModError(f'{occupied} vaga(s) de pools neste deck. Ajuste a composição para caber em {MAX_DECK} cartas.')
             meta = getattr(self.project, 'metadata', {})
             effects = getattr(self.project, 'effects', {})
             validate_deck(self.cards, effects, ids, int(meta.get('ps1_deck_global_limit', 3)))
@@ -321,6 +334,8 @@ class DeckProfileEditor(ttk.Frame):
             self.feedback.set(str(exc))
             return
         self.fixed.set(', '.join(map(str, ids)))
+        if action == 'add':
+            self.add_quantity.set('1')
         if self.deck.exists(str(cid)):
             self.deck.selection_set(str(cid))
             self.deck.see(str(cid))
@@ -617,7 +632,7 @@ class ModEditor(ttk.Frame):
             source = 'Fixa e pool' if cid in fixed and cid in pool else 'Fixa' if cid in fixed else 'Pool'
             self.deck_drop_candidates.insert('', 'end', iid=str(cid), values=(
                 compact_number(cid), display_name(cid, self.cards), source),
-                tags=('stripe',) if index % 2 else ())
+                tags=card_row_tags(self.deck_drop_candidates, self.cards.get(cid), index))
         self.deck_drop_detail.configure(text=f'{len(ids)} candidatas na configuração salva. A vitória premia uma carta do deck efetivamente sorteado, em qualquer rank.')
 
     def _open_drop_candidate(self, _event):
@@ -701,8 +716,7 @@ class ModEditor(ttk.Frame):
         self.studio.tabs.select(self.studio.tab_mod)
         self.tabs.select(self.deck_pane)
         self.opponent_deck.tabs.select(self.opponent_deck.fixed_pane)
-        self.opponent_deck.quantity.set('1')
-        self.opponent_deck.change_card('add', cid)
+        self.opponent_deck.change_card('add', cid, copies=1)
 
     def generate_deck(self, editor):
         if self.project is None or self.studio._extract_running:
@@ -756,8 +770,11 @@ class ModEditor(ttk.Frame):
             if profile['cartas'] or profile['pools']:
                 copies = int(self.project.metadata.get('ps1_deck_global_limit', 3))
                 deal_deck(profile, self.cards, self.project.effects, default_copies=copies)
-            self._commit(rules, 'Deck do oponente salvo.')
-            self.opponent_deck.feedback.set('')
+            count = len(profile['cartas']) + sum(pool['compras'] for pool in profile['pools'])
+            caption = f'Deck do oponente salvo com {count}/{MAX_DECK} cartas.'
+            self._commit(rules, caption)
+            pending_slot = ps1_supports_god24(self.project) and not profile['pools'] and count < MAX_DECK
+            self.opponent_deck.feedback.set('Complete as 40 cartas fixas para gerar o BIN/CUE.' if pending_slot else '')
             if self.use_deck_drops.get():
                 self._render_deck_drops()
         except (ModError, ValueError, OSError) as exc:
@@ -844,7 +861,8 @@ class ModEditor(ttk.Frame):
             starter = None if self.random_starter.get() else self.starter.get()
             match = make_match(self.project, self.studio.drafts, opponent, starter,
                                first='adversario' if self.opponent_first.get() else 'jogador')
-            MatchDialog(self.studio, match, opponent, self.rules, self.pools, project=self.project,
+            rules = normalize_rules(self.project.metadata.get(CONFIG_KEY, {}), self.cards)
+            MatchDialog(self.studio, match, opponent, rules, self.pools, project=self.project,
                         collection_changed=self.collection_changed)
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Simular duelo', str(exc), parent=self)

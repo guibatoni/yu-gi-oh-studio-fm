@@ -38,6 +38,8 @@ typedef struct {
     u16 offsets[CARD_COUNT + 1];
     u16 password_prefix;
     u8 deck_drops[DUELIST_COUNT / 8];
+    u8 reserved;
+    u16 fixed_decks, name_colors;
 } Config;
 _Static_assert(sizeof(Bonus) == 8 && sizeof(Rules) == 8, "rule pack format");
 
@@ -57,6 +59,7 @@ typedef struct {
 } DuelState;
 
 static DuelState duel;
+static u8 prior_name_color[4], name_depth[4];
 
 #define AT(type, addr) (*(volatile type *)(addr))
 /* The resident SLUS callbacks share the retail small-data base at 0x8009AF08. */
@@ -65,6 +68,7 @@ register u8 *game_gp __asm__("$28");
 #define FN(ret, addr, ...) ((ret (*)(__VA_ARGS__))(addr))
 #define ENTRY __attribute__((used, noinline, section(".text.entry")))
 #define EXTENSION __attribute__((noinline, section(".runtime.extension")))
+#define MOD_RULE __attribute__((used, noinline, section(".runtime.mod")))
 #define CARDS ((Card *)0x801A7AD8)
 #define CONFIG ((const Config *)0x801CD7A0)
 #define STATS ((const u32 *)0x801D4244)
@@ -494,6 +498,8 @@ ENTRY unsigned DeckAllowsCopies(int id, unsigned copies)
 }
 
 
+extern int RetailCardDrop(int rank);
+
 ENTRY int SelectDeckDrop(int rank)
 {
     unsigned opponent = GAME(u8, 0x8009B361);
@@ -507,7 +513,7 @@ ENTRY int SelectDeckDrop(int rank)
         }
         if (count) return eligible[FN(unsigned, 0x800358FC, unsigned)(count)];
     }
-    return FN(int, 0x80021810, int)(rank);
+    return RetailCardDrop(rank);
 }
 
 typedef struct {
@@ -536,4 +542,116 @@ void UpdatePasswordShop(void)
     FN(void, 0x8016A37C, void)();
     entry->price = price;
     entry->password = password;
+}
+
+
+MOD_RULE void DealConfiguredDecks(const u16 *player, const u16 *rival)
+{
+    unsigned opponent = GAME(u8, 0x8009B361);
+    if (opponent < DUELIST_COUNT && CONFIG->fixed_decks) {
+        const u16 *offsets = (const u16 *)((const u8 *)CONFIG + CONFIG->fixed_decks);
+        if (offsets[opponent]) rival = (const u16 *)((const u8 *)CONFIG + offsets[opponent]);
+    }
+    FN(void, 0x800245A0, const u16 *, const u16 *)(player, rival);
+    if (opponent < DUELIST_COUNT) {
+        const u16 *shuffled = (const u16 *)0x80177FE8;
+        for (unsigned i = 0; i < DECK_SIZE; i++) {
+            duel.deck[0][i] = shuffled[i];
+            duel.deck[1][i] = shuffled[DECK_SIZE + i];
+        }
+        duel.deck_ready = 1;
+    }
+}
+
+enum { TIER_COUNT = 9, TIER_TAG = 0x80, FONT_X = 0x280, FONT_Y = 232, SMALL_FONT_X = 0x290 };
+
+typedef struct {
+    u32 rgb[TIER_COUNT + 1];
+    u8 by_id[CARD_COUNT + 1];
+} NameColors;
+
+static inline const NameColors *name_colors(void)
+{
+    return (const NameColors *)((const u8 *)CONFIG + CONFIG->name_colors);
+}
+
+static inline unsigned name_tag(unsigned color)
+{
+    return color - TIER_TAG - 1 < TIER_COUNT;
+}
+
+MOD_RULE void InsertTierName(u8 *box)
+{
+    unsigned channel = box[0x57], depth = box[0x58];
+    const u8 *text = ((const u8 **)box)[depth];
+    unsigned command = *text;
+    unsigned id = GAME(u16, 0x8009B338);
+
+    if (channel < 4 && name_tag(box[0x54]))
+        box[0x54] = prior_name_color[channel];
+    FN(void, 0x80037DA4, u8 *)(box);
+    if (channel < 4 && (command & 0x30) == 0x20 &&
+        (unsigned)(id - 1) < CARD_COUNT && box[0x58] != depth) {
+        unsigned tier = name_colors()->by_id[id];
+        if (tier) {
+            prior_name_color[channel] = box[0x54];
+            name_depth[channel] = box[0x58];
+            box[0x54] = TIER_TAG + tier;
+        }
+    }
+}
+
+MOD_RULE void EndTierName(u8 *box)
+{
+    unsigned channel = box[0x57];
+    if (channel < 4 && name_tag(box[0x54]) && name_depth[channel] == box[0x58])
+        box[0x54] = prior_name_color[channel];
+    FN(void, 0x80038E7C, u8 *)(box);
+}
+
+typedef struct {
+    u32 attribute;
+    s16 x, y, width, height, tpage;
+    u8 u, v;
+    s16 cx, cy;
+    u32 rgb;
+} FontSprite;
+_Static_assert(__builtin_offsetof(FontSprite, rgb) == 20, "sprite RGB offset");
+
+MOD_RULE void SortTierGlyph(FontSprite *sprite, void *ordering_table, u16 priority)
+{
+    unsigned color = 0;
+    if ((u32)sprite == 0x1F8000C0)
+        color = (unsigned)(sprite->cy - FONT_Y);
+    else if ((u32)sprite == 0x1F800140)
+        color = (unsigned)(sprite->cx - SMALL_FONT_X) >> 4;
+    if (!name_tag(color)) {
+        FN(void, 0x800849F0, FontSprite *, void *, u16)(sprite, ordering_table, priority);
+        return;
+    }
+    u32 rgb = sprite->rgb, attribute = sprite->attribute;
+    s16 cx = sprite->cx, cy = sprite->cy;
+    if ((u32)sprite == 0x1F800140)
+        sprite->cx = SMALL_FONT_X;
+    else
+        sprite->cy = FONT_Y;
+    sprite->attribute = attribute & ~0x40u;
+    sprite->rgb = name_colors()->rgb[color - TIER_TAG];
+    FN(void, 0x800849F0, FontSprite *, void *, u16)(sprite, ordering_table, priority);
+    sprite->cx = cx;
+    sprite->cy = cy;
+    sprite->rgb = rgb;
+    sprite->attribute = attribute;
+}
+
+MOD_RULE void SortTierPolygon(u8 *polygon, void *ordering_table, u16 priority)
+{
+    /* The animated text path uses the same large-font CLUT coordinates. */
+    u16 *clut = (u16 *)(polygon + 14);
+    unsigned original = *clut;
+    if ((u32)polygon == 0x1F800000 && (original & 63) == FONT_X / 16 &&
+        name_tag((original >> 6) - FONT_Y))
+        *clut = (FONT_Y << 6) | (FONT_X / 16);
+    FN(void, 0x80084320, u8 *, void *, u16)(polygon, ordering_table, priority);
+    *clut = original;
 }

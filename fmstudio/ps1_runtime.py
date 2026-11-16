@@ -9,14 +9,16 @@ from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
 from .core import ModError, check_effect
 from .mod_data import CONFIG_KEY, drops_from_deck
 from .passwords import PS1_ID_PREFIX
+from .rarities import RARITIES, TYPE_OVERRIDES, name_style
 from .ps1_god24_chest import SOURCE_SHA256
 from .ps1_god24_display import SPRITE_ORIGINAL, SPRITE_PATCHED, SPRITE_RAM, extended_sprite_words
 from .ps1_runtime_blob import (
     ENTRY_POINTS, RUNTIME, RUNTIME_BASE, RUNTIME_END, RUNTIME_SHA256,
     RUNTIME_EXT, RUNTIME_EXT_BASE, RUNTIME_EXT_END, RUNTIME_EXT_SHA256,
     RUNTIME_PASSWORD, RUNTIME_PASSWORD_BASE, RUNTIME_PASSWORD_END, RUNTIME_PASSWORD_SHA256,
+    RUNTIME_MOD, RUNTIME_MOD_BASE, RUNTIME_MOD_END, RUNTIME_MOD_SHA256,
 )
-from .tables import CARD_COUNT, DUELIST_COUNT, EXE_DELTA
+from .tables import CARD_COUNT, DECK_SIZE, DUELIST_COUNT, EXE_DELTA
 
 DUEL_STATE = 0x801CD5A0
 CONFIG_ADDRESS = 0x801CD7A0
@@ -35,6 +37,14 @@ BONUS_CODES = {'aura_tipo': 1, 'bonus_por_tipo': 2, 'bonus_deck_tipo': 3,
                'bonus_cemiterio_tipo': 6}
 SCOPES = {'aliados': 0, 'inimigos': 1, 'todos': 2}
 SUMMON_DAMAGE = 7
+DROP_ENTRY = 0x80021810
+DECK_INIT = (0x800179F4, 0x80017DB4, 0x800245A0)
+TEXT_DRAW = (0x80035E20, 0x80036BCC)
+CONFIG_EXTRAS = 2 + 2 * (CARD_COUNT + 1)
+FIXED_DECK_CONFIG = CONFIG_EXTRAS + 8
+NAME_COLOR_CONFIG = FIXED_DECK_CONFIG + 2
+NAME_TIERS = {key: color for key, (_, color) in RARITIES.items()}
+NAME_TIERS.update({key: color for _, color, key in TYPE_OVERRIDES.values()})
 
 
 @dataclass(frozen=True)
@@ -45,6 +55,16 @@ class EffectPlan:
     global_limit: int
     deck_drops: tuple[int, ...] = ()
     password_prefix: int | None = None
+    fixed_decks: tuple[int, ...] = ()
+    name_colors: int = 0
+
+    @property
+    def deck_features(self):
+        return bool(self.deck_drops or self.fixed_decks)
+
+    @property
+    def mod_features(self):
+        return self.deck_features or bool(self.name_colors)
 
     @property
     def copy_rules(self):
@@ -60,12 +80,33 @@ class EffectPlan:
 
     @property
     def bank_end(self):
+        if self.mod_features:
+            return RUNTIME_MOD_BASE
         if self.password_prefix is not None:
             return RUNTIME_PASSWORD_BASE
         return RUNTIME_EXT_BASE if self.gameplay else BANK_END
 
 
-def compile_effects(project, profile: bool) -> EffectPlan:
+def _name_colors(project, profile):
+    if not profile:
+        return {}
+    return {cid: name_style(project.get(cid))[2] for cid, card in getattr(project, 'cards', {}).items()
+            if 1 <= cid <= CARD_COUNT and not card.get('virtual')}
+
+
+def _pack_name_colors(colors):
+    ids = {key: index for index, key in enumerate(NAME_TIERS, 1)}
+    lookup = bytearray(CARD_COUNT + 1)
+    for cid, key in colors.items():
+        lookup[cid] = ids[key]
+    palette = [0]
+    for rgb in NAME_TIERS.values():
+        channels = [int(rgb[index:index + 2], 16) for index in (1, 3, 5)]
+        palette.append(sum(((value + 1) // 2) << (8 * i) for i, value in enumerate(channels)))
+    return struct.pack(f'<{len(palette)}I', *palette) + bytes(lookup) + b'\0'
+
+
+def compile_effects(project, profile: bool, *, fixed_decks=None) -> EffectPlan:
     """Keep the same action vocabulary and value checks as the Studio."""
     metadata = getattr(project, 'metadata', {})
     default = metadata.get('ps1_deck_global_limit')
@@ -88,13 +129,27 @@ def compile_effects(project, profile: bool) -> EffectPlan:
             pending.append('Passwords por ID no BIN/CUE exigem o perfil Drop x15.')
         deck_drops, prefix = (), None
 
-    data = bytearray(2 + 2 * (CARD_COUNT + 1))
+    fixed_decks = (fixed_decks or {}) if profile else {}
+    colors = _name_colors(project, profile)
+    data = bytearray(CONFIG_EXTRAS)
     data[0] = default
-    if deck_drops or prefix is not None:
+    if deck_drops or prefix is not None or fixed_decks or colors:
         flags = sum(1 << opponent for opponent in deck_drops)
         data.extend(struct.pack('<H', int(f'{prefix or 0:05d}', 16)))
         data.extend(flags.to_bytes(DUELIST_COUNT // 8, byteorder='little'))
         data.append(0)
+    if deck_drops or fixed_decks or colors:
+        data.extend(b'\0' * 4)
+        if fixed_decks:
+            directory = len(data)
+            struct.pack_into('<H', data, FIXED_DECK_CONFIG, directory)
+            data.extend(b'\0' * (DUELIST_COUNT * 2))
+            for opponent, deck in sorted(fixed_decks.items()):
+                struct.pack_into('<H', data, directory + opponent * 2, len(data))
+                data.extend(struct.pack(f'<{DECK_SIZE}H', *deck))
+        if colors:
+            struct.pack_into('<H', data, NAME_COLOR_CONFIG, len(data))
+            data.extend(_pack_name_colors(colors))
     offsets = {}
     for key, effects in sorted(getattr(project, 'effects', {}).items(), key=lambda pair: int(pair[0])):
         cid = int(key)
@@ -177,8 +232,8 @@ def compile_effects(project, profile: bool) -> EffectPlan:
             data.extend(payload)
         struct.pack_into('<H', data, 2 + 2 * cid, offsets[payload])
         accepted.extend(entries)
-    plan = EffectPlan(bytes(data) if accepted or deck_drops or prefix is not None else b'',
-                      tuple(accepted), tuple(pending), default, deck_drops, prefix)
+    plan = EffectPlan(bytes(data) if accepted or deck_drops or prefix is not None or fixed_decks or colors else b'',
+                      tuple(accepted), tuple(pending), default, deck_drops, prefix, tuple(sorted(fixed_decks)), len(colors))
     if plan.data_end > plan.bank_end:
         raise ModError('A tabela de efeitos excede a área reservada do perfil Drop x15.')
     return plan
@@ -239,18 +294,22 @@ def _rule_patches(plan: EffectPlan):
         # Exodia defaults to one copy unless the project supplies an override.
         yield 0x8003383C, (0x10600022,), (0,)
         yield 0x80033870, (0x2C420003, 0x10400014), (_jump(ENTRY_POINTS['DeckCopyGate']), 0)
-    if plan.deck_drops and not plan.gameplay:
-        pc, original_target, key = SCENE_HANDLERS[0]
-        yield pc, (original_target,), (ENTRY_POINTS[key],)
+    if plan.deck_features and not plan.gameplay:
         pc, original_words, key = FUNCTION_ENTRIES[1]
         yield pc, original_words, (_jump(ENTRY_POINTS[key]), 0)
+    if plan.name_colors:
+        yield 0x80090EAC, (0x80037DA4,), (ENTRY_POINTS['InsertTierName'],)
+        yield 0x80090F54, (0x80038E7C,), (ENTRY_POINTS['EndTierName'],)
 
 
 def _option_calls(plan):
-    if plan.deck_drops:
-        yield 0x800218F0, 0x80022618, 0x80021810, 'SelectDeckDrop'
+    if plan.deck_features:
+        yield (*DECK_INIT, 'DealConfiguredDecks')
     if plan.password_prefix is not None:
         yield 0x8002D684, 0x8002D6C8, 0x8016A37C, 'UpdatePasswordShop'
+    if plan.name_colors:
+        yield (*TEXT_DRAW, 0x800849F0, 'SortTierGlyph')
+        yield (*TEXT_DRAW, 0x80084320, 'SortTierPolygon')
 
 
 def _call_sites(exe, start, end, target):
@@ -261,7 +320,37 @@ def _call_sites(exe, start, end, target):
             yield pc, word
 
 
-def verify_effects(exe: bytes, plan: EffectPlan) -> dict:
+def _valid_original_drop_entry(raw):
+    """Allow ordinary displaced instructions or a same-region jump with its delay slot."""
+    if len(raw) != 8:
+        return False
+    for index, word in enumerate(struct.unpack('<II', raw)):
+        opcode = word >> 26
+        if index == 0 and opcode == 2:
+            continue
+        if opcode == 0 and (word & 63) in (0, 2, 3, 4, 6, 7, 0x21, 0x23, 0x24, 0x25, 0x26, 0x2A, 0x2B):
+            continue
+        if opcode not in (8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 35, 36, 37, 40, 41, 43):
+            return False
+    return True
+
+
+def _mod_program(plan, drop_entry):
+    if not plan.deck_drops:
+        return RUNTIME_MOD
+    if not _valid_original_drop_entry(drop_entry):
+        raise ModError('A entrada da rotina de drops do SLUS não pode ser executada na extensão.')
+    position = ENTRY_POINTS['RetailCardDrop'] - RUNTIME_MOD_BASE
+    return RUNTIME_MOD[:position] + drop_entry + RUNTIME_MOD[position + 8:]
+
+
+def _valid_call_count(key, count):
+    if key == 'UpdatePasswordShop':
+        return count == 1
+    return 1 <= count <= 4
+
+
+def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = None) -> dict:
     """Read the resident code, rules and hooks from the selected BIN/CUE."""
     code_start, cfg_start = RUNTIME_BASE - EXE_DELTA, CONFIG_ADDRESS - EXE_DELTA
     code_ok = exe[code_start:code_start+len(RUNTIME)] == RUNTIME
@@ -271,6 +360,16 @@ def verify_effects(exe: bytes, plan: EffectPlan) -> dict:
     if plan.password_prefix is not None:
         password_start = RUNTIME_PASSWORD_BASE - EXE_DELTA
         code_ok = code_ok and exe[password_start:password_start+len(RUNTIME_PASSWORD)] == RUNTIME_PASSWORD
+    if plan.mod_features:
+        start = RUNTIME_MOD_BASE - EXE_DELTA
+        original_start = DROP_ENTRY - EXE_DELTA
+        trampoline = ENTRY_POINTS['RetailCardDrop'] - EXE_DELTA
+        drop_entry = (original[original_start:original_start + 8] if original is not None
+                      else exe[trampoline:trampoline + 8])
+        try:
+            code_ok = code_ok and exe[start:start + len(RUNTIME_MOD)] == _mod_program(plan, drop_entry)
+        except ModError:
+            code_ok = False
     if not plan.data:
         return {'status': 'sem_regras_configuradas', 'rotina_presente': code_ok, 'quantidade': 0}
     table_ok = exe[cfg_start:cfg_start+len(plan.data)] == plan.data
@@ -278,14 +377,23 @@ def verify_effects(exe: bytes, plan: EffectPlan) -> dict:
                    struct.pack(f'<{len(words)}I', *words)
                    for pc, _, words in _rule_patches(plan))
     for start, end, target, key in _option_calls(plan):
-        hooks_ok = (hooks_ok and len(list(_call_sites(exe, start, end, ENTRY_POINTS[key]))) == 1
-                    and not any(_call_sites(exe, start, end, target)))
+        installed = list(_call_sites(exe, start, end, ENTRY_POINTS[key]))
+        hooks_ok = hooks_ok and _valid_call_count(key, len(installed)) and not any(_call_sites(exe, start, end, target))
+        if hooks_ok and original is not None:
+            expected = [(pc, _jump(ENTRY_POINTS[key], link=word >> 26 == 3))
+                        for pc, word in _call_sites(original, start, end, target)]
+            hooks_ok = installed == expected
+    if plan.deck_drops:
+        offset = DROP_ENTRY - EXE_DELTA
+        hooks_ok = hooks_ok and exe[offset:offset + 8] == struct.pack('<II', _jump(ENTRY_POINTS['SelectDeckDrop']), 0)
     applied = code_ok and table_ok and hooks_ok
     return {'status': 'aplicado' if applied else 'divergente',
             'rotina_presente': code_ok, 'tabela_confere': table_ok,
             'pontos_mips_conferem': hooks_ok, 'quantidade': len(plan.accepted) if applied else 0,
             'drops_do_deck': list(plan.deck_drops) if applied else [],
-            'password_id_prefix': plan.password_prefix if applied else None}
+            'password_id_prefix': plan.password_prefix if applied else None,
+            'decks_fixos': list(plan.fixed_decks) if applied else [],
+            'nomes_tier': plan.name_colors if applied else 0}
 
 
 def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
@@ -322,6 +430,16 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
         if any(exe[password_start:password_end]):
             raise ModError('Extensão de passwords PS1 conflita com a área reservada.')
         out[password_start:password_end] = RUNTIME_PASSWORD
+    drop_offset = DROP_ENTRY - EXE_DELTA
+    if plan.mod_features:
+        mod_start, mod_end = RUNTIME_MOD_BASE - EXE_DELTA, RUNTIME_MOD_END - EXE_DELTA
+        if (mod_end - mod_start != len(RUNTIME_MOD) or mod_end > len(exe)
+                or hashlib.sha256(RUNTIME_MOD).hexdigest() != RUNTIME_MOD_SHA256
+                or RUNTIME_MOD_END > RUNTIME_PASSWORD_BASE):
+            raise ModError('Extensão de decks e nomes PS1 fora da área reservada.')
+        if any(exe[mod_start:mod_end]):
+            raise ModError('Extensão de decks e nomes PS1 conflita com código ou texto no espaço reservado.')
+        out[mod_start:mod_end] = _mod_program(plan, original[drop_offset:drop_offset + 8])
     offsets = []
 
     def patch(pc, before, after):
@@ -332,10 +450,13 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
         patch(pc, before, after)
     for start, end, target, key in _option_calls(plan):
         matches = list(_call_sites(original, start, end, target))
-        if len(matches) != 1:
-            raise ModError(f'Extensão PS1: chamada esperada ausente ou ambígua em 0x{start:08X}.')
-        pc, old_word = matches[0]
-        patch(pc, (old_word,), (_jump(ENTRY_POINTS[key], link=old_word >> 26 == 3),))
+        if not _valid_call_count(key, len(matches)):
+            raise ModError(f'Extensão PS1: chamadas divergentes em 0x{start:08X}.')
+        for pc, old_word in matches:
+            patch(pc, (old_word,), (_jump(ENTRY_POINTS[key], link=old_word >> 26 == 3),))
+    if plan.deck_drops:
+        previous = struct.unpack_from('<II', original, drop_offset)
+        patch(DROP_ENTRY, previous, (_jump(ENTRY_POINTS['SelectDeckDrop']), 0))
     if description_icons:
         original_renderer = SPRITE_RAM - EXE_DELTA
         observed = struct.unpack_from('<28I', out, original_renderer)
@@ -351,5 +472,6 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
         'pontos_mips': offsets, 'bytes_tabela': len(plan.data),
         'limite_padrao_por_id': plan.global_limit,
         'drops_do_deck': list(plan.deck_drops), 'password_id_prefix': plan.password_prefix,
+        'decks_fixos': list(plan.fixed_decks), 'nomes_tier': plan.name_colors,
         'icones_de_descricao': description_icons, 'validado_no_epsxe': False}
     return bytes(out), report

@@ -1,3 +1,16 @@
+## v1.7.1 — Decks fixos, drops e cores de tier
+
+- **Cópias a inserir** controla o botão Adicionar. Selecionar uma linha do
+  deck preenche apenas **Total da carta**.
+- O Drop x15 usa o deck fixo de 40 cartas salvo para cada duelista.
+  A composição entra na rotina de embaralhamento do jogo. Decks fixos
+  incompletos permanecem editáveis e recebem um aviso de exportação.
+- **Dropar Cartas do Próprio Deck** usa as cartas registradas após o
+  embaralhamento, desde a primeira compra até o resultado. Cada cópia do
+  baralho é elegível em qualquer rank.
+- Catálogo, decks, drops, baú e campo revelado exibem as cores dos nomes.
+  O Drop x15 aplica a paleta de tiers ao renderizar o nome da carta.
+
 ## v1.7.0 — Catálogo, passwords, decks e recompensas
 
 - **Nova carta** salva qualquer ID livre e atualiza a biblioteca e os editores
