@@ -7,7 +7,7 @@ from fmstudio.ps1_god24_hand import SITES, apply, inspect
 
 
 def fake():
-    d = bytearray(0xD200)
+    d = bytearray(0xE000)
     d[:8] = b"PS-X EXE"
     for at, context, _ in SITES:
         struct.pack_into("<5I", d, at - 8, *context)
@@ -34,6 +34,56 @@ class GodHandTests(unittest.TestCase):
                             if i not in allowed))
         self.assertEqual(before, fake())
         self.assertFalse(report["invocacao_confirmada_no_epsxe"])
+
+    def test_real_slus_offsets_match_reported_ram_addresses(self):
+        from fmstudio.tables import EXE_DELTA
+        pc_list=(0x8001C214,0x8001C400,0x8001C9FC,0x8001CD34)
+        offsets=(0xCA14,0xCC00,0xD1FC,0xD534)
+        self.assertEqual(EXE_DELTA,0x8000F800)
+        self.assertEqual(tuple(at for at,_,_ in SITES),offsets)
+        for (offset,_,_),pc in zip(SITES,pc_list):
+            self.assertEqual(pc-offset,EXE_DELTA)
+        # Antigos offsets da v1.4.20 eram 0x800 bytes anteriores.
+        self.assertEqual(tuple(pc-0x80010000 for pc in pc_list),
+                         (0xC214,0xC400,0xC9FC,0xCD34))
+        src=fake()
+        self.assertEqual(inspect(src)['status'],'nao_aplicado_0_de_4')
+        modified,report=apply(src,src,[24],**self.kwargs(src))
+        self.assertEqual(report['status'],'aplicado_4_de_4')
+        for offset,_,_ in SITES:
+            self.assertEqual(src[offset-8:offset],modified[offset-8:offset])
+            self.assertNotEqual(src[offset:offset+4],modified[offset:offset+4])
+            # O patch não toca os offsets incorretos antigos.
+            self.assertEqual(src[offset-0x800:offset-0x800+4],
+                             modified[offset-0x800:offset-0x800+4])
+
+    def test_real_build_order_chest_rows_and_hand_together(self):
+        from fmstudio.ps1_god24_chest import (
+            SITES as CHEST_SITES, patch_god24_chest_preview,
+        )
+        from fmstudio.ps1_god24_row_patch import (
+            AT as ROW_AT, ORIGINAL as ROW_ORIGINAL, apply as patch_row, inspect as inspect_row,
+        )
+        original=bytearray(0x80000)
+        original[:8]=b'PS-X EXE'
+        for offset,context,_ in CHEST_SITES:
+            struct.pack_into('<5I',original,offset-4,*context)
+        struct.pack_into('<'+str(len(ROW_ORIGINAL))+'I',
+                         original,ROW_AT,*ROW_ORIGINAL)
+        for offset,context,_ in SITES:
+            struct.pack_into('<5I',original,offset-8,*context)
+        initial=bytes(original)
+        opts=self.kwargs(initial)
+        with_chest,_=patch_god24_chest_preview(initial,initial,[24],**opts)
+        with_rows,_=patch_row(initial,with_chest,[24],**opts)
+        final,report=apply(initial,with_rows,[24],**opts)
+        self.assertEqual(report['status'],'aplicado_4_de_4')
+        self.assertEqual(inspect_row(final)['status'],'aplicado_3_de_3')
+        self.assertEqual(inspect(final)['status'],'aplicado_4_de_4')
+        self.assertEqual(initial,bytes(original))
+        # A sequência de alterações no BIN não deve anular o patch do baú.
+        for offset,_,_ in CHEST_SITES:
+            self.assertEqual(final[offset:offset+4],with_rows[offset:offset+4])
 
     def test_original_types_and_god_only(self):
         for n in range(25):

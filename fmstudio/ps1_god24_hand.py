@@ -24,14 +24,16 @@ from .ps1_god24_chest import SOURCE_SHA256
 OLD_LOW_BITS = 0x1F
 NEW_LOW_BITS = 0x17
 SITES = (
-    # (offset, janela de 5 instruções iniciada em offset-8, nome)
-    (0xC214, (0x00000000, 0x00021683, 0x3042001F,
+    # (offset REAL no SLUS, janela de 5 instruções iniciada em offset-8, nome)
+    # Endereço RAM = offset SLUS + EXE_DELTA (0x8000F800).
+    # A v1.4.20 omitiu 0x800 (cabeçalho PS-X EXE) nesses quatro offsets.
+    (0xCA14, (0x00000000, 0x00021683, 0x3042001F,
               0x28420014, 0x10400009), "decisao_inicial_da_mao"),
-    (0xC400, (0x00000000, 0x00021683, 0x3050001F,
+    (0xCC00, (0x00000000, 0x00021683, 0x3050001F,
               0x2A020014, 0x1440000F), "confirmar_carta_na_mao"),
-    (0xC9FC, (0x00000000, 0x00021683, 0x3050001F,
+    (0xD1FC, (0x00000000, 0x00021683, 0x3050001F,
               0x2A020014, 0x14400003), "decisao_apos_escolha"),
-    (0xCD34, (0x00000000, 0x00021683, 0x3050001F,
+    (0xD534, (0x00000000, 0x00021683, 0x3050001F,
               0x2A020014, 0x1440001D), "selecionar_colocacao"),
 )
 
@@ -101,9 +103,20 @@ def apply(original_exe: bytes, edited_exe: bytes,
             raise ModError("God24 mão: a classificação de monstro foi alterada.")
         if kind in (20,21,22,23) and normalized != kind:
             raise ModError("God24 mão: as categorias especiais foram alteradas.")
-    if (inspect(original_exe)["status"] != "nao_aplicado_0_de_4"
-            or inspect(edited_exe)["status"] != "nao_aplicado_0_de_4"):
-        raise ModError("God24 mão: janela MIPS modificada ou incompatível.")
+    original_state=inspect(original_exe)
+    edited_state=inspect(edited_exe)
+    if (original_state["status"] != "nao_aplicado_0_de_4"
+            or edited_state["status"] != "nao_aplicado_0_de_4"):
+        conflicting=[
+            f"{p['rotina']} {p['offset_slus']}: {p['opcode_lido'] or 'fora do arquivo'}"
+            for p in edited_state["instrucoes"]
+            if p["estado"]!="original_sem_patch"
+        ]
+        reason="; ".join(conflicting) or edited_state["status"]
+        raise ModError(
+            "God24 mão: sequência MIPS original diferente do diagnóstico "
+            f"({reason}). Nenhum BIN foi modificado; utilize o mod de origem "
+            "validado, não uma imagem de teste já alterada.")
     copy = bytearray(edited_exe)
     changed = set()
     for offset, context, _ in SITES:

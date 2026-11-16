@@ -1,3 +1,13 @@
+## v1.4.21 — Corrigidos os quatro offsets do patch de God24 na mão
+
+- Corrigido erro de -0x800 na conversão de RAM para SLUS:
+  C214/ C400/ C9FC/ CD34 -> CA14/ CC00/ D1FC/ D534.
+- Assinaturas MIPS continuam obrigatórias; falha detalha offset/opcode.
+- Testes de regressão com PC RAM, EXE_DELTA e sequência completa
+  do patch de baú + renderizador + mão.
+- Não libera instalação em MODs diferentes nem patch já aplicado.
+- Invocação e combate God24 permanecem testes experimentais.
+
 ## v1.4.20 — Primeiro patch opt-in do God24 na mão do duelo
 
 - Usa o diagnóstico real da v1.4.19 para corrigir quatro máscaras

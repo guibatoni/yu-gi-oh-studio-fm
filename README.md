@@ -1,3 +1,32 @@
+# Studio FM v1.4.21 — Correção do erro "God24 mão: janela MIPS"
+
+Na v1.4.20, os quatro offsets do patch da mão estavam **0x800 bytes
+antes das instruções reais**, por falta do deslocamento do cabeçalho
+PS-X EXE no mapeamento RAM -> SLUS. A proteção de cinco opcodes
+bloqueava a geração corretamente em vez de modificar endereços errados.
+
+Corrigidos os offsets, confrontados com o relatório enviado:
+- RAM 0x8001C214 -> SLUS 0xCA14;
+- RAM 0x8001C400 -> SLUS 0xCC00;
+- RAM 0x8001C9FC -> SLUS 0xD1FC;
+- RAM 0x8001CD34 -> SLUS 0xD534.
+
+O executável de origem continua exigindo SHA e cinco opcodes exatos
+em cada ponto. O Studio agora informa o endereço e o opcode divergente
+se a verificação recusar outro MOD ou uma imagem já modificada.
+Foram adicionados testes dos quatro endereços com EXE_DELTA, de
+preservação dos antigos endereços incorretos e da cadeia completa
+de patch do baú -> renderizador -> seleção da mão.
+
+**Atenção:** a correção restaura a geração experimental do BIN,
+não comprova a invocação. O teste altera temporariamente valores
+8–15 no registrador da mão, apesar de conservar sua classificação
+como monstros. O símbolo Deus e o caminho de colocação/combate
+continuam sem validação no ePSXe. Teste em cópia do jogo e
+reinicie sem save state antigo.
+
+---
+
 # Studio FM v1.4.20 — God24 na mão do duelo (TESTE EXPERIMENTAL)
 
 O diagnóstico do usuário identificou quatro máscaras `0x1F` seguidas
