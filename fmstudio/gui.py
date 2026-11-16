@@ -2174,7 +2174,7 @@ class Studio(tk.Tk):
                        'três caracteres originais são trocados só na cópia. '
                        'Não implementa o tipo God 24.\n'
                        if self.project.metadata.get('ps1_god_icon_test_card_id') else '')
-                    f'PENDÊNCIAS DE MOTOR: {len(pending)}. Novos efeitos, cartas extras e cores de nomes NÃO serão aplicados.\n\n'
+                    + f'PENDÊNCIAS DE MOTOR: {len(pending)}. Novos efeitos, cartas extras e cores de nomes NÃO serão aplicados.\n\n'
                     + ('\n'.join(pending[:3]) + '\n\n' if pending else '') + 'Gerar somente a cópia parcial de teste?')
         if not messagebox.askyesno('Gerar cópia de teste', question, parent=self):
             return
