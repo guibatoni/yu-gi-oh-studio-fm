@@ -42,6 +42,22 @@ class StudioCoreTests(unittest.TestCase):
         self.p=Project.create(root/'MeuMod','Meu MOD')
         self.p.import_tables(self.base)
 
+    def test_time_wizard_god_type_never_silently_discards_attack(self):
+        from fmstudio.tables import decode_cards
+        source_sha=hashlib.sha256(self.file.read_bytes()).hexdigest()
+        # Reproduz captura do usuário: Time Wizard com ATK 3000 e tipo God.
+        self.p.set_card(16, {'ataque':3000, 'tipo_id':24})
+        with self.assertRaisesRegex(ModError,'Spellcaster'):
+            self.p.export()
+        self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),source_sha)
+        self.p.set_card(16, {'ataque':3000,'tipo_id':1})
+        output,manifest=self.p.export()
+        built=(output/'build_local'/'SLUS_014.11').read_bytes()
+        cards,_=decode_cards(built)
+        self.assertEqual(cards[15]['ataque'],3000)
+        self.assertEqual(cards[15]['tipo_id'],1)
+        self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),source_sha)
+
     def test_large_stats_saved_for_simulator_but_ps1_export_blocked(self):
         from fmstudio.core import simulation_nonnegative_int, check_card_edit
         from fmstudio.continuous import resolve_field

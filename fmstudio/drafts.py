@@ -29,6 +29,13 @@ def same_card(a: dict, b: dict) -> bool:
     return True
 
 
+
+# Referência explícita para cartas cujo tipo pode ter sido alterado na ISO:
+# Time Wizard #016 é Spellcaster no Forbidden Memories original.
+# Nenhuma carta é alterada automaticamente na importação ou atualização.
+RETAIL_TYPE_REFERENCES = {16: 1}
+
+
 class DraftSession:
     def __init__(self, project: Project):
         self.project = project
@@ -55,10 +62,14 @@ class DraftSession:
         else:
             self.cards[cid] = merged
 
+    def original_type_target(self, cid: int) -> int:
+        """Para #016, a referência retail é independente da ISO modificada."""
+        return RETAIL_TYPE_REFERENCES.get(cid,int(self.project.cards[cid]['tipo_id']))
+
     def restore_original_type(self, cid: int) -> None:
-        """Restaura apenas o tipo importado da ISO, sem tocar ATK/DEF/efeitos."""
+        """Restaura apenas o tipo alvo; mantém ATK/DEF e efeitos inalterados."""
         card=self.get_card(cid)
-        card['tipo_id']=int(self.project.cards[cid]['tipo_id'])
+        card['tipo_id']=self.original_type_target(cid)
         self.stage_card(cid,card)
 
     def reset_card(self, cid: int) -> None:

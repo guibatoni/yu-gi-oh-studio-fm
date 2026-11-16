@@ -30,7 +30,11 @@ def verify_image_stats(project, source):
         requested = project.get(cid)
         original = project.cards[cid]
         if int(requested.get('tipo_id',0)) >= 24 or int(requested.get('atributo_id',0)) > 5:
-            continue  # Dados experimentais não graváveis no motor original
+            if set(edits) & set(FIELDS):
+                raise ModError(f'Carta #{cid:03d}: tipo/atributo incompatível com '
+                               'o motor PS1. Não é seguro omitir esta carta da '
+                               'verificação da imagem.')
+            continue
         fields = {}
         for field in FIELDS:
             if field not in edits:

@@ -18,6 +18,24 @@ class DraftTests(unittest.TestCase):
         self.project.cards = {1: dict(CARD), 2: dict(CARD2)}
         self.drafts=DraftSession(self.project)
 
+    def test_time_wizard_restores_spellcaster_even_when_iso_says_equip(self):
+        self.project.cards[16]=dict(CARD,id=16,nome='Time Wizard',
+                                    tipo_id=23,ataque=500,defesa=400)
+        card=self.drafts.get_card(16)
+        card.update({'tipo_id':24,'ataque':3000,'defesa':400})
+        self.drafts.stage_card(16,card)
+        self.drafts.add_effect(16,{'evento':'invocar','acao':'aumentar_atk',
+                                   'alvo':'proprio','valor':500})
+        self.assertEqual(self.drafts.original_type_target(16),1)
+        self.drafts.restore_original_type(16)
+        now=self.drafts.get_card(16)
+        self.assertEqual((now['tipo_id'],now['ataque'],now['defesa']),
+                         (1,3000,400))
+        self.assertEqual(len(self.drafts.get_effects(16)),1)
+        self.drafts.save()
+        self.assertEqual(self.project.get(16)['tipo_id'],1)
+        self.assertEqual(self.project.get(16)['ataque'],3000)
+
     def test_restore_type_preserves_stats_and_effects(self):
         original_type=self.project.cards[1]['tipo_id']
         changed=self.drafts.get_card(1)

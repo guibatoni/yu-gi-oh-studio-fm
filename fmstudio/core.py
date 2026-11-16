@@ -144,6 +144,35 @@ def ps1_stat_export_errors(project) -> list[str]:
     return errors
 
 
+
+def ps1_unwritable_numeric_edits(project) -> list[str]:
+    """Recusa edição numérica que o gerador anterior ignorava silenciosamente."""
+    errors=[]
+    for key, fields in sorted(getattr(project,'edits',{}).items(),key=lambda pair:int(pair[0])):
+        cid=int(key)
+        if cid < 1 or cid > CARD_COUNT or not (set(fields)&set(NUMERIC)):
+            continue
+        current=project.get(cid)
+        typ=int(current['tipo_id'])
+        attr=int(current['atributo_id'])
+        name=str(current.get('nome') or '')
+        if typ >= 24:
+            errors.append(
+                f'Carta #{cid:03d} {name}: tipo {typ} não é gravável como criatura '
+                'no motor original (God 24 é somente prévia do Studio). '
+                + ('Para Time Wizard use 01 — Spellcaster; clique em '
+                   '"Restaurar tipo original" e salve o projeto.'
+                   if cid==16 else
+                   'Selecione um tipo suportado pelo PS1 e salve o projeto.')
+            )
+        if attr > 5:
+            errors.append(
+                f'Carta #{cid:03d} {name}: atributo {attr} não é suportado '
+                'na exportação retail PS1.'
+            )
+    return errors
+
+
 def check_card_edit(row: dict):
     cleaned = {}
     for key in FIELDS:
@@ -778,6 +807,12 @@ class Project:
         issues = self.validate()
         if issues:
             raise ModError('Exportação bloqueada:\n'+'\n'.join(issues[:12]))
+        # Não gere BIN incompleto quando a classe/tipo inviabiliza o patch.
+        incompatible=ps1_unwritable_numeric_edits(self)
+        if incompatible:
+            raise ModError('Exportação PS1 bloqueada para evitar perda de '
+                           'ATK/DEF ou classificação da carta.\n'
+                           +'\n'.join(incompatible[:10]))
         # Não exporte dados truncados pelo campo PS1 de nove bits.
         oversized=ps1_stat_export_errors(self)
         if oversized:
@@ -829,8 +864,9 @@ class Project:
             for row in changes:
                 cid = row['id']
                 if cid > CARD_COUNT: continue
-                if int(self.get(cid)['tipo_id']) == 24:
-                    continue  # tipo God só existe no editor, sem injetar em tabelas retail
+                if int(self.get(cid)['tipo_id']) >= 24:
+                    raise ModError(f'Carta #{cid:03d}: tipo não gravável no PS1. '
+                                   'A geração foi bloqueada para evitar perder atributos.')
                 base = self.cards[cid]
                 off = STATS_ADDR - EXE_DELTA + (cid - 1) * 4
                 before = struct.unpack_from('<I', data, off)[0]

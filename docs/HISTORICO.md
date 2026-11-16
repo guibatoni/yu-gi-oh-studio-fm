@@ -1,3 +1,13 @@
+## v1.4.5 — Evita perda silenciosa do ATK (Time Wizard)
+
+- Reprodução: Time Wizard #016 configurado com 3000 ATK e tipo 24 — God
+  mantém 500 ATK no jogo, porque o antigo exportador ignorava o registro.
+- Correção: toda edição numérica em tipo God/indefinido ou atributo incompatível
+  falha na exportação com orientação explícita, sem substituir BIN anterior.
+- Restauração de tipo da carta #016 usa referência retail (01 Spellcaster).
+- A verificação da imagem não oculta cartas ignoradas.
+- Testes de BIN sintético, restauração preservando efeitos e pré-validação.
+
 ## v1.4.4 — Correção de tipo e números de alta precisão no Studio
 
 - Botão para restaurar apenas o tipo original por carta, sem apagar poderes/efeitos.

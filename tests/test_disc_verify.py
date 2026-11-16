@@ -58,6 +58,21 @@ def create_disc(path, atk):
 
 
 class CardValueVerificationTests(unittest.TestCase):
+    def test_god_type_is_not_silently_skipped_in_bin_verification(self):
+        from fmstudio.core import ModError
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'teste.bin'
+            create_disc(path,500)
+            base={'id':16,'nome':'Time Wizard','ataque':500,'defesa':400,
+                  'tipo_id':1,'atributo_id':0,'nivel':2,
+                  'guardian_1_id':10,'guardian_2_id':8}
+            edited={**base,'ataque':3000,'tipo_id':24}
+            project=SimpleNamespace(
+                edits={'16':{'ataque':3000,'tipo_id':24}},
+                cards={16:base},get=lambda cid:edited)
+            with self.assertRaisesRegex(ModError,'incompatível'):
+                verify_image_stats(project,path)
+
     def test_time_wizard_differs_on_original_and_matches_on_generated(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)

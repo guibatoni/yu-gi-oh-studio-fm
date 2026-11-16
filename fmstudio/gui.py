@@ -521,8 +521,10 @@ class Studio(tk.Tk):
         self._form_entry(left,'Ataque (múltiplos de 10)','ataque',1)
         self._form_entry(left,'Defesa (múltiplos de 10)','defesa',2)
         self._form_entry(left,'Tipo','tipo_id',3,kind='type')
-        ttk.Button(left,text='Restaurar somente tipo da ISO',command=self.restore_original_type).grid(row=8,column=0,sticky='w',pady=(5,2))
+        ttk.Button(left,text='Restaurar tipo original',command=self.restore_original_type).grid(row=8,column=0,sticky='w',pady=(5,2))
         ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
+        self.card_type_warning=ttk.Label(left,text='',wraplength=330)
+        self.card_type_warning.grid(row=10,column=0,sticky='w',pady=(1,6))
         self._form_entry(right,'Atributo','atributo_id',0,kind='attr')
         self._form_entry(right,'Nível (0 a 15)','nivel',1)
         self._form_entry(right,'Guardian Star 1','guardian_1_id',2,kind='star')
@@ -1036,10 +1038,30 @@ class Studio(tk.Tk):
         if self._loading or not self.drafts or not self.selected_id:
             return
         _label,color,_kind=self._current_name_style()
+        self._update_card_type_warning()
         # O campo legado fica sincronizado quando a classe/tipo for alterado.
         if self.vars['cor_nome'].get() != color:
             self.vars['cor_nome'].set(color)
         self._on_card_field_input()
+
+    def _update_card_type_warning(self):
+        if not getattr(self,'selected_id',None) or not hasattr(self,'card_type_warning'):
+            return
+        try:
+            typ=int(self.vars['tipo_id'].get().split(' — ',1)[0])
+            cid=self.selected_id
+            if cid==16 and typ!=1:
+                msg=('Time Wizard original é Spellcaster (01). '
+                     'O tipo atual pode impedir a aplicação do ATK no PS1. '
+                     'Use "Restaurar tipo original".')
+            elif typ>=24:
+                msg=('Tipo God ou desconhecido: somente simulação. '
+                     'Alterações numéricas serão bloqueadas na exportação PS1.')
+            else:
+                msg=''
+            self.card_type_warning.configure(text=msg)
+        except (ValueError,KeyError):
+            self.card_type_warning.configure(text='Verifique o tipo da carta.')
 
     def _on_card_field_input(self):
         if self._loading or not self.drafts or not self.selected_id:
@@ -1135,6 +1157,7 @@ class Studio(tk.Tk):
                 self.vars[key].set(str(c.get(key,'') or ''))
         self.description.edit_modified(False)
         self._loading=False
+        self._update_card_type_warning()
         _label,color,_kind=self._apply_name_color_preview()
         ident=format_id(self.selected_id)
         self.selected_caption.configure(text=f'{ident}  {c.get("nome") or "Nome ainda não extraído"}')
@@ -1217,15 +1240,15 @@ class Studio(tk.Tk):
             return
         self._stage_current()
         cid=self.selected_id
-        original=int(self.project.cards[cid]['tipo_id'])
+        original=self.drafts.original_type_target(cid)
         current=int(self.drafts.get_card(cid)['tipo_id'])
         if current==original:
             messagebox.showinfo('Tipo original',
-                f'A carta #{cid:03d} já usa o tipo importado da ISO: '
+                f'A carta #{cid:03d} já usa o tipo de referência original: '
                 f'{TYPE_NAMES[original] if original<len(TYPE_NAMES) else original}.',
                 parent=self)
             return
-        if not messagebox.askyesno('Restaurar tipo da ISO',
+        if not messagebox.askyesno('Restaurar tipo original',
             f'Carta #{cid:03d}: {current} → {original} '
             f'({TYPE_NAMES[original] if original<len(TYPE_NAMES) else "desconhecido"}).\n'
             'Apenas o tipo será revertido. ATK, DEF, arte e efeitos serão preservados.\n'
@@ -2031,6 +2054,16 @@ class Studio(tk.Tk):
             messagebox.showinfo('Salve primeiro', 'Clique Salvar projeto antes de gerar uma cópia de teste.', parent=self)
             return
         from .ps1_compat import audit, save_audit, explain_no_writable_changes
+        from .core import ps1_unwritable_numeric_edits, ps1_stat_export_errors
+        unexportable=ps1_unwritable_numeric_edits(self.project)
+        oversized=ps1_stat_export_errors(self.project)
+        if unexportable or oversized:
+            messagebox.showerror(
+                'Corrija os atributos antes de gerar o BIN',
+                'Há alterações que não seriam aplicadas corretamente no PS1.\n\n'
+                +'\n'.join((unexportable+oversized)[:8])
+                +'\n\nNenhum BIN/CUE foi modificado.',parent=self)
+            return
         report = audit(self.project)
         if not report['gravavel_hoje']:
             dest = save_audit(self.project)
@@ -2074,6 +2107,8 @@ class Studio(tk.Tk):
         messagebox.showinfo(f'Imagem de teste {action}',
             f'Imagem de teste {action} com sucesso.\n\n'
             f'BIN: {manifest["bin"]}\nCUE: {manifest["cue"]}\n'
+            f'Cartas com atributos confirmados no BIN: '
+            f'{manifest.get("verificacao_atributos",{}).get("corretas","não disponível")}\n'
             f'Setores modificados: {manifest["setores_modificados"]}\n\n'
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'

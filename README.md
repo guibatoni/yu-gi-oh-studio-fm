@@ -1,3 +1,23 @@
+# Studio FM v1.4.5 — Correção do Time Wizard #016 / ATK do BIN
+
+- Corrigido erro da v1.4.4: tipo God (24) podia ser exibido no Studio,
+  mas era descartado silenciosamente pelo exportador, mantendo os atributos
+  originais no ePSXe mesmo com valores editados.
+- A exportação numérica PS1 agora é **bloqueada com erro explícito** quando
+  tipo 24+ ou atributo não suportado impediria o patch. A auditoria do BIN
+  também recusa omitir uma edição numérica incompatível.
+- **Restaurar tipo original** usa **Spellcaster (01)** no Time Wizard #016,
+  mesmo que uma ISO modificada o tenha classificado como Equip/God.
+  Outras cartas continuam usando o tipo importado de sua ISO.
+- ATK/DEF, efeitos e arte não são alterados ao restaurar somente o tipo.
+- A interface destaca o alerta quando Time Wizard não está em Spellcaster.
+- Após salvar e gerar BIN/CUE, o resultado exibe quantas cartas tiveram
+  atributos verificados na imagem realmente construída.
+- Uma imagem antiga ainda aberta no ePSXe não se atualiza por conta própria;
+  feche o jogo e carregue explicitamente o BIN gerado.
+
+---
+
 # Studio FM v1.4.4 — Recuperação de tipo e números grandes no simulador
 
 - Na aba **Cartas**, **Restaurar somente tipo da ISO** reverte a classificação
