@@ -33,13 +33,20 @@ def directory(name, location, size, flags=0):
     return bytes(out)
 
 
-def create_disc(path, atk, typ=1):
+def create_disc(path, atk, typ=1, god_mask=None):
     exe=bytearray(1902592)
     exe[:8]=b'PS-X EXE'
     off=STATS_ADDR-EXE_DELTA+(16-1)*4
     raw=(typ<<26)|(10<<22)|(8<<18)|(40<<9)|(atk//10)
     struct.pack_into('<I',exe,off,raw)
     exe[LEVEL_ADDR-EXE_DELTA+16]=2
+    if god_mask is not None:
+        from fmstudio.ps1_god24_chest import SITES, NEW
+        for offset,pattern,_ in SITES:
+            words=list(pattern)
+            if god_mask=='new' or (god_mask=='partial' and offset==SITES[0][0]):
+                words[1]=NEW
+            struct.pack_into('<5I',exe,offset-4,*words)
     file_lba=25
     blocks=[sector() for _ in range(file_lba + (len(exe)+2047)//2048)]
     root=directory(b'\x00',20,2048,2)
@@ -98,6 +105,35 @@ class CardValueVerificationTests(unittest.TestCase):
             project.metadata={}
             with self.assertRaisesRegex(ModError,'incompatível'):
                 verify_image_stats(project,path)
+
+    def test_god24_chest_mask_readback_from_selected_images(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            old,patched,mixed=(root/'old.bin',root/'patched.bin',root/'partial.bin')
+            create_disc(old,3000,typ=24,god_mask='old')
+            create_disc(patched,3000,typ=24,god_mask='new')
+            create_disc(mixed,3000,typ=24,god_mask='partial')
+            baseline={'id':16,'nome':'Time Wizard','ataque':500,'defesa':400,
+                      'tipo_id':1,'atributo_id':0,'nivel':2,
+                      'guardian_1_id':10,'guardian_2_id':8}
+            edited={**baseline,'ataque':3000,'tipo_id':24}
+            project=SimpleNamespace(
+                metadata={'ps1_god_type_test_card_id':16,
+                          'ps1_god_chest_preview':True},
+                edits={'16':{'ataque':3000,'tipo_id':24}},
+                cards={16:baseline},get=lambda cid:edited)
+            for path,status,count in (
+                (old,'nao_aplicado_0_de_2',0),
+                (patched,'aplicado_2_de_2',2),
+                (mixed,'parcial_1_de_2',1)):
+                report=verify_image_stats(project,path)
+                self.assertEqual(report['god24_mascaras_bau']['status'],status)
+                self.assertEqual(report['god24_mascaras_bau']['total_aplicados'],count)
+                self.assertEqual(report['divergentes'],0)
+                self.assertEqual(report['god24_carta_teste_no_bin']['tipo_id'],24)
+                self.assertEqual(report['god24_carta_teste_no_bin']['ataque'],3000)
+                self.assertEqual(report['god24_carta_teste_no_bin']['defesa'],400)
+                self.assertIn(status,describe(report))
 
     def test_time_wizard_differs_on_original_and_matches_on_generated(self):
         with tempfile.TemporaryDirectory() as tmp:
