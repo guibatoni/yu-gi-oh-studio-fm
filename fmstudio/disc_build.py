@@ -2,7 +2,7 @@
 
 Somente substitui bytes da ISO9660 SLUS_014.11 quando o executável gerado
 mantém o mesmo tamanho. Atualiza EDC+ECC para cada setor Mode2/Form1 alterado.
-Não implementa efeitos, textos, novas cartas ou fusões no motor de PS1.
+Aplica regras compatíveis com o perfil PS1 e verifica os dados da cópia.
 """
 from __future__ import annotations
 
@@ -142,7 +142,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             metadata=getattr(project,'metadata',{})
             expected_wa=wa_sha(project) if metadata.get('edicao_mod') else None
             mod_plan=compile_mod(project,profile=native_profile,wa_verified=bool(expected_wa))
-            native_plan=compile_effects(project,native_profile,fixed_decks=mod_plan.fixed_decks)
+            native_plan=compile_effects(project,native_profile,fixed_decks=mod_plan.fixed_decks,
+                                        fusions=mod_plan.fusions)
             equip_mode=metadata.get('ps1_equip_mode','adicionar')
             if equip_mode not in ('adicionar','substituir'):
                 raise ModError('Modo de equipamento inválido no projeto.')
@@ -175,7 +176,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         validate_ps1_prefix(original_wa, native_plan.password_prefix)
     desc_bank_end=min(native_plan.bank_end, LP_CODE if mod_plan.has_lp else LP_BANK_END)
     if native_plan.data_end>desc_bank_end:
-        raise ModError('A tabela de efeitos excede a área reservada para esta cópia.')
+        raise ModError('As regras nativas excedem a área reservada para esta cópia.')
 
     audit_report=None
     if hasattr(project,'edits') and hasattr(project,'new_cards'):
@@ -468,7 +469,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 raise ModError('BIN de teste diverge dos atributos do projeto. '
                                'A cópia anterior foi preservada.')
             if native_plan.data and checked['efeitos_nativos_ps1']['status']!='aplicado':
-                raise ModError('As regras nativas, os decks ou as cores do BIN divergem do projeto. '
+                raise ModError('As regras nativas do BIN divergem do projeto. '
                                'A cópia anterior foi preservada.')
             if native_profile and not all(checked['edicao_do_mod_ps1'].values()):
                 raise ModError('As regras de duelo do BIN divergem do projeto. A cópia anterior foi preservada.')

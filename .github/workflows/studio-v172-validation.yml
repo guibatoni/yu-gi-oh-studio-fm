@@ -14,6 +14,23 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends gcc-mipsel-linux-gnu binutils-mipsel-linux-gnu python3-tk python3-pil python3-venv xvfb xauth
           python3 tools/compile_ps1_runtime.py
-          echo STUDIO_RUNTIME_BEGIN
-          cat fmstudio/ps1_runtime_blob.py
-          echo STUDIO_RUNTIME_END
+          git diff --exit-code -- fmstudio/ps1_runtime_blob.py
+      - name: Validar Python e testes
+        run: |
+          python3 -m compileall -q app.py fmstudio tools tests
+          python3 -m unittest discover -s tests -v
+          python3 -S -m unittest discover -s tests -p test_ps1_god_icon.py -v
+      - name: Verificar interface
+        run: |
+          export PYTHONPATH=.
+          for test in tests/gui*_smoke.py; do
+            printf '%s\n' "$test"
+            timeout 40s xvfb-run -a python3 "$test"
+          done
+      - name: Executar fusões no MIPS
+        run: |
+          python3 -m venv /tmp/studio-mips
+          /tmp/studio-mips/bin/pip -q install unicorn==2.1.4
+          PYTHONPATH=. /tmp/studio-mips/bin/python tests/verify_edited_fusion_mips.py
+      - name: Verificar o pacote do atualizador
+        run: python3 tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip

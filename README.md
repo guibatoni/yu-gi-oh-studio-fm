@@ -1,3 +1,13 @@
+# Studio FM v1.7.2 — Fusões personalizadas no Drop x15
+
+As fusões salvas em **Relações → Fusões** vão para o próximo BIN/CUE do
+Drop x15 quando os materiais e o resultado usam os IDs originais #001–#722.
+O jogo resolve a combinação com os materiais em qualquer ordem,
+e a IA também consulta a receita. Use **Verificar BIN/CUE** para conferir
+as fusões gravadas na cópia.
+
+---
+
 # Studio FM v1.7.1 — Decks fixos no Drop x15 e nomes por tier
 
 Em **Edição do Mod → Deck do oponente**, escolha o duelista e salve **40/40**

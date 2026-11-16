@@ -32,9 +32,11 @@ def audit(project) -> dict:
             'descricoes':0,'classes_cores':0,'icones_especiais':0,'equipamentos_ps1':0,'equip_substituicoes':0,
             'rituais_ps1':0,'armadilhas_ps1':0,'terrenos_ps1':0,'limite_global_deck_ps1':0}
     mod_plan=compile_mod(project,profile=native_profile,wa_verified=wa_pinned)
-    native_plan=compile_effects(project,native_profile,fixed_decks=mod_plan.fixed_decks)
+    native_plan=compile_effects(project,native_profile,fixed_decks=mod_plan.fixed_decks,
+                                fusions=mod_plan.fusions)
     counts['nomes_tier_ps1'] = native_plan.name_colors
     counts['decks_fixos_ps1'] = len(native_plan.fixed_decks)
+    counts['fusoes_personalizadas_ps1'] = len(native_plan.fusions)
     blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
     if native_profile:
         supported.append('Bloqueio de ataque na abertura com exceção por carta')
@@ -198,7 +200,7 @@ def audit(project) -> dict:
         'atributos_originais':'gravavel_em_BIN_EXPERIMENTAL',
         'nomes_curtos_fonte_original':'gravavel_se_couber_no_espaco_original',
         'arte_e_miniatura_722':'gravavel_com_paleta_original_e_WA_verificado',
-        'fusoes_original':'preservado_sem_edicao',
+        'fusoes_original':'Tabela de base com receitas personalizadas resolvidas no Drop x15',
         'descricoes_coloridas':'Cores e ícones do jogo. Drop x15 também aceita ícones do Studio e realocação de texto.',
         'raridade_e_cor_nomes':'Cores de tier salvo por carta no Drop x15',
         'icones_personalizados':'Graváveis nas descrições no perfil Drop x15',

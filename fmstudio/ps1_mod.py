@@ -44,6 +44,7 @@ class ModPlan:
     applied: list[str]
     pending: list[str]
     fixed_decks: dict[int, tuple[int, ...]] = field(default_factory=dict)
+    fusions: dict[tuple[int, int], int] = field(default_factory=dict)
 
     @property
     def needs_wa(self):
@@ -100,6 +101,10 @@ def _retail_weights(weights, last_id):
             allocated[donor] -= 1
             allocated[cid] = 1
     return tuple(allocated.get(cid,0) for cid in range(1,CARD_COUNT+1))
+
+
+def fusion_uses_original_ids(cards, *ids):
+    return all(1 <= cid <= CARD_COUNT and cid in cards and not cards[cid].get('virtual') for cid in ids)
 
 
 def compile_mod(project, *, profile, wa_verified):
@@ -187,8 +192,18 @@ def compile_mod(project, *, profile, wa_verified):
             plan.pending.append(f'Deck inicial: {exc}')
     if config.get('iniciais'):
         plan.pending.append('Perfis adicionais de deck inicial: disponíveis nas partidas do Studio.')
-    for kind, records in config.get('receitas', {}).items():
-        if records:
+    recipes = config.get('receitas', {})
+    for pair, result in recipes.get('fusoes', {}).items():
+        a, b = map(int, pair.split(','))
+        label = f'Fusão #{a:03d} + #{b:03d} → #{result:03d}'
+        if profile and fusion_uses_original_ids(cards, a, b, result):
+            plan.fusions[a, b] = result
+        else:
+            plan.pending.append(f'{label}: o BIN/CUE exige o perfil Drop x15 e IDs originais #001–#722.')
+    if plan.fusions:
+        plan.applied.append(f'Fusões personalizadas ({len(plan.fusions)})')
+    for kind in ('rituais', 'equipamentos'):
+        if recipes.get(kind):
             plan.pending.append(f'Relações de cartas ({kind}): compatíveis com as partidas do Studio.')
     return plan
 

@@ -1,3 +1,10 @@
+## v1.7.2 — Fusões personalizadas no BIN/CUE
+
+- Receitas salvas em **Relações** com IDs originais passam a integrar a
+  resolução de fusões do Drop x15, para o jogador e o adversário.
+- A verificação de BIN/CUE lista as receitas personalizadas que conferem
+  com o projeto, incluindo os dois materiais e o resultado.
+
 ## v1.7.1 — Decks fixos, drops e cores de tier
 
 - **Cópias a inserir** controla o botão Adicionar. Selecionar uma linha do

@@ -2445,6 +2445,8 @@ class Studio(tk.Tk):
             + ('Ataque na abertura restrito pela habilidade da carta.\n'
                if mod.get('bloqueio_turno_inicial') else '')
             + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
+            + (f'Fusões personalizadas gravadas: {len(runtime["fusoes"])}.\n'
+               if runtime.get('fusoes') else '')
             + (f'Decks fixos de 40 cartas: {len(runtime["decks_fixos"])} duelista(s).\n'
                if runtime.get('decks_fixos') else '')
             + (f'Nomes com cor de tier: {runtime["nomes_tier"]} carta(s).\n'

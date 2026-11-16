@@ -953,6 +953,13 @@ class CardRelationsDialog(tk.Toplevel):
             variable = tk.StringVar(value=initial)
             ttk.Entry(cell, textvariable=variable, width=15).pack(fill='x')
             self.fusion_values.append(variable)
+        self.fusion_status = tk.StringVar()
+        if ps1_supports_god24(studio.project):
+            self.fusion_status.set('Receitas com IDs originais entram na próxima cópia BIN/CUE do Drop x15.')
+        else:
+            self.fusion_status.set('Receitas salvas ficam disponíveis no simulador do Studio.')
+        ttk.Label(fusions, textvariable=self.fusion_status, foreground=MUTED,
+                  wraplength=540).pack(anchor='w', pady=(0, 5))
         ttk.Button(fusions, text='Salvar fusão', style='Accent.TButton', command=self._save_fusion).pack(side='right')
         ttk.Button(fusions, text='Remover alteração', command=lambda: self._save_fusion(remove=True)).pack(side='right', padx=5)
         self.tributes = tk.StringVar()
@@ -1001,22 +1008,33 @@ class CardRelationsDialog(tk.Toplevel):
             project = self.studio.project
             rules = deepcopy(project.metadata.get(CONFIG_KEY, {}))
             entries = rules.setdefault('receitas', {}).setdefault(scope, {})
-            apply(entries)
+            status = apply(entries)
             save_rules(project, rules)
             self.studio.mod_editor.refresh()
-            self.studio._update_status('Relações salvas.')
+            self.studio._update_status(status or 'Relações salvas.')
+            if scope == 'fusoes' and status:
+                self.fusion_status.set(status)
             self._refresh()
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Relações da carta', str(exc), parent=self)
 
     def _save_fusion(self, remove=False):
+        from .ps1_mod import fusion_uses_original_ids
+
         def edit(entries):
             a, b = sorted(positive_int(v.get(), 'Material') for v in self.fusion_values[:2])
             key = f'{a},{b}'
             if remove:
                 entries.pop(key, None)
-            else:
-                entries[key] = positive_int(self.fusion_values[2].get(), 'Resultado')
+                return 'Alteração da fusão removida.'
+            result = positive_int(self.fusion_values[2].get(), 'Resultado')
+            entries[key] = result
+            project = self.studio.project
+            label = f'#{a:03d} + #{b:03d} → #{result:03d}'
+            if ps1_supports_god24(project) and fusion_uses_original_ids(project.cards, a, b, result):
+                return f'{label} salva. Gere outra cópia BIN/CUE para aplicar.'
+            return f'{label} salva no simulador.'
+
         self._change('fusoes', edit)
 
     def _save_ritual(self):
