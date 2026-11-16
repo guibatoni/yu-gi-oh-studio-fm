@@ -1,3 +1,12 @@
+## v1.4.16 — Diagnóstico do BIN que o usuário executou
+
+- Verificação de 0/2, 1/2 ou 2/2 máscaras reais no SLUS do BIN/CUE escolhido.
+- Relatório inclui tipo, ATK e DEF efetivamente gravados para God24.
+- Aviso ao gerar imagem quando a opção de patch de baú não estiver ativa.
+- Mensagem final informa claramente se o teste estava aplicado.
+- Testes sintéticos de máscaras ausentes, presentes e parciais.
+- Nenhuma alteração nova nos limites do motor MIPS ou no ícone.
+
 ## v1.4.15 — Duas máscaras MIPS para ATK/DEF de God24 no baú
 
 - Opt-in explícito na aba Cartas para apresentação do tipo 24 no baú.

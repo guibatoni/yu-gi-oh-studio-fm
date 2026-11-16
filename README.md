@@ -1,3 +1,29 @@
+# Studio FM v1.4.16 — Auditar o BIN real antes de outro patch God24
+
+Após a captura do baú sem ATK/DEF, não é possível confirmar apenas
+pela imagem se o usuário executou um BIN que contém o patch da v1.4.15.
+
+O comando **Projeto / Exportação > Verificar BIN/CUE** agora faz
+readback do SLUS da imagem selecionada e identifica o estado exato de
+duas instruções MIPS, nos offsets 0x51500 e 0x51728:
+`aplicado_2_de_2`, `nao_aplicado_0_de_2`, `parcial_1_de_2`
+ou `opcodes_desconhecidos`. Mostra também tipo, ATK e DEF
+da carta marcada para teste, e salva `verificacao_bin_ps1.json`.
+
+O botão **Gerar jogo BIN/CUE** oferece confirmação para ligar
+o teste experimental do baú quando a carta for God24 e o usuário
+esquecer de ativá-lo. A mensagem final informa se as duas máscaras
+foram aplicadas, e a releitura aborta a substituição do último BIN
+caso haja diferença entre solicitado e gravado.
+
+**Nenhum hook MIPS novo**: esta versão investiga se o jogo recebeu
+a modificação da v1.4.15. Se o arquivo contém 2/2 máscaras e
+ATK/DEF corretos mas o ePSXe permanece sem poder, ainda existem
+rotinas de exibição ou caminhos de execução a localizar. O ícone
+God24 e as regras de batalha continuam pendentes.
+
+---
+
 # Studio FM v1.4.15 — God24 ATK/DEF no baú (teste opcional)
 
 Primeiro patch MIPS do God24 aplicado à CÓPIA do SLUS: a opção
