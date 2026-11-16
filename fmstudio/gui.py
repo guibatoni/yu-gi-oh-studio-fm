@@ -2250,7 +2250,7 @@ class Studio(tk.Tk):
                'não foram alterados. O teste do tipo God 24 é independente.\n'
                if (manifest.get('teste_visual_icone_deus') or {}).get('status')
                   == 'icone_nao_inserido_sem_espaco_livre' else '')
-            f'Tipo 24 God (gravação experimental): '
+            + f'Tipo 24 God (gravação experimental): '
             f'{manifest.get("teste_tipo_god24",{}).get("status") if manifest.get("teste_tipo_god24") else "não habilitado"}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
