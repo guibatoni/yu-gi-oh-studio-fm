@@ -1,3 +1,10 @@
+## v1.6.1 — Ataque de abertura por carta
+
+- O primeiro turno exige **Ataca no 1º turno** no monstro em campo.
+- Fusões verificam a habilidade da carta resultante.
+- O exportador Drop x15 mantém a trava de abertura e o verificador identifica
+  cópias antigas com liberação geral.
+
 ## v1.6.0 — Criação de cartas, passwords e geração de decks
 
 - Cartas novas aparecem no catálogo, nos seletores de deck e na busca logo

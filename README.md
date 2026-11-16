@@ -1,3 +1,12 @@
+# Studio FM v1.6.1 — Ataque no primeiro turno
+
+No turno de abertura, só monstros com **Ataca no 1º turno** podem atacar.
+Em uma fusão, vale a habilidade da carta resultante. Os turnos seguintes
+usam as regras normais de combate. Gere outro BIN/CUE do Drop x15 a
+partir da imagem original para aplicar a regra no PS1.
+
+---
+
 # Studio FM v1.6.0 — Passwords e geração de decks
 
 Na aba **Edição do Mod**, abra **Passwords de Cartas** para buscar os códigos

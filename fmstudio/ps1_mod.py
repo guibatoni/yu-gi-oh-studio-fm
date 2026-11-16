@@ -17,7 +17,6 @@ from .tables import (
 
 FIRST_TURN_PC = 0x80017B18
 FIRST_TURN_SOURCE = 0x34421000
-FIRST_TURN_PATCH = 0x34420000  # ori v0,v0,0 omits the first-turn attack lock
 INIT_CALL = 0x80017B08
 LP_CODE = 0x801CFF00
 LP_TABLE = 0x801CFFA0
@@ -182,29 +181,36 @@ def _replace_word(out, pc, before, after):
     struct.pack_into('<I',out,offset,after)
 
 
+def _has_opening_attack_lock(exe):
+    offset = FIRST_TURN_PC - EXE_DELTA
+    return exe[offset:offset+4] == struct.pack('<I', FIRST_TURN_SOURCE)
+
+
 def patch_executable(exe, plan, *, profile):
     if not profile:
         return exe
+    if not _has_opening_attack_lock(exe):
+        raise ModError('A trava original de ataque no primeiro turno diverge do Drop x15.')
+    if not plan.has_lp:
+        return exe
     out = bytearray(exe)
-    _replace_word(out,FIRST_TURN_PC,FIRST_TURN_SOURCE,FIRST_TURN_PATCH)
-    if plan.has_lp:
-        start, end = LP_CODE - EXE_DELTA, LP_BANK_END - EXE_DELTA
-        if any(out[start:end]):
-            raise ModError('O banco reservado para LP do PS1 está ocupado.')
-        struct.pack_into(f'<{len(_LP_WORDS)}I',out,start,*_LP_WORDS)
-        struct.pack_into(f'<{DUELIST_COUNT+1}H',out,LP_TABLE-EXE_DELTA,plan.player_lp,*plan.life)
-        _replace_word(out,INIT_CALL,_LP_INIT,_LP_JAL)
+    start, end = LP_CODE - EXE_DELTA, LP_BANK_END - EXE_DELTA
+    if any(out[start:end]):
+        raise ModError('O banco reservado para LP do PS1 está ocupado.')
+    struct.pack_into(f'<{len(_LP_WORDS)}I',out,start,*_LP_WORDS)
+    struct.pack_into(f'<{DUELIST_COUNT+1}H',out,LP_TABLE-EXE_DELTA,plan.player_lp,*plan.life)
+    _replace_word(out,INIT_CALL,_LP_INIT,_LP_JAL)
     return bytes(out)
 
 
 def verify_executable(exe, plan):
-    first_turn = exe[FIRST_TURN_PC-EXE_DELTA:FIRST_TURN_PC-EXE_DELTA+4] == struct.pack('<I',FIRST_TURN_PATCH)
+    opening_lock = _has_opening_attack_lock(exe)
     life = not plan.has_lp or (
         exe[INIT_CALL-EXE_DELTA:INIT_CALL-EXE_DELTA+4] == struct.pack('<I',_LP_JAL)
         and exe[LP_CODE-EXE_DELTA:LP_CODE-EXE_DELTA+len(_LP_WORDS)*4] == struct.pack(f'<{len(_LP_WORDS)}I',*_LP_WORDS)
         and exe[LP_TABLE-EXE_DELTA:LP_TABLE-EXE_DELTA+2*(DUELIST_COUNT+1)] ==
         struct.pack(f'<{DUELIST_COUNT+1}H',plan.player_lp,*plan.life))
-    return first_turn, life
+    return opening_lock, life
 
 
 def patch_wa(wa, plan):

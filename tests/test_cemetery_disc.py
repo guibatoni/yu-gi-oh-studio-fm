@@ -94,8 +94,8 @@ def dir_entry(name,extent,size,flags=0):
     return bytes(out)
 
 def fake_disc(path,exe):
-    # 30 setores; ISO9660 começa LBA16, root em LBA20 e SLUS em LBA25.
-    blocks=[sector() for _ in range(30)]
+    # ISO9660 começa no LBA16, o diretório raiz no LBA20 e o SLUS no LBA25.
+    blocks=[sector() for _ in range(max(30, 25 + (len(exe)+2047)//2048))]
     pvd=bytearray(2048);pvd[0]=1;pvd[1:6]=b'CD001';pvd[6]=1
     pvd[156:190]=dir_entry(b'\x00',20,2048,2)
     blocks[16]=sector(pvd)
@@ -176,6 +176,33 @@ class StableDiscOutputTests(DiscBuildTests):
         with DiscReader(second['bin']) as reader:
             slus=next(e for e in reader.files() if e.path=='SLUS_014.11')
             self.assertEqual(b''.join(reader.read_entry(slus)),self.patched)
+
+    def test_rebuild_restores_original_lock_even_without_other_edits(self):
+        import struct
+        from unittest.mock import patch
+        from fmstudio.ps1_mod import FIRST_TURN_PC, FIRST_TURN_SOURCE
+        from fmstudio.tables import EXE_DELTA
+
+        offset = FIRST_TURN_PC - EXE_DELTA
+        original = bytearray(offset + 4)
+        original[:8] = b'PS-X EXE'
+        struct.pack_into('<I', original, offset, FIRST_TURN_SOURCE)
+        self.original = bytes(original)
+        fake_disc(self.src, self.original)
+        digest = hashlib.sha256(self.original).hexdigest()
+        self.project.metadata['base_sha256']['slus'] = digest
+        self.patched = self.original[:offset] + struct.pack('<I', 0x34420000)
+        legacy = build_test_disc(self.project, self.src)
+        self.assertNotEqual(Path(legacy['bin']).read_bytes(), self.src.read_bytes())
+
+        self.patched = self.original
+        with patch('fmstudio.ps1_runtime.SOURCE_SHA256', digest):
+            fresh = build_test_disc(self.project, self.src)
+        self.assertEqual(fresh['bin'], legacy['bin'])
+        self.assertEqual(fresh['acao_arquivo'], 'substituido')
+        self.assertEqual(fresh['setores_modificados'], 0)
+        self.assertTrue(fresh['edicao_do_mod_ps1']['bloqueio_turno_inicial'])
+        self.assertEqual(Path(fresh['bin']).read_bytes(), self.src.read_bytes())
 
     def test_different_source_filename_creates_distinct_image(self):
         first=build_test_disc(self.project,self.src)

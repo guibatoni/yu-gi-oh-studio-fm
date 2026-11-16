@@ -21,5 +21,17 @@ jobs:
           echo STUDIO_RUNTIME_BEGIN
           cat fmstudio/ps1_runtime_blob.py
           echo STUDIO_RUNTIME_END
+          git diff --exit-code -- fmstudio/ps1_runtime_blob.py
       - name: Exercitar o seletor de ataque em MIPS
         run: PYTHONPATH=. "$RUNNER_TEMP/studio-env/bin/python" tests/verify_mips_opening.py
+      - name: Testar o simulador e a exportação
+        run: |
+          python3 -m compileall -q app.py fmstudio tools tests
+          python3 -m unittest discover -s tests -v
+          python3 -S -m unittest discover -s tests -p test_ps1_god_icon.py -v
+      - name: Conferir interface e pacote Python
+        run: |
+          export PYTHONPATH=.
+          xvfb-run -a python3 tests/gui_mod_smoke.py
+          xvfb-run -a python3 tests/gui_mod_tools_smoke.py
+          python3 tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip

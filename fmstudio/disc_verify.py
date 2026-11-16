@@ -112,7 +112,7 @@ def verify_image_stats(project, source):
     god24_enabled=profile and bool(expected_gods)
     plan=compile_effects(project,profile)
     runtime=verify_effects(exe,plan)
-    first_turn, life=verify_executable(exe,mod_plan)
+    opening_lock, life=verify_executable(exe,mod_plan)
     tested=cards[expected_gods[0]-1] if expected_gods else None
     chest=inspect_god24_chest_mips(exe)
     from .ps1_god24_chest import audit_god24_build_deck_rows
@@ -132,7 +132,8 @@ def verify_image_stats(project, source):
             'god24_roteamento_duelo':duel_patch,
             'god24_exibicao_tipo':god_display,
             'efeitos_nativos_ps1':runtime,
-            'edicao_do_mod_ps1':{'ataque_primeiro_turno':first_turn,'lp':life,'tabelas':verify_wa(wa,mod_plan)},
+            'edicao_do_mod_ps1':{'bloqueio_turno_inicial':opening_lock if profile else None,
+                                'lp':life,'tabelas':verify_wa(wa,mod_plan)},
             'god24_teste_mao_ativado_no_projeto':god24_enabled,
             'god24_teste_bau_ativado_no_projeto':god24_enabled,
             'god24_cartas_esperadas':expected_gods,
@@ -158,8 +159,10 @@ def describe(result):
     elif runtime.get('status')=='divergente':
         text.append('A tabela de efeitos desta cópia diverge do projeto. Gere outro BIN/CUE.')
     mod=result.get('edicao_do_mod_ps1',{})
-    if mod.get('ataque_primeiro_turno'):
-        text.append('Ataque no primeiro turno conferido no executável.')
+    if mod.get('bloqueio_turno_inicial') is True:
+        text.append('Trava de ataque no primeiro turno conferida no executável.')
+    elif mod.get('bloqueio_turno_inicial') is False:
+        text.append('A trava de ataque no primeiro turno diverge do projeto. Gere outro BIN/CUE com a base original.')
     if not mod.get('lp',True) or not mod.get('tabelas',True):
         text.append('Os LP ou as tabelas de duelistas desta cópia divergem do projeto.')
     if result.get('god24_tipo_gravado_e_verificado'):

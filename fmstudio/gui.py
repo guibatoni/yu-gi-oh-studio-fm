@@ -2343,7 +2343,8 @@ class Studio(tk.Tk):
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Efeitos gravados no PS1: {len(runtime.get("efeitos",[]))}. '
             f'Ícones de descrição: {len(manifest.get("icones_de_descricao_ps1",[]))}.\n'
-            + ('Ataques no primeiro turno ativos. ' if mod.get('ataque_primeiro_turno') else '')
+            + ('Ataque na abertura restrito pela habilidade da carta.\n'
+               if mod.get('bloqueio_turno_inicial') else '')
             + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
             + (f'Fonte PS1 simplificou acentos em {simplified} descrição(ões).\n' if simplified else '')
             + f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
@@ -2426,8 +2427,9 @@ class Studio(tk.Tk):
                 ['status']!='aplicado_3_de_3'
                 or report['god24_exibicao_tipo']['status']!='aplicado'
                 or report['god24_roteamento_duelo']['status']!='aplicado')
+            opening_lock = report['edicao_do_mod_ps1']['bloqueio_turno_inicial']
             if (report['divergentes'] or not report['god24_tipos_conferem'] or god24_unpatched
-                    or report['efeitos_nativos_ps1']['status']=='divergente'):
+                    or opening_lock is False or report['efeitos_nativos_ps1']['status']=='divergente'):
                 messagebox.showwarning('BIN/CUE diverge do projeto',info,parent=self)
             else:
                 messagebox.showinfo('BIN/CUE conferido (teste no ePSXe pendente)',

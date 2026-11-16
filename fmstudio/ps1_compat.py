@@ -35,7 +35,7 @@ def audit(project) -> dict:
     mod_plan=compile_mod(project,profile=native_profile,wa_verified=wa_pinned)
     blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
     if native_profile:
-        supported.append('Ataque no primeiro turno para os dois lados')
+        supported.append('Bloqueio de ataque na abertura com exceção por carta')
     descriptions={}
     for key,edits in sorted(project.edits.items(),key=lambda item:int(item[0])):
         cid=int(key); current=project.get(cid)

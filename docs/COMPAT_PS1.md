@@ -1,3 +1,9 @@
+## v1.6.1 — Regra de abertura do Drop x15
+
+O primeiro turno permite ataques dos monstros com **Ataca no 1º turno**.
+A regra considera a carta em campo, inclusive a resultante de uma fusão.
+Para substituir uma cópia anterior, gere o BIN/CUE a partir do Drop x15 original.
+
 ## v1.5.1 — God 24 no Drop x15
 
 Nas cartas originais (#001–#722), o tipo salvo determina a exportação.

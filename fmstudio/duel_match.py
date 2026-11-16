@@ -300,12 +300,18 @@ class DuelMatch(DuelLab):
         self.logs.append({'acao': 'armadilha_ativada', 'lado': side, 'carta': cid})
         return True
 
+    def _attack_timing_error(self, attacker):
+        if sum(self.turns.values()) == 1 and not attacker.get('ataque_primeiro_turno', False):
+            return 'Só monstros com Ataca no 1º turno podem atacar na abertura do duelo.'
+        return super()._attack_timing_error(attacker)
+
     def can_attack(self, side, slot, board):
         unit = next((m for m in board if (m['lado'], m['slot']) == (side, slot)), None)
         if unit is None:
             return False
         key = (side, slot, unit['card_id'])
         return (unit['face_up'] and unit['posicao'] == 'ataque'
+                and not self._attack_timing_error(unit)
                 and self.attacks_used.get(key, 0) < unit['ataques_max']
                 and (not self.swords[side] or unit['imune_magia']))
 

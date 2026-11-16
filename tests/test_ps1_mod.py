@@ -3,14 +3,28 @@ from types import SimpleNamespace
 import struct
 import unittest
 
+from fmstudio.core import ModError
 from fmstudio.ps1_mod import (
-    FIRST_TURN_PC, FIRST_TURN_SOURCE, INIT_CALL, LP_TABLE, _LP_INIT,
+    FIRST_TURN_PC, FIRST_TURN_SOURCE, INIT_CALL, LP_TABLE, ModPlan, _LP_INIT,
     compile_mod, patch_executable, patch_wa, verify_executable, verify_wa,
 )
 from fmstudio.tables import CARD_COUNT, DECK_SIZE, DUELIST_BASE, DUELIST_STRIDE, EXE_DELTA, POOL_OFFSETS, POOL_TOTAL
 
 
 class ModProjectionTests(unittest.TestCase):
+    def test_opening_attack_lock_preserved_and_legacy_unlock_rejected(self):
+        plan = ModPlan(0, [], {}, [], [], [])
+        offset = FIRST_TURN_PC - EXE_DELTA
+        source = bytearray(offset + 4)
+        struct.pack_into('<I', source, offset, FIRST_TURN_SOURCE)
+        self.assertEqual(patch_executable(bytes(source), plan, profile=True), bytes(source))
+        self.assertEqual(verify_executable(source, plan), (True, True))
+
+        struct.pack_into('<I', source, offset, 0x34420000)
+        self.assertEqual(verify_executable(source, plan), (False, True))
+        with self.assertRaisesRegex(ModError, 'trava original'):
+            patch_executable(source, plan, profile=True)
+
     def test_pools_lp_and_opening_turn_verify_without_truncating_studio_settings(self):
         cards = {i:{'tipo_id':0} for i in range(1, 30)}
         project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={'edicao_mod':{
@@ -30,6 +44,7 @@ class ModProjectionTests(unittest.TestCase):
         struct.pack_into('<I',exe,FIRST_TURN_PC-EXE_DELTA,FIRST_TURN_SOURCE)
         struct.pack_into('<I',exe,INIT_CALL-EXE_DELTA,_LP_INIT)
         patched = patch_executable(exe,plan,profile=True)
+        self.assertEqual(struct.unpack_from('<I',patched,FIRST_TURN_PC-EXE_DELTA)[0], FIRST_TURN_SOURCE)
         self.assertEqual(verify_executable(patched,plan),(True,True))
         corrupted = bytearray(patched)
         corrupted[LP_TABLE-EXE_DELTA] ^= 1

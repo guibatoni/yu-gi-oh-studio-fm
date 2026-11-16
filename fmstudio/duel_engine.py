@@ -183,6 +183,13 @@ class DuelLab:
         self.turns[side] += 1
         self.logs.append({'acao':'novo_turno','lado':side})
 
+    def _attack_timing_error(self, attacker):
+        key = (attacker['lado'], attacker['slot'], attacker['card_id'])
+        if (self.summoning_delay and self.summoned_turn.get(key) == self.turns[key[0]]
+                and not attacker.get('ataque_primeiro_turno', False)):
+            return 'Este monstro foi invocado neste turno e não possui Ataca no 1º turno'
+        return None
+
     def preview_attack(self, side: str, slot: int, *, target_slot: int | None = None,
                        against: str | None = 'defesa', board: list[dict] | None = None) -> dict:
         """Resolve the exchange without spending LP, cards or attacks."""
@@ -199,9 +206,9 @@ class DuelLab:
         key=(side,int(slot),int(source['card_id']))
         used=self.attacks_used.get(key,0)
         maximum=attacker['ataques_max']
-        if (self.summoning_delay and self.summoned_turn.get(key)==self.turns[side]
-                and not attacker['ataque_primeiro_turno']):
-            raise ModError('Este monstro foi invocado neste turno e não possui Ataca no 1º turno')
+        blocked = self._attack_timing_error(attacker)
+        if blocked:
+            raise ModError(blocked)
         if used >= maximum:
             raise ModError(f'Combate: limite de {maximum} ataque(s) por turno atingido; inicie novo turno')
         cost=0
