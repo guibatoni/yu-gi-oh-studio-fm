@@ -40,7 +40,7 @@ class ModProjectionTests(unittest.TestCase):
         self.assertEqual(plan.fixed_decks, {1: tuple(deck)})
         self.assertFalse(plan.needs_wa)
         self.assertTrue(any('39/40' in note for note in plan.pending))
-        self.assertTrue(any('original' in note for note in plan.pending))
+        self.assertTrue(any('IDs originais #001–#722' in note for note in plan.pending))
         self.assertEqual(compile_mod(project, profile=False, wa_verified=True).fixed_decks, {})
 
     def test_pools_lp_and_opening_turn_verify_without_truncating_studio_settings(self):

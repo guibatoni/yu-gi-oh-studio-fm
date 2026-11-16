@@ -113,9 +113,13 @@ def verify_image_stats(project, source):
     verified_gods=[cid for cid in expected_gods if cid in actual_gods]
     god24_enabled=profile and bool(expected_gods)
     plan=compile_effects(project,profile,fixed_decks=mod_plan.fixed_decks)
-    original_exe=project.folder/'base'/'source_SLUS_014.11'
-    original=original_exe.read_bytes() if plan.data and original_exe.is_file() else None
-    runtime=verify_effects(exe,plan,original=original)
+    original = None
+    project_folder = getattr(project, 'folder', None)
+    if plan.data and project_folder is not None:
+        original_exe = project_folder / 'base' / 'source_SLUS_014.11'
+        if original_exe.is_file():
+            original = original_exe.read_bytes()
+    runtime = verify_effects(exe, plan, original=original)
     opening_lock, life=verify_executable(exe,mod_plan)
     tested=cards[expected_gods[0]-1] if expected_gods else None
     chest=inspect_god24_chest_mips(exe)
