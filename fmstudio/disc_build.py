@@ -165,9 +165,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if not expected or source_digest!=expected:
         raise ModError('SLUS da imagem não corresponde ao executável vinculado ao projeto.')
     native_plan=compile_effects(project,native_profile)
-    desc_bank_end=LP_CODE if mod_plan.has_lp else LP_BANK_END
+    desc_bank_end=min(native_plan.bank_end, LP_CODE if mod_plan.has_lp else LP_BANK_END)
     if native_plan.data_end>desc_bank_end:
-        raise ModError('A tabela de efeitos excede o espaço disponível com os LP individuais.')
+        raise ModError('A tabela de efeitos excede a área reservada para esta cópia.')
 
     audit_report=None
     if hasattr(project,'edits') and hasattr(project,'new_cards'):

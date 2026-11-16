@@ -90,7 +90,7 @@ def audit(project) -> dict:
         from .ps1_text import patch_descriptions
         catalog={cid:project.get(cid) for cid in project.cards}
         _,rows,icons,pending=patch_descriptions(exe,descriptions,catalog,start=native_plan.data_end,
-                                               end=LP_CODE if mod_plan.has_lp else LP_BANK_END)
+                                               end=min(native_plan.bank_end, LP_CODE if mod_plan.has_lp else LP_BANK_END))
         counts['descricoes']=len(rows)
         counts['icones_especiais']=len(icons)
         for row in rows:
@@ -194,7 +194,7 @@ def audit(project) -> dict:
         'icones_personalizados':'Graváveis nas descrições no perfil Drop x15',
         'cartas_maiores_722':'PENDENTE_MIPS_MEMORIA_TABELAS',
         'tipo_god':'O tipo 24 ativa automaticamente o nome, o ícone e o roteamento de monstro no Drop x15.',
-        'buffs_auras_cemiterio':'Bônus contínuos de campo, deck e cemitério no Drop x15',
+        'buffs_auras_cemiterio':'Bônus de campo com cartas viradas para baixo, deck inicial e cemitério no Drop x15',
         'equipamentos_imunidades':'Equipamentos com ATK e proteção, imunidades e indestrutibilidade no Drop x15',
         'rituais_tres_tributos_originais':'gravavel_na_tabela_WA_SEM_NOVOS_IDS',
         'armadilhas_ataque_681_686':'gravavel_no_SLUS_SE_TABELA_RETAIL',

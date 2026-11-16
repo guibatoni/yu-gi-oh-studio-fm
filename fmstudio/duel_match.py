@@ -32,6 +32,7 @@ class Play:
     position: str = 'ataque'
     target: tuple[str, int] | None = None
     tribute: tuple[int, ...] = ()
+    face_up: bool = True
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,8 @@ class DuelMatch(DuelLab):
     def _monsters_for(self, kind, hand, cid, slots, tribute=(), field_material=None):
         for slot, star, pose in product(slots, guardian_options(self.card(cid)), POSITIONS):
             yield Play(kind, hand, cid, slot, star, pose, field_material, tribute)
+            if pose == 'defesa':
+                yield Play(kind, hand, cid, slot, star, pose, field_material, tribute, face_up=False)
 
     def _spell_targets(self, cid, side):
         enemy = opposite(side)
@@ -219,8 +222,12 @@ class DuelMatch(DuelLab):
             del hand[i]
         self.played = True
         cid = action.card_id
+        log = {'acao': action.kind, 'lado': side, 'carta': cid, 'slot': action.slot,
+               'face_up': action.face_up and action.kind != 'armadilha'}
+        self.logs.append(log)
         if action.kind == 'armadilha':
             self.traps[side].append(cid)
+            self.apply_event(cid, side, 'invocar', kind='armadilha', strict=False)
         elif action.kind == 'equip':
             equip = {'lado': side, 'slot': action.slot, 'card_id': cid}
             self.equipments.append(equip)
@@ -248,11 +255,10 @@ class DuelMatch(DuelLab):
             self.monsters.append({'lado': side, 'slot': action.slot, 'card_id': cid,
                                   'tipo_id': int(card['tipo_id']), 'atributo_id': int(card.get('atributo_id', -1)),
                                   'ataque': int(card['ataque']), 'defesa': int(card['defesa']),
-                                  'face_up': True, 'posicao': action.position, 'guardian_id': action.star})
+                                  'face_up': action.face_up, 'posicao': action.position,
+                                  'guardian_id': action.star})
             self.positions_used.add(action.slot)
             self.apply_event(cid, side, 'invocar', source_slot=action.slot, strict=False)
-        log = {'acao': action.kind, 'lado': side, 'carta': cid, 'slot': action.slot}
-        self.logs.append(log)
         return log
 
     def _stock_spell(self, side, cid):

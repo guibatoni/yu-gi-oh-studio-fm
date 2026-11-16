@@ -307,10 +307,9 @@ def check_effect(entry: dict):
             raise ModError('Escopo inválido')
         result = {'evento':event,'acao':action,'alvo':target,'valor':atk,
                   'valor_def':defense,'tipo_id':typ,'escopo':scope,'observacao':note}
-        if action in ('bonus_deck_tipo', 'bonus_cemiterio_tipo', 'bonus_mao_tipo'):
-            attribute = _bounded_int(entry.get('atributo_id', -1), 'Atributo', -1, 15)
-            if attribute >= 0:
-                result['atributo_id'] = attribute
+        attribute = _bounded_int(entry.get('atributo_id', -1), 'Atributo', -1, 15)
+        if attribute >= 0:
+            result['atributo_id'] = attribute
         return result
     if action in EQUIPMENT_ACTIONS:
         if event != 'equipado' or target != 'monstro_equipado':
@@ -425,7 +424,10 @@ class Project:
         ids = [positive_int(row.get('id'), 'ID da carta') for row in rows]
         if len(set(ids)) != len(ids) or not set(range(1, CARD_COUNT+1)).issubset(ids):
             raise ModError('A base deve conter os IDs originais 1–722 e IDs adicionais únicos.')
-        if self.cards and (self.edits or self.effects):
+        overlap = set(ids).intersection(map(int, self.new_cards))
+        if overlap:
+            raise ModError(f'O CSV contém o ID #{min(overlap)} de uma carta já criada no projeto.')
+        if any(cid <= CARD_COUNT for cid in self.cards) and (self.edits or self.effects):
             raise ModError('Projeto já editado: crie outro projeto para trocar a base')
         base = self.folder / 'base'
         base.mkdir(parents=True, exist_ok=True)
@@ -449,7 +451,7 @@ class Project:
         self.save()
 
     def import_disc(self, path: Path):
-        if self.cards and (self.edits or self.effects):
+        if any(cid <= CARD_COUNT for cid in self.cards) and (self.edits or self.effects):
             raise ModError('Não substitua uma base editada. Crie um novo projeto')
         with DiscReader(path) as reader:
             names = {x.path.upper():x for x in reader.files() if not x.is_dir}
@@ -508,7 +510,7 @@ class Project:
                            for e in entries.values()]
         if not slus.startswith(b'PS-X EXE'):
             raise ModError('A base extraída não possui cabeçalho PS-X EXE válido')
-        if self.cards:
+        if any(cid <= CARD_COUNT for cid in self.cards):
             from .tables import decode_cards
             checked,_=decode_cards(slus)
             if len(checked)!=sum(cid <= CARD_COUNT for cid in self.cards):
@@ -554,8 +556,9 @@ class Project:
                     raise ModError('WA_MRG.MRG da imagem diverge das fusões originais do projeto. '
                                    'Importação bloqueada para evitar misturar MODs.')
         if progress:progress('Decodificando nomes, descrições, diálogos e demais textos...')
-        from .tables import decode_starters
+        from .tables import decode_passwords, decode_starters
         _write_csv(self.folder/'base'/'decks_iniciais.csv', decode_starters(wa))
+        _write_csv(self.folder/'base'/'senhas.csv', decode_passwords(wa))
         results,warnings=extract_texts(slus)
         base=self.folder/'base'
         staging=base/'_extracao_em_andamento'
@@ -648,8 +651,10 @@ class Project:
             expected = info.get('source_sha256', {}).get('SLUS_014.11')
             if expected and hashlib.sha256(raw).hexdigest() != expected:
                 raise ModError('Este SLUS não corresponde ao hash usado na extração das tabelas')
-        # Conferir as estatísticas e níveis de TODAS as cartas.
+        # As cartas adicionais existem no projeto e ficam fora da tabela original.
         for cid, card in self.cards.items():
+            if cid > CARD_COUNT:
+                continue
             pos = STATS_ADDR - EXE_DELTA + (cid-1)*4
             value = struct.unpack_from('<I', raw, pos)[0]
             if f'{value:08X}' != card['valor_hex'].upper():
@@ -675,25 +680,26 @@ class Project:
         base.update(self.edits.get(str(cid),{}))
         return base
 
+    def next_card_id(self) -> int:
+        cid = CARD_COUNT + 1
+        while cid in self.cards:
+            cid += 1
+        return cid
+
     def add_card(self, copy_from: int | None = None, *, name: str | None = None,
                  type_id: int | None = None, card_id: int | None = None) -> int:
         """Cria uma carta Studio a partir de um modelo ou em branco."""
         if copy_from is not None and copy_from not in self.cards:
             raise ModError('Escolha uma carta válida para servir como modelo.')
-        cid = CARD_COUNT + 1
-        if card_id is None:
-            while cid in self.cards:
-                cid += 1
-        else:
-            cid = positive_int(card_id, 'ID da nova carta')
-            if cid <= CARD_COUNT or cid in self.cards:
-                raise ModError(f'Escolha um ID livre acima de {CARD_COUNT}.')
-        card = self.get(copy_from) if copy_from is not None else dict.fromkeys(NUMERIC, 0)
+        cid = self.next_card_id() if card_id is None else positive_int(card_id, 'ID da nova carta')
+        if cid <= CARD_COUNT or cid in self.cards:
+            raise ModError(f'Escolha um ID livre acima de {CARD_COUNT}.')
+        source = self.get(copy_from) if copy_from is not None else dict.fromkeys(NUMERIC, 0)
+        numeric = {key: source[key] for key in NUMERIC}
         if type_id is not None:
-            card['tipo_id'] = type_id
-        card.update(check_card_edit({'nome':name or f'Nova carta {cid}'[:100], 'descricao':'',
-                                     'cor_nome':DEFAULT_NAME_COLOR, 'raridade':DEFAULT_RARITY,
-                                     **{key: card[key] for key in NUMERIC}}))
+            numeric['tipo_id'] = type_id
+        card = check_card_edit({'nome': name or f'Nova carta {cid}'[:100], 'descricao': '',
+                                'cor_nome': DEFAULT_NAME_COLOR, 'raridade': DEFAULT_RARITY, **numeric})
         card.update({'id':cid, 'modelo_base_id':copy_from, 'virtual':True})
         self.cards[cid] = card
         self.new_cards[str(cid)] = card

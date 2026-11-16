@@ -161,7 +161,22 @@ class StudioMatchTests(unittest.TestCase):
         self.assertEqual(game.graveyards[PLAYER],[90002])
         self.assertEqual(game.graveyards[CPU],[1])
 
-    def test_stats_in_every_zone_react_to_draw_and_graveyard(self):
+    def test_face_down_summon_burn_fires_once_with_both_sides(self):
+        for side, enemy in ((PLAYER, CPU), (CPU, PLAYER)):
+            with self.subTest(side=side):
+                effects = {1: [effect('dano_lp', 500, event='invocar', target='inimigo')]}
+                game = DuelMatch(self.cards, effects, self.decks, first=side, initial_lp=400)
+                play = next(a for a in game.legal_plays(side) if a.card_id == 1 and not a.face_up)
+                game.play(side, play)
+                self.assertEqual(game.lp, {side: 400, enemy: 0})
+                self.assertEqual(game.winner, side)
+                self.assertFalse(game.get(side, play.slot)['face_up'])
+                game.resolve()
+                burns = [row for row in game.logs if row['acao'] == 'dano_lp']
+                self.assertEqual(len(burns), 1)
+                self.assertEqual((burns[0]['carta'], burns[0]['evento'], burns[0]['valor']), (1, 'invocar', 400))
+
+    def test_stats_keep_initial_deck_bonus_and_react_to_graveyard(self):
         large = 10**120
         self.cards[90000].update(ataque=large, defesa=large, atributo_id=3)
         self.cards[2]['atributo_id'] = 3
@@ -177,12 +192,13 @@ class StudioMatchTests(unittest.TestCase):
         self.assertEqual(lab.inspect_zone(PLAYER,'mao')[0]['ataque'],large+600)
         self.assertEqual(lab.inspect_zone(PLAYER,'deck')[1]['defesa'],large+60)
         lab.draw(PLAYER)
-        self.assertEqual(lab.resolve()[0][0]['ataque'],large+300)
-        self.assertEqual(lab.effective_card(PLAYER,90000)['defesa'],large+30)
+        self.assertEqual(lab.decks[PLAYER], [90000])
+        self.assertEqual(lab.resolve()[0][0]['ataque'],large+600)
+        self.assertEqual(lab.effective_card(PLAYER,90000)['defesa'],large+60)
         lab.set_graveyard(PLAYER,[2,3,1])
-        self.assertEqual(lab.effective_card(PLAYER,90000)['ataque'],large+400)
+        self.assertEqual(lab.effective_card(PLAYER,90000)['ataque'],large+700)
         lab.set_graveyard(PLAYER,[])
-        self.assertEqual(lab.effective_card(PLAYER,90000)['ataque'],large+300)
+        self.assertEqual(lab.effective_card(PLAYER,90000)['ataque'],large+600)
 
     def test_weighted_pools_reserve_cards_required_for_later_draws(self):
         cards = {1:card(),2:card()}

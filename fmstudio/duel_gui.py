@@ -152,6 +152,8 @@ class MatchDialog(tk.Toplevel):
             details.append(f'slot {action.slot}')
         if action.kind in ('monstro', 'fusao', 'ritual'):
             details += [action.position, guardian_name(action.star)]
+            if not action.face_up:
+                details.append('virada para baixo')
         if action.target:
             target = 'seu campo' if action.target[0] == 'jogador' else 'rival'
             details.append(f'{target} slot {action.target[1]}')
@@ -202,8 +204,19 @@ class MatchDialog(tk.Toplevel):
             elif action=='novo_turno':
                 text=f'Início do turno de {event["lado"]}.'
             elif 'carta' in event:
-                name=display_name(event['carta'],self.game.cards)
-                text=f'{event["lado"].capitalize()} · {action.replace("_"," ")} · {name}'
+                side = event['lado']
+                visible = side == 'jogador' or event.get('face_up', True)
+                name = display_name(event['carta'], self.game.cards) if visible else 'Carta virada para baixo'
+                if action in ('dano_lp', 'cura_lp', 'dano_lp_deck_tipo', 'cura_lp_deck_tipo'):
+                    amount = compact_number(event['valor'], 22)
+                    target = 'oponente' if event['alvo'] == 'adversario' else 'jogador'
+                    timing = ' ao entrar em campo' if event['evento'] == 'invocar' else ''
+                    if action.startswith('dano'):
+                        text = f'{name} causou {amount} de dano aos LP do {target}{timing}.'
+                    else:
+                        text = f'{name} recuperou {amount} LP do {target}{timing}.'
+                else:
+                    text = f'{side.capitalize()} · {action.replace("_", " ")} · {name}'
             else:
                 text=f'{action.replace("_"," ").capitalize()} · {compact_number(event.get("valor",0),22)}'
             self.log_lines.append(text)

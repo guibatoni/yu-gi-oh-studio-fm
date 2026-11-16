@@ -45,10 +45,14 @@ def main():
         info = subprocess.check_output([args.prefix + 'nm', '-n', str(elf)], text=True)
         symbols = {name: int(address, 16) for address, _, name in
                    (line.split() for line in info.splitlines())}
-        raw = work / 'runtime.bin'
-        subprocess.run([args.prefix + 'objcopy', '-O', 'binary', '-j', '.runtime',
-                        str(elf), str(raw)], check=True)
-        content = raw.read_bytes()
+        def section_bytes(section):
+            raw = work / f'{section}.bin'
+            subprocess.run([args.prefix + 'objcopy', '-O', 'binary', '-j', section,
+                            str(elf), str(raw)], check=True)
+            return raw.read_bytes()
+
+        content = section_bytes('.runtime')
+        extension = section_bytes('.runtime_ext')
 
     pieces = ['"""Gerado por tools/compile_ps1_runtime.py a partir de tools/ps1."""\n',
               f'RUNTIME_SHA256 = {hashlib.sha256(content).hexdigest()!r}',
@@ -58,6 +62,12 @@ def main():
         pieces.append(f'    {name!r}: 0x{symbols[name]:08X},')
     pieces.extend(('}', 'RUNTIME = bytes.fromhex("""'))
     pieces.extend(content[i:i+32].hex(' ') for i in range(0, len(content), 32))
+    pieces.extend(('""")', '',
+                   f'RUNTIME_EXT_SHA256 = {hashlib.sha256(extension).hexdigest()!r}',
+                   f'RUNTIME_EXT_BASE = 0x{symbols["__runtime_ext_start"]:08X}',
+                   f'RUNTIME_EXT_END = 0x{symbols["__runtime_ext_end"]:08X}',
+                   'RUNTIME_EXT = bytes.fromhex("""'))
+    pieces.extend(extension[i:i+32].hex(' ') for i in range(0, len(extension), 32))
     pieces.append('""")\n')
     OUTPUT.write_text('\n'.join(pieces), encoding='utf-8', newline='\n')
     print(f'{len(content)} bytes de código, reserva até 0x{symbols["__runtime_end"]:08X}')

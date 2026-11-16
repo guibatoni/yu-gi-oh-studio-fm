@@ -61,8 +61,8 @@ def wa_sha(project):
     return None
 
 
-def import_starter_tables(project, source):
-    """Populate the new CSV for projects extracted before this table was supported."""
+def read_linked_wa(project, source):
+    """Read WA_MRG from the image associated with this project."""
     try:
         with DiscReader(source) as disc:
             entries = {entry.path.upper(): entry for entry in disc.files() if not entry.is_dir}
@@ -75,7 +75,11 @@ def import_starter_tables(project, source):
     expected = wa_sha(project)
     if expected and hashlib.sha256(wa).hexdigest() != expected:
         raise ModError('O WA_MRG da imagem diverge do projeto.')
-    rows = decode_starters(wa)
+    return wa
+
+
+def import_starter_tables(project, source):
+    rows = decode_starters(read_linked_wa(project, source))
     if not rows:
         raise ModError('A imagem não apresenta as duas cópias compatíveis dos pools iniciais.')
     _write_csv(project.folder/'base'/'decks_iniciais.csv', rows)

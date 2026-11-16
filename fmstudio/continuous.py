@@ -35,8 +35,10 @@ def _count_bonus(effect, side, field, catalog, zones, legacy):
     origin = effect.get('origem_contagem') or COUNT_ZONES[effect['acao']]
     sides = [candidate for candidate in SIDES if _in_scope(side, candidate, effect['escopo'])]
     if origin == 'campo':
-        return sum(monster.get('face_up', True) and monster['lado'] in sides
-                   and _matches(monster, effect, int(monster['card_id'])) for monster in field)
+        return sum(monster['lado'] in sides and _matches(monster, effect, int(monster['card_id']))
+                   for monster in field)
+    if origin == 'deck' and 'deck_inicial' in zones:
+        origin = 'deck_inicial'
     if origin in zones:
         return sum(_matches(catalog[cid], effect, cid)
                    for candidate in sides for cid in zones[origin].get(candidate, ()))
@@ -73,7 +75,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
                   catalog: dict | None = None, zones: dict | None = None) -> tuple[list[dict], list[dict]]:
     """Devolve novas cópias com bônus e proteções; não modifica o tabuleiro fornecido.
 
-    `zones` contém os IDs atuais das zonas de cada lado. Os contadores antigos
+    `zones` contém os IDs das zonas e o deck inicial usado pelos bônus. Os contadores antigos
     ainda são aceitos em chamadas que fornecem somente as quantidades por tipo.
     `equipments`: lista {lado, slot, card_id}; associa uma carta equip ao monstro.
     """
@@ -132,11 +134,11 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
                            'indice_efeito':idx})
 
     for source in field:
-        if not source['face_up']:
-            continue
         for i, raw in enumerate(effect_set(source['card_id'])):
+            if raw.get('evento') != 'continuo':
+                continue
             action = raw.get('acao')
-            if raw.get('evento') == 'continuo' and action in (
+            if source['face_up'] and action in (
                 'ataques_multiplos', 'ataque_primeiro_turno', 'monstro_indestrutivel', 'monstro_imune_magia',
                 'monstro_imune_armadilha', 'dano_perfurante', 'nao_bloqueavel'):
                 eff = check_effect(raw)
@@ -159,13 +161,12 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
                                'acao':action,'tipo_id':None,'quantidade':1,
                                'ataque':0,'defesa':0,'indice_efeito':i})
                 continue
-            if raw.get('evento') != 'continuo' or raw.get('acao') not in EFFECT_ACTIONS:
+            if action not in EFFECT_ACTIONS:
                 continue
             eff = check_effect(raw)
             if action == 'aura_tipo':
                 for target in field:
-                    if (target['face_up'] and _in_scope(source['lado'], target['lado'], eff['escopo'])
-                            and _matches(target, eff)):
+                    if _in_scope(source['lado'], target['lado'], eff['escopo']) and _matches(target, eff):
                         add_bonus(source, target, eff, 1, i)
             else:
                 n = _count_bonus(eff, source['lado'], field, catalog, zones, legacy)

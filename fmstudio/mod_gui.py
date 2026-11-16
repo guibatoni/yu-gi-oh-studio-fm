@@ -14,7 +14,7 @@ from .mod_data import (
     CONFIG_KEY, DROP_GROUPS, RANK_GROUPS, STOCK_STARTER, base_tables, drop_weights,
     duelist_profile, match_recipes, normalize_rules, save_rules, starting_life,
 )
-from .tables import CARD_COUNT, DUELIST_NAMES_REFERENCE, TYPE_NAMES
+from .tables import DUELIST_NAMES_REFERENCE, TYPE_NAMES
 
 WEIGHT_COLUMNS = ('carta', 'nome', 'peso', 'chance')
 
@@ -58,13 +58,16 @@ class WeightTable(ttk.Frame):
         self.summary = ttk.Label(self, foreground=MUTED)
         self.summary.pack(anchor='w', pady=(3, 0))
 
-    def load(self, cards, weights):
+    def refresh_catalog(self, cards):
         self.cards = cards
         self.labels = {f'#{cid} — {display_name(cid, cards)}': cid for cid in sorted(cards)}
-        self.card.configure(values=list(self.labels))
+        self._search()
+        self.render()
+
+    def load(self, cards, weights):
         self.selected.set('')
         self.weights = {int(cid): int(value) for cid, value in weights.items() if int(value)}
-        self.render()
+        self.refresh_catalog(cards)
 
     def render(self):
         self.tree.delete(*self.tree.get_children())
@@ -75,7 +78,7 @@ class WeightTable(ttk.Frame):
                 _probability(weight, total)))
         self.summary.configure(text=f'{len(self.weights)} cartas · peso total {compact_number(total)}')
 
-    def _search(self, _event):
+    def _search(self, _event=None):
         query = self.selected.get().strip().casefold()
         self.card.configure(values=[label for label in self.labels if query in label.casefold()])
 
@@ -224,6 +227,7 @@ class ModEditor(ttk.Frame):
         chooser = ttk.Combobox(head, textvariable=self.duelist, state='readonly', values=list(self.duelist_ids), width=24)
         chooser.pack(side='left')
         chooser.bind('<<ComboboxSelected>>', lambda _e: self._load_duelist())
+        ttk.Button(head, text='Passwords de Cartas', command=self.open_passwords).pack(side='left', padx=8)
         ttk.Button(head, text='Simular duelo', style='Accent.TButton', command=self.start_match).pack(side='right')
         ttk.Checkbutton(head, text='Oponente começa', variable=self.opponent_first).pack(side='right', padx=8)
         tabs = ttk.Notebook(self)
@@ -245,8 +249,12 @@ class ModEditor(ttk.Frame):
 
         self.opponent_deck = DeckProfileEditor(deck_pane)
         self.opponent_deck.pack(fill='both', expand=True)
-        ttk.Button(deck_pane, text='Salvar deck do duelista', style='Accent.TButton',
-                   command=self.save_opponent).pack(anchor='e', pady=(4, 0))
+        opponent_actions = ttk.Frame(deck_pane)
+        opponent_actions.pack(fill='x', pady=(4, 0))
+        ttk.Button(opponent_actions, text='Gerar Deck Aleatório',
+                   command=lambda: self.generate_deck(self.opponent_deck)).pack(side='left')
+        ttk.Button(opponent_actions, text='Salvar deck do duelista', style='Accent.TButton',
+                   command=self.save_opponent).pack(side='right')
 
         profiles = ttk.Frame(start_pane)
         profiles.pack(fill='x', pady=(0, 6))
@@ -264,6 +272,8 @@ class ModEditor(ttk.Frame):
         ttk.Button(starter_actions, text='Ler pools do BIN/CUE', command=self._load_starter_disc).pack(side='left')
         ttk.Checkbutton(starter_actions, text='Sortear perfil no duelo',
                         variable=self.random_starter).pack(side='left', padx=5)
+        ttk.Button(profiles, text='Gerar Deck Aleatório',
+                   command=lambda: self.generate_deck(self.starter_deck)).pack(side='right')
         ttk.Button(starter_actions, text='Salvar deck inicial', style='Accent.TButton',
                    command=self.save_starter).pack(side='right')
 
@@ -285,6 +295,18 @@ class ModEditor(ttk.Frame):
             self.cards, self.pools, self.rules, self.stock = {}, {}, {}, []
         self._load_duelist()
         self._refresh_profiles()
+
+    def refresh_catalog(self):
+        if self.project is not self.studio.project:
+            self.refresh()
+            return
+        if self.project is None:
+            return
+        self.cards = {cid: self.project.get(cid) for cid in self.project.cards}
+        self.drops.refresh_catalog(self.cards)
+        for editor in (self.opponent_deck, self.starter_deck):
+            editor.cards = self.cards
+            editor.table.refresh_catalog(self.cards)
 
     def _refresh_profiles(self):
         names = [STOCK_STARTER, *self.rules.get('iniciais', {})]
@@ -342,6 +364,59 @@ class ModEditor(ttk.Frame):
             self._load_drop()
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Drops', str(exc), parent=self)
+
+    def open_passwords(self):
+        if self.project is None or self.studio._extract_running:
+            return
+        from .mod_tools_gui import PasswordsDialog
+        from .passwords import original_passwords
+        try:
+            self.refresh_catalog()
+            PasswordsDialog(self.studio, self.project, self.cards, original_passwords(self.project))
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Passwords de cartas', str(exc), parent=self)
+
+    def generate_deck(self, editor):
+        if self.project is None or self.studio._extract_running:
+            return
+        from .mod_tools_gui import DeckGeneratorDialog
+        try:
+            self.refresh_catalog()
+            _, _, equips, rituals = base_tables(self.project)
+            fusions, equips, _ = match_recipes(self.project, equips, rituals)
+            metadata = self.project.metadata
+            copies = int(metadata.get('ps1_deck_global_limit', 3))
+            thresholds = {int(cid): int(value) for cid, value in metadata.get('ps1_trap_thresholds', {}).items()}
+            try:
+                fixed = parse_card_ids(editor.fixed.get(), maximum=MAX_DECK)
+            except ModError:
+                fixed = []
+            stock = editor is self.starter_deck and self.starter.get() == STOCK_STARTER
+            DeckGeneratorDialog(
+                self, self.cards, self.project.effects, fusions, equips, default_copies=copies,
+                trap_thresholds=thresholds, fixed=fixed, new_starter=stock,
+                use_deck=lambda ids: self._use_generated_deck(editor, ids, stock),
+            )
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Gerar Deck Aleatório', str(exc), parent=self)
+
+    def _use_generated_deck(self, editor, ids, stock):
+        profile = {'cartas': list(ids), 'pools': []}
+        if stock:
+            rules = self._edit()
+            profiles = rules.setdefault('iniciais', {})
+            name = 'Deck inicial gerado'
+            suffix = 2
+            while name in profiles:
+                name = f'Deck inicial gerado {suffix}'
+                suffix += 1
+            profiles[name] = {'peso': 1, **profile}
+            self._commit(rules, f'Perfil {name} salvo.')
+            self.starter.set(name)
+            self._refresh_profiles()
+            return
+        editor.load(self.cards, profile)
+        self.status.set('Deck gerado no editor. Ajuste as cartas e salve o deck.')
 
     def save_opponent(self):
         try:
@@ -440,14 +515,13 @@ class NewCardDialog(tk.Toplevel):
     def __init__(self, studio):
         super().__init__(studio)
         self.studio = studio
+        self.project = studio.project
+        self.template = studio.selected_id
         self.title('Nova carta')
         self.transient(studio)
         pane = ttk.Frame(self, padding=14)
         pane.pack(fill='both', expand=True)
-        cid = CARD_COUNT + 1
-        while cid in studio.project.cards:
-            cid += 1
-        ttk.Label(pane, text=f'Nova carta #{cid}').pack(anchor='w')
+        ttk.Label(pane, text=f'Nova carta #{self.project.next_card_id()}').pack(anchor='w')
         self.name = tk.StringVar()
         self.kind = tk.StringVar(value=TYPE_NAMES[0])
         self.clone = tk.BooleanVar()
@@ -456,27 +530,30 @@ class NewCardDialog(tk.Toplevel):
         name.pack(fill='x')
         ttk.Label(pane, text='Tipo').pack(anchor='w', pady=(5, 0))
         ttk.Combobox(pane, state='readonly', textvariable=self.kind, values=TYPE_NAMES).pack(fill='x')
-        if studio.selected_id:
-            card = studio.project.get(studio.selected_id)
+        if self.template is not None:
+            card = self.project.get(self.template)
             typ = int(card['tipo_id'])
-            self.kind.set(TYPE_NAMES[typ] if typ < len(TYPE_NAMES) else TYPE_NAMES[0])
-            ttk.Checkbutton(pane, text=f'Usar #{studio.selected_id} como modelo de atributos',
+            self.kind.set(TYPE_NAMES[typ] if 0 <= typ < len(TYPE_NAMES) else TYPE_NAMES[0])
+            ttk.Checkbutton(pane, text=f'Usar #{self.template} como modelo de atributos',
                             variable=self.clone).pack(anchor='w', pady=7)
         ttk.Button(pane, text='Criar carta', style='Accent.TButton', command=self.create).pack(anchor='e', pady=(7, 0))
         self.bind('<Return>', lambda _e: self.create())
         self.bind('<Escape>', lambda _e: self.destroy())
+        self.grab_set()
         name.focus_set()
 
     def create(self):
         try:
-            studio = self.studio
-            cid = studio.project.add_card(studio.selected_id if self.clone.get() else None,
-                                          name=self.name.get().strip() or None,
-                                          type_id=TYPE_NAMES.index(self.kind.get()))
-            self.destroy()
-            studio.select_new_card(cid)
+            if self.project is not self.studio.project or self.studio._extract_running:
+                raise ModError('Reabra a criação de cartas no projeto atual.')
+            cid = self.project.add_card(self.template if self.clone.get() else None,
+                                        name=self.name.get().strip() or None,
+                                        type_id=TYPE_NAMES.index(self.kind.get()))
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Nova carta', str(exc), parent=self)
+            return
+        self.destroy()
+        self.studio.select_new_card(cid)
 
 
 class CardRelationsDialog(tk.Toplevel):

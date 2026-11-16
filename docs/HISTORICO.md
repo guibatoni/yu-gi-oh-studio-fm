@@ -1,3 +1,14 @@
+## v1.6.0 — Criação de cartas, passwords e geração de decks
+
+- Cartas novas aparecem no catálogo, nos seletores de deck e na busca logo
+  após a criação. É possível vincular o SLUS original a um projeto com cartas adicionais.
+- Dano direto entra no histórico no momento da invocação. Bônus de ATK/DEF
+  incluem as cartas viradas para baixo no campo e usam as 40 cartas iniciais do deck.
+- **Passwords de Cartas** consulta os oito dígitos originais extraídos do jogo
+  e resolve códigos por ID para qualquer carta no Studio.
+- **Gerar Deck Aleatório** monta decks de 40 cartas com quantidades exatas,
+  limites de ATK/DEF das cartas base, fusões fortes e equipamentos utilizáveis.
+
 ## v1.5.1 — God 24 na seleção de tipo
 
 - A geração do BIN/CUE Drop x15 usa os tipos salvos para aplicar o

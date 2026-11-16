@@ -1,3 +1,23 @@
+# Studio FM v1.6.0 — Passwords e geração de decks
+
+Na aba **Edição do Mod**, abra **Passwords de Cartas** para buscar os códigos
+originais de oito dígitos ou usar um código por ID, como `FM-00000723`, no Studio.
+A leitura de um BIN/CUE vinculado recupera a tabela para projetos mais antigos.
+
+Use **Gerar Deck Aleatório** em **Decks de oponentes** ou **Decks iniciais**.
+Distribua as 40 vagas nas abas **Composição** e **Tipos de Monstro**.
+O limite de ATK/DEF afeta as cartas incluídas no deck. As fusões podem levar
+a monstros mais fortes. A prévia mostra as combinações encontradas e permite
+enviar a composição ao editor. Os decks fixos gerados são usados nas partidas
+do Studio.
+
+As auras incluem monstros virados para baixo. Bônus de ATK/DEF por deck usam
+a composição inicial, desde a primeira compra. No Drop x15, o dano direto de
+entrada em campo e essas regras de bônus são gravados para monstros originais
+dentro dos limites do PS1.
+
+---
+
 # Studio FM v1.5.1 — God 24 na seleção de tipo
 
 Em **Cartas**, escolha **24 — God** no campo **Tipo** e salve o

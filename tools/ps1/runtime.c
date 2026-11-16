@@ -10,7 +10,7 @@ enum {
     MAGIC = 1, TRAP = 2, INDESTRUCTIBLE = 4, PIERCING = 8, DIRECT = 16, FIRST_TURN = 32,
     FIELD = 5, PLACING = 7, BATTLE = 9,
     CARD_COUNT = 722, DECK_SIZE = 40, RECORD_COUNT = 30,
-    AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE
+    AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE
 };
 
 typedef struct {
@@ -62,9 +62,11 @@ register u8 *game_gp __asm__("$28");
 #define GAME(type, addr) (*(volatile type *)(game_gp + ((addr) - 0x8009AF08)))
 #define FN(ret, addr, ...) ((ret (*)(__VA_ARGS__))(addr))
 #define ENTRY __attribute__((used, noinline, section(".text.entry")))
+#define EXTENSION __attribute__((noinline, section(".runtime.extension")))
 #define CARDS ((Card *)0x801A7AD8)
 #define CONFIG ((const Config *)0x801CD7A0)
 #define STATS ((const u32 *)0x801D4244)
+#define LEVELS ((const u8 *)0x801D5332)
 #define OBJECTS ((const u8 *volatile *)0x800E9EF0)
 #define SCENE GAME(u16, 0x8009B23A)
 #define STEP GAME(u8, 0x8009B174)
@@ -103,7 +105,7 @@ static int field_slot(const Card *card)
 
 static int object_slot(const u8 *object) { return object ? object[0x6A] : -1; }
 
-static int face_up(unsigned slot)
+static int field_monster(unsigned slot, int include_face_down)
 {
     unsigned type = type_of(CARDS[slot].id);
     if (type >= 20 && type != 24) return 0;
@@ -112,39 +114,44 @@ static int face_up(unsigned slot)
             if (duel.battle[i] == (int)slot && !(duel.lost & (1 << i))) return 1;
     }
     return ((CARDS[slot].flags & OCCUPIED) || (duel.hidden_by_effect & (1u << slot))) &&
-           !(CARDS[slot].flags & FACE_DOWN);
+           (include_face_down || !(CARDS[slot].flags & FACE_DOWN));
 }
 
 static unsigned protection(unsigned slot)
 {
     const Rules *rule;
     unsigned flags;
-    if (!monster_zone(slot) || !face_up(slot)) return 0;
+    if (!monster_zone(slot) || !field_monster(slot, 0)) return 0;
     rule = rules(CARDS[slot].id);
     flags = rule ? rule->protection : 0;
     if (duel.field[slot].id == CARDS[slot].id) flags |= duel.field[slot].equip_protection;
     return flags;
 }
 
-static int count_bonus(const Bonus *bonus, unsigned source_side)
+static EXTENSION int matches_bonus(const Bonus *bonus, unsigned id, int by_id)
+{
+    if (id < 1 || id > CARD_COUNT) return 0;
+    if (bonus->match != 0xFFFF && (by_id ? id : type_of(id)) != bonus->match) return 0;
+    unsigned attribute = bonus->scope >> 2;
+    return !attribute || attribute == (LEVELS[id] >> 4) + 1u;
+}
+
+static EXTENSION int count_bonus(const Bonus *bonus, unsigned source_side)
 {
     int count = 0;
+    unsigned scope = bonus->scope & 3;
     unsigned by_id = bonus->action == FIELD_ID || bonus->action == DECK_ID;
     for (unsigned side = 0; side < 2; side++) {
-        if (bonus->scope < 2 && side != (source_side ^ bonus->scope)) continue;
+        if (scope < 2 && side != (source_side ^ scope)) continue;
         if (bonus->action == GRAVE_TYPE) {
             if (bonus->match < 32) count += duel.graveyard[side][bonus->match];
             else for (int i = 0; i < 32; i++) count += duel.graveyard[side][i];
         } else if (bonus->action == DECK_TYPE || bonus->action == DECK_ID) {
-            for (int i = AT(u8, SIDE(side) + 0x18); i < DECK_SIZE; i++) {
-                unsigned id = duel.deck[side][i];
-                if (id && (bonus->match == 0xFFFF ||
-                           (by_id ? id : type_of(id)) == bonus->match)) count++;
-            }
+            for (int i = 0; i < DECK_SIZE; i++)
+                count += matches_bonus(bonus, duel.deck[side][i], by_id);
         } else {
             for (unsigned i = side * 15 + 5; i < side * 15 + 10; i++) {
-                if (face_up(i) && (bonus->match == 0xFFFF ||
-                    (by_id ? (unsigned)CARDS[i].id : type_of(CARDS[i].id)) == bonus->match)) count++;
+                if (field_monster(i, 1)) count += matches_bonus(bonus, CARDS[i].id, by_id);
             }
         }
     }
@@ -158,20 +165,21 @@ ENTRY u32 CalculateStats(const Card *card)
     int slot = field_slot(card);
     int attack = card->attack + card->modifier + card->terrain;
     int defense = card->defense + card->modifier + card->terrain;
-    if (monster_zone(slot) && face_up(slot)) {
+    if (monster_zone(slot) && field_monster(slot, 1)) {
         unsigned side = owner(slot);
-        unsigned target_type = type_of(card->id);
         if (duel.field[slot].id == card->id) attack += duel.field[slot].equip_attack;
         for (unsigned i = 5; i < 25; i = i == 9 ? 20 : i + 1) {
-            if (!face_up(i)) continue;
+            if (!field_monster(i, 1)) continue;
             const Rules *rule = rules(CARDS[i].id);
             if (!rule) continue;
             for (unsigned j = 0; j < rule->bonus_count; j++) {
                 const Bonus *bonus = &rule->bonuses[j];
                 int count;
+                if (bonus->action == SUMMON_DAMAGE) continue;
                 if (bonus->action == AURA) {
-                    if ((bonus->scope < 2 && side != (owner(i) ^ bonus->scope)) ||
-                        (bonus->match != 0xFFFF && bonus->match != target_type)) continue;
+                    unsigned scope = bonus->scope & 3;
+                    if ((scope < 2 && side != (owner(i) ^ scope)) ||
+                        !matches_bonus(bonus, card->id, 0)) continue;
                     count = 1;
                 } else if ((int)i == slot) {
                     count = count_bonus(bonus, side);
@@ -258,6 +266,17 @@ static void lose_lp(unsigned side, unsigned amount)
 {
     u16 lp = AT(u16, SIDE(side) + 0x14);
     AT(u16, SIDE(side) + 0x14) = lp > amount ? lp - amount : 0;
+}
+
+static EXTENSION void summon_damage(unsigned slot)
+{
+    const Rules *rule = rules(CARDS[slot].id);
+    if (!rule) return;
+    for (unsigned i = 0; i < rule->bonus_count; i++) {
+        const Bonus *effect = &rule->bonuses[i];
+        if (effect->action == SUMMON_DAMAGE)
+            lose_lp(owner(slot) ^ effect->scope, effect->attack);
+    }
 }
 
 ENTRY void Battle(void)
@@ -450,6 +469,7 @@ ENTRY void ConfirmPlacement(void)
         if ((current != slot || state->id != CARDS[slot].id) &&
             (STEP & 0xCF) == 0xC4 && (sub & 0xCF) != 0xC4) {
             *state = (Instance){.id = CARDS[slot].id};
+            if (!did_equip) summon_damage(slot);
         }
         if (did_equip && phase() == FIELD && state->id == CARDS[slot].id) {
             if (sub == 5) {

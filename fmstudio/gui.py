@@ -154,6 +154,8 @@ class EffectDialog(tk.Toplevel):
             'equip_indestrutivel':'monstro_equipado','equip_atk':'monstro_equipado'}
         if action in required:
             self._set('alvo',required[action])
+        elif key == 'acao' and action == 'dano_lp':
+            self._set('alvo', 'inimigo')
         elif self.vars['alvo'].get() in ('aliados_tipo','monstro_alvo','monstro_equipado'):
             self._set('alvo','proprio')
         self._refresh_controls()
@@ -165,8 +167,7 @@ class EffectDialog(tk.Toplevel):
         protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'})
         self.def_entry.configure(state='normal' if continuous else 'disabled')
         self.type_combo.configure(state='readonly' if typ else 'disabled')
-        self.attribute_combo.configure(state='readonly' if action in
-            ('bonus_deck_tipo','bonus_cemiterio_tipo','bonus_mao_tipo') else 'disabled')
+        self.attribute_combo.configure(state='readonly' if continuous else 'disabled')
         self.scope_combo.configure(state='readonly' if continuous else 'disabled')
         if protection:
             self.vars['valor'].set('0')
@@ -176,11 +177,11 @@ class EffectDialog(tk.Toplevel):
         if action=='bonus_cemiterio_tipo':
             help_text='Bônus contínuo: +X ATK e +Y DEF por cada carta do TIPO no cemitério. Atualiza quando cartas morrem ou saem do cemitério.'
         elif action=='bonus_deck_tipo':
-            help_text='Bônus contínuo por carta no monte de compra. Recalcula quando alguém compra.'
+            help_text='Bônus fixo por carta na composição inicial do deck.'
         elif action=='bonus_mao_tipo':
             help_text='Bônus contínuo por carta na mão. Recalcula após compras, invocações e descartes.'
         elif action in EFFECT_ACTIONS:
-            help_text='Auras são recalculadas ao mudar o campo. "Todos os tipos" inclui qualquer criatura; posição e lado dependem do escopo.'
+            help_text='O bônus acompanha as cartas no campo, inclusive as viradas para baixo.'
         elif action in ('cura_lp_deck_tipo','dano_lp_deck_tipo'):
             help_text='X vezes o número de cartas do tipo no deck configurado. Ativado UMA vez ao entrar em campo.'
         elif action=='dano_monstro_alvo':
@@ -1323,6 +1324,7 @@ class Studio(tk.Tk):
         self._refresh_cards()
         self._load_card()
         self._refresh_project()
+        self.mod_editor.refresh_catalog()
         self._update_pending_label()
         self._update_status(f'Projeto salvo! {count} carta(s) alterada(s), com backup do projeto.json.')
         return True
@@ -1948,14 +1950,19 @@ class Studio(tk.Tk):
         from .mod_gui import NewCardDialog
         NewCardDialog(self)
 
-    def select_new_card(self, cid):
+    def select_card(self, cid):
+        self._stage_current()
+        self.selected_id = cid
         self._clear_card_filters()
-        self.selected_id=None
         self._refresh_cards()
-        self.tree.selection_set(str(cid))
         self.tree.see(str(cid))
-        self._on_card_select()
+        self._load_card()
         self.tabs.select(self.tab_cards)
+
+    def select_new_card(self, cid):
+        self.mod_editor.refresh_catalog()
+        self.select_card(cid)
+        self._refresh_project()
         self._update_status(f'Carta #{cid} criada e salva no projeto.')
 
     def _clear_card_filters(self):
