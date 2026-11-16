@@ -1,3 +1,17 @@
+## v1.4.3 — Inspeção de instruções das rotinas de duelo
+
+O diagnóstico do usuário passa a registrar as primeiras 20 instruções de
+cada uma das nove regiões MIPS, com endereço RAM, offset SLUS, opcode,
+mnemônico de classe, destinos de J/JAL/branch e marcação de *delay slot*.
+Esses dados ajudam a localizar pontos para protótipos de bônus de cemitério
+e ataques múltiplos; não constituem descompilação completa nem prova de hook.
+O código de origem e o BIN não são alterados por esse diagnóstico.
+
+Critérios para qualquer futuro patch de efeito: assinatura MIPS do MOD,
+ABI e registradores preservados, endereço da função validado, trecho de
+código livre efetivo, ramo com delay slot íntegro, verificação por readback,
+cópia isolada do disco e ensaio em ePSXe.
+
 ## v1.4.2 — Teste do pipeline de patch MIPS
 
 Primeira prova opt-in de mudança real de instrução MIPS: LP inicial do

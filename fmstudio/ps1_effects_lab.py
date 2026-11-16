@@ -160,6 +160,89 @@ def scan_direct_mips_calls(exe: bytes) -> dict:
     }
 
 
+
+def inspect_function_instructions(exe: bytes, alias: str, max_words: int = 20) -> dict:
+    """Amostra MIPS sem execução: opcodes, ramificações e delay slots.
+
+    NÃO valida injeção. Um bloco pode conter dados ou rotina redirecionada.
+    """
+    if alias not in SITES:
+        raise ModError('Rotina MIPS desconhecida: '+str(alias))
+    if isinstance(max_words,bool) or not isinstance(max_words,int) or not 1<=max_words<=48:
+        raise ModError('Amostra MIPS deve conter entre 1 e 48 instruções.')
+    function,address,size=SITES[alias]
+    try:
+        offset,raw=_range(exe,address,size)
+    except ModError as exc:
+        return {'funcao':function,'status':'incompativel','motivo':str(exc),
+                'instrucoes':[]}
+    count=min(max_words,len(raw)//4)
+    branch_ops={4:'beq',5:'bne',6:'blez',7:'bgtz',20:'beql',21:'bnel'}
+    mem_ops={32:'lb',33:'lh',35:'lw',36:'lbu',37:'lhu',
+             40:'sb',41:'sh',43:'sw'}
+    out=[]
+    delay=False
+    for i in range(count):
+        word=struct.unpack_from('<I',raw,i*4)[0]
+        pc=address+i*4
+        op=word>>26
+        rs=(word>>21)&31
+        rt=(word>>16)&31
+        imm=word&0xFFFF
+        signed=imm if imm<0x8000 else imm-0x10000
+        decoded='op_0x%02X'%op
+        target=None
+        delayed=False
+        if word==0:
+            decoded='nop'
+        elif op==0:
+            funct=word&63
+            if funct==8:
+                decoded='jr'; delayed=True
+            elif funct==9:
+                decoded='jalr'; delayed=True
+            else:
+                decoded='special_0x%02X'%funct
+        elif op in (2,3):
+            decoded='j' if op==2 else 'jal'
+            target=((pc+4)&0xF0000000)|((word&0x03FFFFFF)<<2)
+            delayed=True
+        elif op in branch_ops:
+            decoded=branch_ops[op]
+            target=(pc+4+(signed<<2))&0xFFFFFFFF
+            delayed=True
+        elif op in mem_ops:
+            decoded=mem_ops[op]
+        elif op in (8,9,10,11,12,13,14,15):
+            decoded={8:'addi',9:'addiu',10:'slti',11:'sltiu',
+                     12:'andi',13:'ori',14:'xori',15:'lui'}[op]
+        entry={'endereco_ram':'0x%08X'%pc,'offset_slus':'0x%X'%(offset+i*4),
+               'opcode_hex':'0x%08X'%word,'mnemonico':decoded,
+               'delay_slot':delay,'gera_delay_slot':delayed}
+        if target is not None:
+            entry['alvo_ram']='0x%08X'%target
+        if decoded=='jr':
+            entry['registrador_alvo']=rs
+        if decoded in ('lb','lh','lw','lbu','lhu','sb','sh','sw'):
+            entry['base_reg']=rs
+            entry['data_reg']=rt
+            entry['deslocamento']=signed
+        out.append(entry)
+        delay=delayed
+    return {
+        'funcao':function,'endereco_funcao':'0x%08X'%address,
+        'status':'amostra_estatica_sem_hooks_validados',
+        'instrucoes':out,
+        'primeiro_opcode':'0x%08X'%struct.unpack_from('<I',raw,0)[0],
+        'retorno_jr_ra_na_amostra':sum(
+            rec['mnemonico']=='jr' and rec.get('registrador_alvo')==31
+            for rec in out),
+        'amostra_parcial':count<len(raw)//4,
+        'aviso':'Desmontagem parcial: não é confirmação de limites da função, '
+                'fluxo de controle nem espaço livre para código MIPS.',
+    }
+
+
 def scan_effect_sites(exe: bytes) -> dict:
     referencias=scan_direct_mips_calls(exe)
     sites={}
@@ -303,6 +386,8 @@ def analyze_project_effects(project) -> dict:
         'versao_perfil':1,'alvo':'SLUS_014.11 (PS1 MIPS)',
         'sha256_executavel_origem':hashlib.sha256(exe).hexdigest(),
         'funcoes_encontradas':scan_effect_sites(exe),
+        'amostras_instrucoes_mips':{alias:inspect_function_instructions(exe,alias)
+                                    for alias in SITES},
         'referencias_chamadas_mips':scan_direct_mips_calls(exe),
         'probe_lp_inicial':probe_initial_duel_lp(exe,project.metadata.get('ps1_starting_lp')),
         'perfil_limite_global_deck':deck_global_patch_probe(exe,limit),

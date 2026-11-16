@@ -1,3 +1,16 @@
+# Studio FM v1.4.3 — Análise de instruções do motor PS1
+
+**Efeitos > Diagnosticar motor MIPS** agora inclui no relatório
+\`amostras_instrucoes_mips\`, com até 20 instruções, endereços, instruções
+J/JAL, ramificações, delay slots, loads/stores e JR. Também apresenta
+a contagem de chamadas diretas para \`Duel_CalcCardStats\`, quando
+o cabeçalho PS-X EXE permite a análise.
+
+**Limite:** é uma inspeção estática parcial, não um patch de habilidade,
+não prova espaço livre e não valida um hook para o ePSXe.
+
+---
+
 # Studio FM v1.4.2 — Teste de escrita de instrução MIPS (LP inicial)
 
 Na aba **Efeitos**, o botão **Teste MIPS: LP inicial** permite opcionalmente

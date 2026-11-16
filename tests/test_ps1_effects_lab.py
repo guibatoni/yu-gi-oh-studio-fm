@@ -14,6 +14,7 @@ from fmstudio.ps1_effects_lab import (
     SITES, scan_effect_sites, scan_direct_mips_calls, deck_global_patch_probe, patch_deck_global_limit,
     analyze_project_effects, save_project_effect_analysis,
     probe_initial_duel_lp, patch_initial_duel_lp,
+    inspect_function_instructions,
 )
 from fmstudio.disc_build import build_test_disc
 from fmstudio.disc import DiscReader
@@ -81,6 +82,38 @@ class MipsEffectProbeTests(unittest.TestCase):
         struct.pack_into('<II',exe,0x18,EXE_DELTA+0x800,0xFFFFFFFC)
         self.assertEqual(scan_direct_mips_calls(bytes(exe))['status'],
                          'segmento_invalido')
+
+    def test_mips_instruction_inspection_decodes_branches_and_slots(self):
+        exe=bytearray(stock_like_exe())
+        at=SITES['atributos_dinamicos'][1]-EXE_DELTA
+        words=[0x27BDFFE8,0x0C005C32,0x00000000,0x10000001,
+               0x00000000,0x03E00008,0x00000000]
+        for i,word in enumerate(words):
+            struct.pack_into('<I',exe,at+4*i,word)
+        report=inspect_function_instructions(bytes(exe),'atributos_dinamicos',7)
+        self.assertEqual(report['status'],'amostra_estatica_sem_hooks_validados')
+        labels=[v['mnemonico'] for v in report['instrucoes']]
+        self.assertEqual(labels[:7],['addiu','jal','nop','beq','nop','jr','nop'])
+        self.assertTrue(report['instrucoes'][2]['delay_slot'])
+        self.assertTrue(report['instrucoes'][4]['delay_slot'])
+        self.assertTrue(report['instrucoes'][6]['delay_slot'])
+        self.assertEqual(report['retorno_jr_ra_na_amostra'],1)
+        self.assertIn('alvo_ram',report['instrucoes'][1])
+
+    def test_mips_inspection_is_read_only_and_validates_inputs(self):
+        original=stock_like_exe()
+        sha=hashlib.sha256(original).hexdigest()
+        for alias in ('combate','controle_campo','construcao_deck'):
+            sample=inspect_function_instructions(original,alias)
+            self.assertLessEqual(len(sample['instrucoes']),20)
+            self.assertEqual(sample['status'],'amostra_estatica_sem_hooks_validados')
+        self.assertEqual(hashlib.sha256(original).hexdigest(),sha)
+        for invalid in ('made_up',''):
+            with self.assertRaises(ModError):
+                inspect_function_instructions(original,invalid)
+        for invalid in (0,49,True):
+            with self.assertRaises(ModError):
+                inspect_function_instructions(original,'atributos_dinamicos',invalid)
 
     def test_lp_patch_retains_original_and_changes_immediate(self):
         exe=bytearray(stock_like_exe())

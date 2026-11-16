@@ -1,3 +1,11 @@
+## v1.4.3 — Inspeção estática de rotinas MIPS
+
+- Relatório adicional por rotina com até 20 palavras de máquina decodificadas.
+- Reconhece chamadas, desvios, retornos, loads/stores e delay slots.
+- Interface mostra quantidade de chamadas diretas para cálculo de atributos.
+- Testes com instruções sintéticas e garantias de operação somente leitura.
+- Sem injeção de novos handlers MIPS, sem modificação da ISO por diagnóstico.
+
 ## v1.4.2 — Smoke test executável do motor PS1
 
 - Prova opcional de patch da instrução \`addiu $v0,$zero,8000\` em SLUS+0x7DD0.

@@ -1270,10 +1270,15 @@ class Studio(tk.Tk):
                       for s in report['funcoes_encontradas'].values())
             groups=', '.join(f'{key}: {len(entries)}' for key,entries
                              in report['grupos_programados_no_studio'].items())
+            calls=report.get('referencias_chamadas_mips',{})
+            stat_refs=calls.get('por_funcao',{}).get('atributos_dinamicos',{})
+            jals=stat_refs.get('total_jal_diretos','não disponível')
             deck=report['perfil_limite_global_deck']
             msg=(f'Funções MIPS encontradas: {ready}/{len(report["funcoes_encontradas"])}\n'
                  f'Efeitos cadastrados: {groups}\n'
-                 f'Limite global de cópias: {deck["status"]}\n\n'
+                 f'Limite global de cópias: {deck["status"]}\n'
+                 f'Chamadas diretas JAL ao cálculo de atributos: {jals}\n'
+                 'Amostras de instruções MIPS adicionadas ao relatório.\n\n'
                  'Os endereços são referências do PS1 original; MODs podem usar hooks.\n'
                  'Nenhum efeito inédito foi instalado no BIN somente por gerar este relatório.\n\n'
                  f'Relatório salvo em:\n{dest}')
