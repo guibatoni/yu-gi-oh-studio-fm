@@ -391,8 +391,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'teste_visual_icone_deus':god_icon_report,
                 'teste_tipo_god24':({'carta_id':god_type_test,
                                       'status':'CAMPO_TIPO_24_GRAVADO_SEM_MOTOR_VALIDADO',
-                                      'aviso':'Pode não funcionar como monstro; '
-                                              'necessário teste em duelo no ePSXe.'}
+                                      'aviso':'Não é monstro para o motor PS1 '
+                                              'original (tipo 24 >=20): ATK/DEF '
+                                              'podem não aparecer no baú e a '
+                                              'invocação pode falhar. O hook de '
+                                              'ícone de tipo não foi instalado.',
+                                      'atk_def_visiveis_no_bau':False,
+                                      'tipo_deus_funcional_no_epsxe':False,
+                                      'icone_de_tipo_instalado':False}
                                      if god_type_test is not None else None),
                 'modo_equip_ps1':equip_mode,
                 'estrategia_equip_ps1':equip_strategy if (native_equips or replacements) else 'sem-equip',

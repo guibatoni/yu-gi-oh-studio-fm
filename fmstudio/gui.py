@@ -523,7 +523,7 @@ class Studio(tk.Tk):
         self._form_entry(left,'Defesa (múltiplos de 10)','defesa',2)
         self._form_entry(left,'Tipo','tipo_id',3,kind='type')
         ttk.Button(left,text='Escolher tipo jogável (PS1)',command=self.choose_playable_monster_type).grid(row=8,column=0,sticky='w',pady=(5,2))
-        ttk.Button(left,text='Teste no BIN: símbolo Deus',command=self.toggle_god_icon_ps1).grid(row=11,column=0,sticky='w',pady=(6,2))
+        ttk.Button(left,text='Teste glifo na descrição (não no tipo)',command=self.toggle_god_icon_ps1).grid(row=11,column=0,sticky='w',pady=(6,2))
         ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
         self.card_type_warning=ttk.Label(left,text='',wraplength=330)
         self.card_type_warning.grid(row=10,column=0,sticky='w',pady=(1,6))
@@ -1282,7 +1282,7 @@ class Studio(tk.Tk):
                 'Apenas a cópia de teste terá os 3 PRIMEIROS CARACTERES da '
                 'descrição substituídos pelo símbolo. O projeto, a descrição '
                 'original e o BIN fonte continuam intactos.\n\n'
-                'O símbolo aparecerá na descrição da carta para testar a '
+                'O símbolo aparecerá somente na descrição da carta para testar a '
                 'fonte nativa. NÃO substituirá o ícone de tipo na interface.\n\n'
                 + ('Também autorizaremos gravar o TIPO 24 REAL na tabela do '
                    'PS1 para este cartão. ATK/DEF e tipo serão conferidos '
@@ -1425,6 +1425,8 @@ class Studio(tk.Tk):
             ic=report.get('chamadas_mips_icone_tipo_god',{})
             type_calls=ic.get('rotinas',{}).get('tipo_na_lista',{}).get('total_chamadas_glifo','indisponível')
             identity=ic.get('comparacao_com_relatorio_anterior','sem comparação')
+            god_class=report.get('diagnostico_god24_classe_monstro',{})
+            god_predicates=god_class.get('comparacoes_imediato_20_total','sem validação')
             deck=report['perfil_limite_global_deck']
             msg=(f'Funções MIPS encontradas: {ready}/{len(report["funcoes_encontradas"])}\n'
                  f'Efeitos cadastrados: {groups}\n'
@@ -1433,6 +1435,10 @@ class Studio(tk.Tk):
                  f'Chamadas de glifo no trecho de tipo: {type_calls}.\n'
                  f'Comparação com diagnóstico anterior: {identity}.\n'
                  'Ícone God24: JALs e delay slots no JSON; SEM hook instalado.\n'
+                 f'God24 como monstro: {god_predicates} possível(is) comparação(ões) '
+                 'com 20 nas rotinas pesquisadas.\n'
+                 'ATK/DEF em branco: tipo 24 não passa a verificação de monstro.\n'
+                 'A pesquisa NÃO ativou patch de invocação nem ícone.\n'
                  'Amostras de instruções MIPS adicionadas ao relatório.\n\n'
                  'Os endereços são referências do PS1 original; MODs podem usar hooks.\n'
                  'Nenhum efeito inédito foi instalado no BIN somente por gerar este relatório.\n\n'
@@ -2169,8 +2175,10 @@ class Studio(tk.Tk):
             if messagebox.askyesno(
                 'TESTE EXPERIMENTAL — tipo Deus (24)',
                 f'Carta #{target:03d} está definida como God 24.\n\n'
-                'Gravar exatamente o número 24 no campo de tipo e '
+                'Gravar somente o valor 24 no campo de tipo e '
                 'conferir o ATK/DEF no BIN de teste?\n\n'
+                'O motor original considera 24 NÃO-MONSTRO: ATK e DEF '
+                'ficarão ocultos no baú e a invocação pode falhar. '
                 'Isto NÃO implementa o motor de Deus: o jogo pode não '
                 'reconhecer a carta como monstro ou apresentar falhas. '
                 'A imagem original e seus efeitos salvos não mudarão.\n\n'
@@ -2256,6 +2264,9 @@ class Studio(tk.Tk):
                'não foram alterados. O teste do tipo God 24 é independente.\n'
                if (manifest.get('teste_visual_icone_deus') or {}).get('status')
                   == 'icone_nao_inserido_sem_espaco_livre' else '')
+            + ('AVISO GOD24: o tipo está no BIN, mas ATK/DEF podem ficar '
+               'em branco no baú e o motor não o reconhece como monstro.\n'
+               if manifest.get('teste_tipo_god24') else '')
             + f'Tipo 24 God (gravação experimental): '
             f'{manifest.get("teste_tipo_god24",{}).get("status") if manifest.get("teste_tipo_god24") else "não habilitado"}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)

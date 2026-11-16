@@ -1,3 +1,17 @@
+## v1.4.14 — Correção do diagnóstico de God24 sem atributos
+
+- Evidência em ePSXe: Time Wizard #016 com tipo 24 aparece sem ATK/DEF
+  no deck. A gravação do valor 24 na tabela não torna a carta monstro.
+- A rotina CardList_RenderDeckBoxStats (0x80060B38) tem comparação
+  de tipo menor que CARD_TYPE_MAGIC (20) para exibir números.
+- Relatório MIPS estendido: oito janelas com hashes, limites do
+  segmento, comparações slti/sltiu 20 e addiu -20, contexto e ramo.
+- Mensagens de geração e manifesto agora não confundem "gravado no BIN"
+  com "reconhecido como monstro e renderizado".
+- O botão experimental deixa claro que o glifo só vai na descrição.
+- Nenhum patch de terreno/invocação/ícone é aplicado sem assinatura
+  validada do jogo e sem preservar as categorias não-monstro 20–23.
+
 - Segurança de memória reforçada: stream_58 é s8 assinado; exige 0–21 antes de acessar streams[22].
 ## v1.4.13 — Engenharia do hook God24 sem escrita automática
 

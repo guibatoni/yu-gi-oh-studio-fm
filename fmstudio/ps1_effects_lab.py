@@ -494,6 +494,142 @@ def scan_god24_render_calls(exe: bytes) -> dict:
     return out
 
 
+
+# Caminhos separados de apresentação, classificação e jogabilidade.
+# Endereços/limites consultados no mapa SLUS-01411 de Forbidden Memories
+# recompilado. Uma assinatura não é autorização para injetar código.
+GOD24_MONSTER_SITES={
+    'bau_atk_def': ('CardList_RenderDeckBoxStats',0x80060B38,0x338,
+                    'O baú só desenha ATK/DEF para tipos 00–19.'),
+    'classificacao_linha': ('func_80060E70',0x80060E70,0x198,
+                            'Escolhe o layout monstro ou não-monstro.'),
+    'criacao_registro_duelo': ('Duel_SetupCardRecord',0x800249E0,0x23C,
+                               'Prepara a carta no campo e dados de terreno.'),
+    'bonus_de_terreno': ('Duel_GetTerrainBoost',0x8002497C,0x64,
+                         'Tabela retail de terreno só comporta 20 tipos.'),
+    'colocacao_carta': ('DuelScene_UpdateCardPlacement',0x80019D18,0x13B4,
+                        'Fluxo de invocação/colocação no duelo.'),
+    'acoes_de_campo': ('DuelScene_UpdateFieldActions',0x8001D670,0x1600,
+                       'Operações de campo e condições do turno.'),
+    'icone_carta': ('func_80031574',0x80031574,0x17C,
+                    'Desenha ícone do tipo na tela da carta.'),
+    'icone_texto': ('func_80037DA4',0x80037DA4,0x280,
+                    'Compartilha símbolos de tipo e Guardian Stars.'),
+}
+GOD24_MONSTER_LIMIT = 20
+
+
+def _god24_compare_entries(raw: bytes, address: int, offset: int,
+                            max_candidates: int = 24) -> tuple[int,list[dict]]:
+    """Busca somente padrões de IMEDIATO 20 (candidatos, não prova de fluxo).
+
+    Não tenta gravar nem alterar limiares 20->25: isso converteria
+    Magia/Armadilha/Ritual/Equip em criaturas.
+    """
+    words=struct.unpack('<'+str(len(raw)//4)+'I',raw)
+    found=[]
+    total=0
+    for i,word in enumerate(words):
+        op=word>>26
+        imm=word&0xffff
+        # slti/sltiu ...,20: forma comum de "tipo < 20".
+        # addiu ..., -20: forma possível de comparação com CARD_TYPE_MAGIC.
+        if not ((op in (10,11) and imm==20) or
+                (op in (8,9) and imm==0xFFEC)):
+            continue
+        total+=1
+        if len(found)>=max_candidates:
+            continue
+        left=max(0,i-5)
+        right=min(len(words),i+7)
+        excerpt=[]
+        for j in range(left,right):
+            w=words[j]
+            p=address+j*4
+            opcode=w>>26
+            record={'pc':f'0x{p:08X}',
+                    'offset_slus':f'0x{offset+j*4:X}',
+                    'word':f'0x{w:08X}',
+                    'foco':j==i,
+                    'delay_apos_comparacao':False}
+            if opcode in (4,5,6,7):
+                immediate=w&0xffff
+                signed=immediate if immediate<0x8000 else immediate-0x10000
+                record['ramo_destino']=f'0x{((p+4+(signed<<2))&0xFFFFFFFF):08X}'
+                record['ramo_condicional']=True
+                if j+1<right:
+                    record['delay_slot_ram']=f'0x{p+4:08X}'
+            elif opcode in (2,3):
+                record['salto_destino']=f'0x{(((p+4)&0xF0000000)|((w&0x03FFFFFF)<<2)):08X}'
+            excerpt.append(record)
+        found.append({
+            'pc':f'0x{address+i*4:08X}',
+            'offset_slus':f'0x{offset+i*4:X}',
+            'opcode':f'0x{word:08X}',
+            'familia':('slti' if op==10 else 'sltiu' if op==11 else
+                       'addi_-20' if op==8 else 'addiu_-20'),
+            'reg_origem':(word>>21)&31,
+            'reg_destino':(word>>16)&31,
+            'contexto':excerpt,
+            'aviso':'Possível teste de classe; é necessário rastrear os '
+                    'registradores e o caminho de execução no ePSXe.'})
+    return total,found
+
+
+def diagnose_god24_monster_classification(exe: bytes) -> dict:
+    """Inspeciona o caso God24 sem alterar bytes nem assumir suporte retail."""
+    result={
+        'status':'somente_leitura',
+        'tipo_solicitado':24,
+        'limite_retail_monstro':GOD24_MONSTER_LIMIT,
+        'atk_def_armazenados_podem_ficar_ocultos':True,
+        'tipo_24_funciona_como_monstro_ps1':False,
+        'icone_deus_de_tipo_instalado':False,
+        'escrita_no_slus':False,
+        'alerta':'Tipo 24 é >=20: o motor original não o classifica como '
+                 'monstro. Trocar sltiu 20 por 25 NÃO é seguro, pois incluiria '
+                 'os quatro tipos de cartas não-monstro. Cada caminho requer '
+                 'uma condição exclusiva para God24, preservando as categorias 20–23.',
+        'rotinas':{},
+    }
+    if len(exe)<0x800 or exe[:8]!=b'PS-X EXE':
+        result['status']='executavel_psx_invalido'
+        return result
+    load,code_size=struct.unpack_from('<II',exe,0x18)
+    if (load!=EXE_DELTA+0x800 or not code_size or code_size%4
+            or 0x800+code_size>len(exe)):
+        result['status']='segmento_mips_invalido'
+        return result
+    result['sha256_executavel']=hashlib.sha256(exe).hexdigest()
+    result['segmento_mips']={'ram':f'0x{load:08X}','tamanho':code_size}
+    total=0
+    for key,(name,ram,size,description) in GOD24_MONSTER_SITES.items():
+        offset=ram-EXE_DELTA
+        entry={'funcao':name,'endereco_ram':f'0x{ram:08X}',
+               'offset_slus':f'0x{offset:X}','motivo':description}
+        if offset<0x800 or offset+size>0x800+code_size:
+            entry.update(status='fora_segmento_carregado',
+                         comparacoes_imediato_20_total=0,
+                         comparacoes_imediato_20=[])
+        else:
+            chunk=exe[offset:offset+size]
+            count,sites=_god24_compare_entries(chunk,ram,offset)
+            total+=count
+            entry.update(status='assinatura_nao_validada_analise_estatica',
+                         hash_sha256=hashlib.sha256(chunk).hexdigest(),
+                         bytes_regiao=size,
+                         comparacoes_imediato_20_total=count,
+                         comparacoes_imediato_20=sites)
+        result['rotinas'][key]=entry
+    result['comparacoes_imediato_20_total']=total
+    result['cobertura']='amostragem_estatica_nao_exaustiva'
+    result['proximo_passo']='Verificar os predicados de monstro em cada '
+                           'região com o SLUS real, fluxo eABI; inserir '
+                           'um teste ==24 exclusivo com código validado e '
+                           'preservar os tipos 20–23. Validar no ePSXe.'
+    return result
+
+
 def analyze_project_effects(project) -> dict:
     """Relatório local sem prometer que o jogo executa habilidades da GUI."""
     base=project.folder/'base'/'source_SLUS_014.11'
@@ -512,7 +648,7 @@ def analyze_project_effects(project) -> dict:
             else:unknown.append(record)
     limit=project.metadata.get('ps1_deck_global_limit')
     return {
-        'versao_perfil':3,'alvo':'SLUS_014.11 (PS1 MIPS)',
+        'versao_perfil':4,'alvo':'SLUS_014.11 (PS1 MIPS)',
         'sha256_executavel_origem':hashlib.sha256(exe).hexdigest(),
         'funcoes_encontradas':scan_effect_sites(exe),
         'amostras_instrucoes_mips':{alias:inspect_function_instructions(exe,alias)
@@ -520,6 +656,7 @@ def analyze_project_effects(project) -> dict:
         'referencias_chamadas_mips':scan_direct_mips_calls(exe),
         'diagnostico_icone_tipo_god':diagnose_god_type_icon(exe),
         'chamadas_mips_icone_tipo_god':scan_god24_render_calls(exe),
+        'diagnostico_god24_classe_monstro':diagnose_god24_monster_classification(exe),
         'probe_lp_inicial':probe_initial_duel_lp(exe,project.metadata.get('ps1_starting_lp')),
         'perfil_limite_global_deck':deck_global_patch_probe(exe,limit),
         'grupos_programados_no_studio':grouped,

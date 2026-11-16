@@ -1,3 +1,38 @@
+# Studio FM v1.4.14 — Diagnóstico de God24 como monstro real
+
+Identificamos por que Time Wizard #016, definido como God (24), aparece
+sem ATK/DEF e sem ícone no baú do ePSXe:
+
+- O motor PS1 original considera monstros somente os tipos **0–19**.
+- A rotina \`CardList_RenderDeckBoxStats\`, RAM \`0x80060B38\`, oculta
+  os valores numéricos de cartas de tipo maior ou igual a 20.
+- Outros caminhos de classificação e invocação também precisam de
+  suporte a God24, senão um ícone isolado não resolve o duelo.
+- O protótipo de glifo anterior escreve somente na **descrição**,
+  não no campo de tipo; não há hook MIPS nativo instalado para isso.
+
+O botão **Efeitos → Diagnosticar motor MIPS** agora inclui
+\`diagnostico_god24_classe_monstro\` (perfil 4) no JSON exportado.
+A análise examina oito janelas de referência do executável (baú,
+classificação, registro de duelo, terreno, colocação e ações de campo,
+ícone de carta e ícone de texto), calcula hashes e procura comparações
+MIPS do limiar 20, incluindo endereços e contexto ao redor.
+A presença de opcodes com imediato 20 não valida a segurança de um
+patch; pode haver caminhos indiretos e dados que se parecem com código.
+
+**Não aplicar** uma mudança simples \`tipo < 25\`: isso incluiria
+Magia/Armadilha/Ritual/Equip como monstros e quebraria o jogo.
+Um patch correto exige \`tipo < 20 OU tipo == 24\` em cada
+caminho relevante e um sprite exclusivo, com espaço de código e
+ABI verificados no SLUS importado.
+
+A geração experimental do valor 24 permanece opt-in e avisa explicitamente
+que ATK/DEF podem ficar ocultos e a invocação pode falhar.
+A nova versão é uma etapa real de diagnóstico e **ainda não implementa
+God24 funcional ou ícone de tipo** no ePSXe.
+
+---
+
 # Studio FM v1.4.13 — Protótipo de trampoline God24 (desativado por segurança)
 
 A partir do relatório MIPS v1.4.12 foi preparado um trampoline de

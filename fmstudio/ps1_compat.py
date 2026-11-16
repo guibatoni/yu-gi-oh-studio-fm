@@ -171,7 +171,7 @@ def audit(project) -> dict:
         'raridade_e_cor_nomes':'PENDENTE',
         'icones_personalizados':'PENDENTE',
         'cartas_maiores_722':'PENDENTE_MIPS_MEMORIA_TABELAS',
-        'tipo_god':'GRAVACAO_EXPERIMENTAL_DO_CAMPO_24_SOB_CONFIRMACAO; JOGABILIDADE_PENDENTE_MIPS',
+        'tipo_god':'CAMPO_24_GRAVAVEL_POREM_NAO_MONSTRO; ATK_DEF_PODEM_FICAR_OCULTOS; JOGABILIDADE_PENDENTE_MIPS',
         'buffs_auras_cemiterio':'PENDENTE_MIPS_EVENTOS',
         'equipamentos_imunidades':'PENDENTE_MIPS_REGRAS; alvos de Equip stock podem ser gravados',
         'rituais_tres_tributos_originais':'gravavel_na_tabela_WA_SEM_NOVOS_IDS',

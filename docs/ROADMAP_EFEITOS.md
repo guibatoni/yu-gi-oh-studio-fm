@@ -1,3 +1,19 @@
+## v1.4.14 — Sequência do patch God24 real
+
+1. Inspecionar predicados em CardList_RenderDeckBoxStats e
+   func_80060E70 para corrigir apresentação de ATK/DEF e layout.
+2. Preservar Magia(20), Armadilha, Ritual e Equip(23) em todos os
+   ramos; **jamais** trocar a comparação 20 por 25.
+3. Rastrear chamadas de colocação de carta, registro de duelo,
+   terreno e ações de campo para permitir invocação e combate.
+4. Colocar novo sprite de tipo numa região gráfica e memória
+   verificada; não sobrescrever Guardian Stars.
+5. Ativar hooks MIPS apenas para assinatura SLUS e cave comprovadamente
+   livres, numa cópia BIN, com readback e testes reais ePSXe.
+
+O relatório inclui offsets de possíveis predicados e seus opcodes
+para análise, mas não instala hooks automaticamente.
+
 ## v1.4.3 — Inspeção de instruções das rotinas de duelo
 
 O diagnóstico do usuário passa a registrar as primeiras 20 instruções de
