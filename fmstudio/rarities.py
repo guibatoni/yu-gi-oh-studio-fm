@@ -1,8 +1,7 @@
-"""Classes visuais do nome das cartas no Studio (ainda sem patch PS1).
+"""Cores dos nomes no Studio e no renderizador de texto do Drop x15.
 
-O tipo da carta tem precedência para Trap, Magic, Equip e God. A raridade
-configurada continua guardada em criaturas, inclusive se o tipo for alterado.
-As cores RGB sao usadas apenas na interface e nos metadados do projeto.
+Magias, armadilhas, equipamentos e God usam as cores do tipo. Os demais
+nomes usam a raridade salva no projeto.
 """
 from __future__ import annotations
 

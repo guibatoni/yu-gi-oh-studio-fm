@@ -9,7 +9,8 @@ from fmstudio.abilities import quick_settings, replace_quick_effects
 from fmstudio.core import ModError
 from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_sprite_words
 from fmstudio.ps1_runtime import (
-    CONFIG_ADDRESS, DUEL_STATE, RUNTIME_EXT_BASE, RUNTIME_PASSWORD_BASE, SUMMON_DAMAGE,
+    CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, NAME_COLOR_CONFIG, RUNTIME_EXT_BASE,
+    RUNTIME_MOD_BASE, SUMMON_DAMAGE,
     _jump, _option_calls, _rule_patches, compile_effects, install_runtime, verify_effects,
 )
 from fmstudio.ps1_text import ICON_CODES, patch_descriptions
@@ -107,7 +108,7 @@ class TestNativeRules(unittest.TestCase):
             'ps1_password_id_prefix': 10,
         })
         plan = compile_effects(self.project, True)
-        self.assertEqual(plan.bank_end, RUNTIME_PASSWORD_BASE)
+        self.assertEqual(plan.bank_end, RUNTIME_MOD_BASE)
         self.assertFalse(plan.gameplay)
         source = bytearray(sample_exe())
         for pc, old, _ in _rule_patches(plan):
@@ -128,6 +129,45 @@ class TestNativeRules(unittest.TestCase):
         unsupported = compile_effects(self.project, False)
         self.assertEqual(unsupported.data, b'')
         self.assertEqual(len(unsupported.pending), 3)
+
+
+    def test_fixed_deck_and_name_colors_verify_exact_bytes(self):
+        self.project.effects = {}
+        self.project.cards = {
+            1: {'tipo_id': 0, 'raridade': 'epica'},
+            2: {'tipo_id': 24, 'raridade': 'comum'},
+            3: {'tipo_id': 21},
+        }
+        self.project.get = self.project.cards.__getitem__
+        deck = tuple(range(100, 140))
+        self.project.metadata['edicao_mod'] = {'duelistas': {'1': {'drops_do_deck': True}}}
+        plan = compile_effects(self.project, True, fixed_decks={1: deck})
+        directory, colors = struct.unpack_from('<HH', plan.data, FIXED_DECK_CONFIG)
+        self.assertEqual(colors, struct.unpack_from('<H', plan.data, NAME_COLOR_CONFIG)[0])
+        offset = struct.unpack_from('<H', plan.data, directory + 2)[0]
+        self.assertEqual(struct.unpack_from('<40H', plan.data, offset), deck)
+        palette = struct.unpack_from('<10I', plan.data, colors)
+        tiers = plan.data[colors + 40:colors + 44]
+        self.assertEqual(tiers, bytes((0, 4, 6, 8)))
+        self.assertEqual([palette[index] for index in tiers[1:]], [0x803D5B, 0x3D1D09, 0x643C80])
+        source = bytearray(sample_exe())
+        for pc, old, _ in _rule_patches(plan):
+            struct.pack_into(f'<{len(old)}I', source, where(pc), *old)
+        for pc, _, target, _ in _option_calls(plan):
+            struct.pack_into('<I', source, where(pc), _jump(target, link=True))
+            struct.pack_into('<I', source, where(pc + 8), _jump(target, link=True))
+        struct.pack_into('<II', source, where(DROP_ENTRY), 0x27BDFFF0, 0xAFBF000C)
+        original = bytes(source)
+        with patch('fmstudio.ps1_runtime.SOURCE_SHA256', hashlib.sha256(original).hexdigest()):
+            output, _ = install_runtime(original, original, plan, description_icons=False)
+        report = verify_effects(output, plan, original=original)
+        self.assertEqual(report['decks_fixos'], [1])
+        self.assertEqual(report['drops_do_deck'], [1])
+        self.assertEqual(report['nomes_tier'], 3)
+        for changed in (DROP_ENTRY, CONFIG_ADDRESS + offset, CONFIG_ADDRESS + colors, RUNTIME_MOD_BASE):
+            corrupted = bytearray(output)
+            corrupted[where(changed)] ^= 1
+            self.assertEqual(verify_effects(corrupted, plan, original=original)['status'], 'divergente')
 
 
 class TestRichDescriptions(unittest.TestCase):

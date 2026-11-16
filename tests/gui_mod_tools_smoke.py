@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 from fmstudio.core import Project
 from fmstudio.drafts import DraftSession
 from fmstudio.gui import Studio
+from fmstudio.duel_match import make_match
 from fmstudio.mod_data import STOCK_STARTER
 from fmstudio.mod_gui import NewCardDialog
 from fmstudio.mod_tools_gui import DeckGeneratorDialog, PasswordsDialog
@@ -50,7 +51,7 @@ with TemporaryDirectory() as temp:
     deck_editor.kind.set(TYPE_NAMES[22])
     assert deck_editor.catalog.get_children() == (str(cid),)
     deck_editor.catalog.selection_set(str(cid))
-    deck_editor.quantity.set('2')
+    deck_editor.add_quantity.set('2')
     deck_editor.change_card('add')
     assert deck_editor.deck.set(str(cid), 'qtd') == '2'
     deck_editor.quantity.set('1')
@@ -78,10 +79,26 @@ with TemporaryDirectory() as temp:
     setup_deck(editor.opponent_deck)
     editor.save_opponent()
     assert len(editor.rules['duelistas']['1']['deck']['cartas']) == 40
+
+    almost_full = [nid for nid in sorted(project.cards)[:13] for _ in range(3)]
+    deck_editor.fixed.set(', '.join(map(str, almost_full)))
+    deck_editor.deck.selection_set(str(almost_full[0]))
+    deck_editor._select_copy()
+    assert '39/40' in deck_editor.total.get()
+    assert deck_editor.quantity.get() == '3'
+    assert deck_editor.add_quantity.get() == '1'
+    deck_editor.catalog.selection_set(str(cid))
+    deck_editor.change_card('add')
+    assert '40/40' in deck_editor.total.get()
+    assert deck_editor.deck.set(str(cid), 'qtd') == '1'
+    editor.save_opponent()
+
     setup_deck(editor.starter_deck)
     name = editor.starter.get()
     assert name != STOCK_STARTER
     restored = Project.open(project.folder)
     assert len(restored.metadata['edicao_mod']['iniciais'][name]['cartas']) == 40
+    match = make_match(restored, None, 1, name)
+    assert list(match.initial_decks['adversario']) == [*almost_full, cid]
     root.destroy()
 print('GUI: criação imediata, resgate de password por ID e geração dos dois decks conferidos.')

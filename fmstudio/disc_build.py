@@ -142,7 +142,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             metadata=getattr(project,'metadata',{})
             expected_wa=wa_sha(project) if metadata.get('edicao_mod') else None
             mod_plan=compile_mod(project,profile=native_profile,wa_verified=bool(expected_wa))
-            native_plan=compile_effects(project,native_profile)
+            native_plan=compile_effects(project,native_profile,fixed_decks=mod_plan.fixed_decks)
             equip_mode=metadata.get('ps1_equip_mode','adicionar')
             if equip_mode not in ('adicionar','substituir'):
                 raise ModError('Modo de equipamento inválido no projeto.')
@@ -433,7 +433,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'icones_de_descricao_ps1':sorted(description_icons),
                 'efeitos_nativos_ps1':native_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
-                                    'pendente':mod_plan.pending},
+                                    'pendente':mod_plan.pending,
+                                    'decks_fixos':list(native_plan.fixed_decks)},
                 'artes_aplicadas':written_arts,
                 'equipamentos_ps1_aplicados':native_written,
                 'rituais_ps1_aplicados':ritual_written,
@@ -467,7 +468,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 raise ModError('BIN de teste diverge dos atributos do projeto. '
                                'A cópia anterior foi preservada.')
             if native_plan.data and checked['efeitos_nativos_ps1']['status']!='aplicado':
-                raise ModError('A tabela de efeitos do BIN diverge do projeto. '
+                raise ModError('As regras nativas, os decks ou as cores do BIN divergem do projeto. '
                                'A cópia anterior foi preservada.')
             if native_profile and not all(checked['edicao_do_mod_ps1'].values()):
                 raise ModError('As regras de duelo do BIN divergem do projeto. A cópia anterior foi preservada.')
