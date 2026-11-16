@@ -623,10 +623,12 @@ def diagnose_god24_monster_classification(exe: bytes) -> dict:
         result['rotinas'][key]=entry
     result['comparacoes_imediato_20_total']=total
     result['cobertura']='amostragem_estatica_nao_exaustiva'
-    result['proximo_passo']='Verificar os predicados de monstro em cada '
-                           'região com o SLUS real, fluxo eABI; inserir '
-                           'um teste ==24 exclusivo com código validado e '
-                           'preservar os tipos 20–23. Validar no ePSXe.'
+    result['proximo_passo']=(
+        'Verificar os predicados de monstro em cada região do SLUS real, '
+        'incluindo fluxo e ABI; inserir condição exclusiva para ==24 '
+        'com código validado, preservando os tipos 20–23. '
+        'Validar no ePSXe.'
+    )
     return result
 
 
