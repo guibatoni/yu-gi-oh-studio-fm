@@ -1,3 +1,33 @@
+# Studio FM v1.4.13 — Protótipo de trampoline God24 (desativado por segurança)
+
+A partir do relatório MIPS v1.4.12 foi preparado um trampoline de
+19 instruções R3000A para o ponto `SLUS+0x287F4`.
+A intenção é redirecionar apenas o ícone de tipo 24:
+lê o opcode do stream no canal, verifica **kind=0** e **ID=24**
+e encaminha para um slot gráfico próprio 0x27–0x30.
+**kind=1/2 (Guardian Stars) é encaminhado sem mudanças**.
+O código preserva o delay slot original do JAL, mantém $ra
+com um tail jump e usa NOPs para os load-delay hazards do PS1.
+
+**Não é uma funcionalidade ativada no BIN.** O módulo
+`fmstudio/ps1_god24_hook.py` oferece construção e testes do
+trampoline, leitura de SHA/assinatura e verificações conservadoras
+de offsets. A gravação é bloqueada sem uma auditoria externa do
+espaço de código (cave) específico do SLUS; uma sequência de zeros
+não prova que o espaço seja livre. Não foi feito teste no ePSXe.
+As funções públicas só trabalham em bytes em memória e não são
+chamadas pelo gerador de jogo. No PS1, o tipo God 24 ainda pode
+não ser reconhecido como monstro no combate.
+
+O SLUS enviado tem SHA-256
+`7412689c12618f90144e8b90839f1f47d2813cc20b42675f2506d8e125fa6b03`.
+O alvo compartilhado da chamada é `func_80036C14` e o delay slot
+`0x02002021`; quaisquer diferenças interrompem a preparação.
+A implementação completa exigirá reservar um endereço MIPS seguro,
+selecionar o sprite efetivamente livre no WA do MOD e validar no emulador.
+
+---
+
 # Studio FM v1.4.12 — Inventário das chamadas MIPS do ícone Deus
 
 O botão Efeitos > Diagnosticar motor MIPS agora registra no JSON o inventário de chamadas JAL a func_80036C14 nas três regiões envolvidas na exibição dos ícones. Cada ocorrência inclui endereço RAM, offset SLUS, opcode, delay slot e instruções próximas. A análise também compara hashes das janelas com o diagnóstico enviado do projeto yugioh teste e recusa mapear código quando t_addr/t_size do cabeçalho não correspondem à base PS1. Nenhum byte do executável ou do projeto é modificado.

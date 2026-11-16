@@ -1,3 +1,11 @@
+## v1.4.13 — Engenharia do hook God24 sem escrita automática
+
+- Trampoline MIPS R3000A com filtro tipo 24/kind=0 e preservação das estrelas.
+- Branches calculados e load-delay slots explícitos.
+- Rejeição de JAL, delay slot, imagem, offset ou região de código diferentes.
+- Testes sintéticos de isolamento de bytes e bloqueio até confirmação do cave.
+- Não aplicado ao BIN de produção; ícone no baú ainda depende de teste no ePSXe.
+
 ## v1.4.12 — Chamadas JAL e delay slots da exibição God24
 
 - Relatório de chamadas para func_80036C14, com opcode, delay slot e contexto.
