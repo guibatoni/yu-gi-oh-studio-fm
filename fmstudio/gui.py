@@ -525,7 +525,7 @@ class Studio(tk.Tk):
         ttk.Button(left,text='Escolher tipo jogável (PS1)',command=self.choose_playable_monster_type).grid(row=8,column=0,sticky='w',pady=(5,2))
         ttk.Button(left,text='Teste glifo na descrição (não no tipo)',command=self.toggle_god_icon_ps1).grid(row=11,column=0,sticky='w',pady=(6,2))
         ttk.Button(left,text='PS1: ATK/DEF God no baú (teste)',command=self.toggle_god24_chest_preview).grid(row=12,column=0,sticky='w',pady=(6,2))
-        ttk.Button(left,text='PS1: God24 na mão (teste)',command=self.toggle_god24_hand_preview).grid(row=13,column=0,sticky='w',pady=(6,2))
+        ttk.Button(left,text='PS1: God24 em duelo (teste)',command=self.toggle_god24_hand_preview).grid(row=13,column=0,sticky='w',pady=(6,2))
         ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
         self.card_type_warning=ttk.Label(left,text='',wraplength=330)
         self.card_type_warning.grid(row=10,column=0,sticky='w',pady=(1,6))
@@ -1265,7 +1265,7 @@ class Studio(tk.Tk):
                 self.project.metadata.pop('ps1_god_chest_preview',None)
                 self.project.metadata.pop('ps1_god_hand_preview',None)
                 self.project.save()
-                self._update_status('Testes God24 do baú e mão desativados.')
+                self._update_status('Testes God24 do baú e do duelo desativados.')
             return
         if int(self.project.get(cid)['tipo_id'])!=24:
             messagebox.showwarning('Carta God24',
@@ -1293,21 +1293,21 @@ class Studio(tk.Tk):
         self._update_status('God24 no baú ativado. Gere uma nova cópia BIN/CUE.')
 
     def toggle_god24_hand_preview(self):
-        """Teste explícito de quatro máscaras da seleção da mão no duelo."""
+        """Configura o teste God24 na mão, na colocação e na confirmação."""
         if not self._ready_native_effect() or not self.selected_id:
             return
         self._stage_current()
         if self.drafts and self.drafts.is_dirty:
             messagebox.showinfo('Salve primeiro',
-                'Salve as alterações antes de testar a mão do God24.',parent=self)
+                'Salve as alterações antes de testar God24 em duelo.',parent=self)
             return
         cid=int(self.selected_id)
         if self.project.metadata.get('ps1_god_hand_preview',False):
-            if messagebox.askyesno('Desativar teste God24 da mão',
-                    'Não aplicar o patch da mão no próximo BIN/CUE?',parent=self):
+            if messagebox.askyesno('Desativar teste God24 em duelo',
+                    'Desativar o teste em duelo na próxima cópia BIN/CUE?',parent=self):
                 self.project.metadata.pop('ps1_god_hand_preview',None)
                 self.project.save()
-                self._update_status('God24 na mão desativado no próximo BIN.')
+                self._update_status('Teste God24 em duelo desativado na próxima cópia.')
             return
         if int(self.project.get(cid)['tipo_id'])!=24:
             messagebox.showwarning('Tipo God24',
@@ -1315,7 +1315,7 @@ class Studio(tk.Tk):
             return
         if not self.project.metadata.get('ps1_god_chest_preview',False):
             messagebox.showwarning('Ative primeiro o baú',
-                'Ative PS1: ATK/DEF God no baú (teste) antes do teste da mão.',
+                'Ative PS1: ATK/DEF God no baú (teste) antes do teste em duelo.',
                 parent=self)
             return
         if self.project.metadata.get('ps1_god_type_test_card_id')!=cid:
@@ -1329,21 +1329,17 @@ class Studio(tk.Tk):
             messagebox.showerror('Tipo incompatível',
                 'Cartas com tipo 25–31 impedem este experimento.',parent=self)
             return
-        if not messagebox.askyesno('God24 na mão — MIPS experimental',
-                'Modificar QUATRO instruções de máscara no fluxo '
-                'DuelScene_UpdateHandActions da CÓPIA BIN/CUE?\n\n'
-                'Isso faz apenas o tipo 24 seguir o caminho de monstro '
-                'na seleção da mão. Os tipos 0–23 não mudam.\n\n'
-                'ATENÇÃO: não altera diretamente colocação, fusão ou '
-                'combate. Pode haver comportamento inesperado no ePSXe. '
-                'Não é uma invocação God24 já validada.\n\n'
-                'A imagem original será preservada. Ativar?',
+        if not messagebox.askyesno('God24 em duelo (teste)',
+                'Ativar o teste para jogar God24 como monstro na cópia BIN/CUE?\n\n'
+                'O teste cobre a seleção na mão, a colocação no campo '
+                'e a confirmação com a estrela guardiã. Depois de gerar '
+                'a cópia, jogue um duelo no ePSXe para conferir.',
                 parent=self):
             return
         self.project.metadata['ps1_god_hand_preview']=True
         self.project.save()
         self._refresh_project()
-        self._update_status('Teste God24 da mão ativado: gere novo BIN/CUE.')
+        self._update_status('Teste God24 em duelo ativado. Gere uma nova cópia BIN/CUE.')
 
     def toggle_god_icon_ps1(self):
         """Opt-in para glifo Deus de texto em uma cópia de BIN, não tipo 24."""
@@ -1539,8 +1535,8 @@ class Studio(tk.Tk):
                  'com 20 nas rotinas pesquisadas.\n'
                  'ATK/DEF em branco: tipo 24 não passa a verificação de monstro.\n'
                  f'Fluxo da mão em duelo: {hand_candidates} candidatos MIPS analisados.\n'
-                 'God24 ainda é tratado como magia durante o duelo.\n'
-                 'Detalhes da mão e colocação no campo registrados no JSON.\n'
+                 'Na imagem de origem, God24 segue o fluxo de cartas especiais.\n'
+                 'Para conferir o patch na cópia, use Verificar BIN/CUE.\n'
                  'A pesquisa NÃO ativou patch de invocação nem ícone.\n'
                  'Amostras de instruções MIPS adicionadas ao relatório.\n\n'
                  'Os endereços são referências do PS1 original; MODs podem usar hooks.\n'
@@ -2345,8 +2341,8 @@ class Studio(tk.Tk):
                     + ('GOD24 NO BAÚ: duas máscaras e três opcodes do renderizador. '
                        'NÃO modifica combate nem ícone.\n'
                        if self.project.metadata.get('ps1_god_chest_preview') else '')
-                    + ('GOD24 NA MÃO: quatro máscaras experimentais de roteamento. '
-                       'NÃO garante invocação ou batalha funcional.\n'
+                    + ('GOD24 EM DUELO: teste de mão, colocação e confirmação. '
+                       'Valide a jogada no ePSXe.\n'
                        if self.project.metadata.get('ps1_god_hand_preview') else '')
                     + ('GOD 24: gravação experimental do campo tipo (24) '
                        'autorizada; jogabilidade NÃO validada no ePSXe.\n'
@@ -2370,6 +2366,9 @@ class Studio(tk.Tk):
             messagebox.showerror('Não foi possível gerar BIN/CUE', str(exc), parent=self)
             return
         action='substituída' if manifest.get('acao_arquivo')=='substituido' else 'criada'
+        duel=manifest.get('teste_god24_roteamento_duelo')
+        duel_status=(f'{duel["pontos_aplicados"]}/{duel["total_pontos"]} pontos conferidos '
+                     '(ePSXe pendente)' if duel else 'DESATIVADO')
         messagebox.showinfo(f'Imagem de teste {action}',
             f'Imagem de teste {action} com sucesso.\n\n'
             f'BIN: {manifest["bin"]}\nCUE: {manifest["cue"]}\n'
@@ -2380,7 +2379,7 @@ class Studio(tk.Tk):
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             f'God24 ATK/DEF BAÚ: {"2 máscaras + 3 opcodes da lista" if manifest.get("teste_god24_atk_def_bau") else "DESATIVADO"}.\n'
-            f'God24 MÃO: {"4/4 máscaras aplicadas (ePSXe pendente)" if manifest.get("teste_god24_roteamento_mao") else "DESATIVADO"}.\n'
+            f'God24 EM DUELO: {duel_status}.\n'
             f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             f'Método: {manifest.get("estrategia_equip_ps1","não aplicado")}.\n'
             f'Rituais: {len(manifest.get("rituais_ps1_aplicados",[]))}; '
@@ -2465,7 +2464,7 @@ class Studio(tk.Tk):
                 or report['god24_renderizador_lista_bau']['god24_patch_lista']
                 ['status']!='aplicado_3_de_3'
                 or (self.project.metadata.get('ps1_god_hand_preview',False)
-                    and report['god24_mascara_da_mao']['status']!='aplicado_4_de_4'))
+                    and report['god24_roteamento_duelo']['status']!='aplicado'))
             if report['divergentes'] or god24_unpatched:
                 messagebox.showwarning('BIN/CUE: God24 não verificado',info,parent=self)
             else:

@@ -1,3 +1,14 @@
+## v1.4.22 — God24 experimental na colocação e confirmação
+
+- O teste já marcado para God24 na mão também cobre colocação e estrela
+  guardiã ao gerar outra cópia do Drop x15.
+- Quatro decisões da mão, sete de colocação e duas de confirmação agora
+  reconhecem o tipo 24 como monstro e preservam os tipos originais.
+- A releitura exige os 13 pontos na cópia antes de concluir a exportação.
+  O verificador ainda reconhece imagens com o teste da mão da v1.4.21.
+- A escolha de posição, a estrela guardiã e o ataque precisam de um duelo
+  no ePSXe para validação de ponta a ponta.
+
 ## v1.4.21 — Corrigidos os quatro offsets do patch de God24 na mão
 
 - Corrigido erro de -0x800 na conversão de RAM para SLUS:

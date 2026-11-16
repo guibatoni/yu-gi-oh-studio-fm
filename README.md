@@ -1,3 +1,22 @@
+# Studio FM v1.4.22 — God24 da mão ao campo (teste)
+
+**PS1: God24 em duelo (teste)** prepara o tipo 24 para seguir o caminho de
+monstro na mão, na colocação e na confirmação da estrela guardiã. A
+configuração de teste da mão já salva no projeto vale para esta versão.
+
+Gere uma nova cópia BIN/CUE a partir do Drop x15 usado na importação.
+Em **Verificar BIN/CUE**, confira mão **4/4**, colocação **7/7** e confirmação
+**2/2**. Abra a cópia em um duelo novo no ePSXe e teste jogar a carta,
+escolher a estrela guardiã e atacar depois que o jogo permitir.
+
+A cópia mantém o tipo 24 e os atributos gravados de cada carta. As
+comparações do duelo preservam o número dos tipos originais e os desvios
+de Magia, Armadilha, Ritual e Equip. A versão continua experimental até
+validar a jogada inteira no ePSXe. Ícone de tipo e efeitos inéditos
+seguem pendentes.
+
+---
+
 # Studio FM v1.4.21 — Correção do erro "God24 mão: janela MIPS"
 
 Na v1.4.20, os quatro offsets do patch da mão estavam **0x800 bytes

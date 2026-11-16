@@ -99,11 +99,18 @@ def verify_image_stats(project, source):
     from .ps1_god24_chest import audit_god24_build_deck_rows
     row_renderer=audit_god24_build_deck_rows(exe)
     from .ps1_god24_hand import inspect as inspect_hand_god
-    hand_patch=inspect_hand_god(exe)
+    from .ps1_god24_play import inspect as inspect_duel_god
+    duel_patch=inspect_duel_god(exe)
+    legacy_hand_patch=inspect_hand_god(exe)
+    hand=duel_patch['etapas']['mao']
+    if hand['aplicados'] == hand['total']:
+        legacy_hand_patch={'status':'substituido_pelo_patch_de_duelo',
+                           'quantidade_aplicada':0,'instrucoes':[]}
     return {'imagem':image_path,'sha256_slus':hashlib.sha256(exe).hexdigest(),
             'god24_mascaras_bau':chest,
             'god24_renderizador_lista_bau':row_renderer,
-            'god24_mascara_da_mao':hand_patch,
+            'god24_mascara_da_mao':legacy_hand_patch,
+            'god24_roteamento_duelo':duel_patch,
             'god24_teste_mao_ativado_no_projeto':bool(config.get('ps1_god_hand_preview')),
             'god24_teste_bau_ativado_no_projeto':bool(config.get('ps1_god_chest_preview')),
             'god24_total_cartas_no_bin':len(card_types_24),
@@ -128,16 +135,17 @@ def describe(result):
         status=result['god24_mascaras_bau']
         text.append('\nGOD24 — MÁSCARAS MIPS NO BIN/CUE SELECIONADO:')
         text.append('  '+status['status']+' ('+str(status['total_aplicados'])+'/2)')
-        rows=result['god24_renderizador_lista_bau']
-        hand=result['god24_mascara_da_mao']
-        text.append('  MÁSCARAS DA MÃO (DUEL): '+hand['status']+
-                    ' ('+str(hand['quantidade_aplicada'])+'/4)')
-        for point in hand['instrucoes']:
-            text.append('    '+point['offset_slus']+': '+str(point['opcode_lido'])+
-                        ' ('+point['estado']+')')
-        if hand['status']=='aplicado_4_de_4':
-            text.append('  Atenção: patch da mão presente; colocação, combate '
-                        'e invocação ainda NÃO foram validados no ePSXe.')
+        duel=result['god24_roteamento_duelo']
+        if result.get('god24_teste_mao_ativado_no_projeto') or duel['pontos_aplicados']:
+            labels={'mao':'mão','colocacao':'colocação','confirmacao':'confirmação'}
+            phases=', '.join(f"{labels[name]} {phase['aplicados']}/{phase['total']}"
+                             for name,phase in duel['etapas'].items())
+            text.append(f"  GOD24 EM DUELO ({duel['status']}): {phases}.")
+            if duel['status']=='aplicado':
+                text.append('  Patch conferido no BIN. Valide a jogada no ePSXe.')
+        if result['god24_mascara_da_mao']['quantidade_aplicada']:
+            text.append('  Detectado o teste anterior, limitado à mão. '
+                        'Gere uma nova cópia para testar a colocação.')
         rows=result['god24_renderizador_lista_bau']
         text.append('  RENDERIZADOR REAL DAS LINHAS: func_80031874 — '+rows['status'])
         row_test=rows.get('god24_patch_lista',{})
