@@ -241,7 +241,9 @@ class AdvancedFieldDialog(tk.Toplevel):
 
     def _sync(self):
         for side in ('jogador','adversario'):
-            self.lab.set_deck(side,parse_card_ids(self.deck_vars[side].get(),maximum=40))
+            deck = parse_card_ids(self.deck_vars[side].get(),maximum=40)
+            if deck != self.lab.decks[side]:
+                self.lab.set_deck(side, deck)
             hand_string=self.hand_vars[side].get()
             if self._last_hand[side] != hand_string:
                 self.lab.set_hand(side,parse_card_ids(hand_string,maximum=5))

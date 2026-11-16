@@ -9,7 +9,10 @@ from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
 from .core import ModError, check_effect
 from .ps1_god24_chest import SOURCE_SHA256
 from .ps1_god24_display import SPRITE_ORIGINAL, SPRITE_PATCHED, SPRITE_RAM, extended_sprite_words
-from .ps1_runtime_blob import ENTRY_POINTS, RUNTIME, RUNTIME_BASE, RUNTIME_END, RUNTIME_SHA256
+from .ps1_runtime_blob import (
+    ENTRY_POINTS, RUNTIME, RUNTIME_BASE, RUNTIME_END, RUNTIME_SHA256,
+    RUNTIME_EXT, RUNTIME_EXT_BASE, RUNTIME_EXT_END, RUNTIME_EXT_SHA256,
+)
 from .tables import CARD_COUNT, EXE_DELTA
 
 DUEL_STATE = 0x801CD5A0
@@ -23,11 +26,12 @@ PROTECTIONS = {
     'equip_imune_armadilha': 2, 'equip_imune_magia_armadilha': 3, 'equip_indestrutivel': 4,
 }
 PLAY_ACTIONS = ((EFFECT_ACTIONS - {'bonus_mao_tipo'}) | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
-                {'ataques_multiplos', 'perder_lp_por_ataque'})
+                {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp'})
 SUPPORTED = PLAY_ACTIONS | COPY_ACTIONS
 BONUS_CODES = {'aura_tipo': 1, 'bonus_por_tipo': 2, 'bonus_deck_tipo': 3,
                'bonus_cemiterio_tipo': 6}
 SCOPES = {'aliados': 0, 'inimigos': 1, 'todos': 2}
+SUMMON_DAMAGE = 7
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,10 @@ class EffectPlan:
     @property
     def data_end(self):
         return CONFIG_ADDRESS + len(self.data) if self.data else DUEL_STATE
+
+    @property
+    def bank_end(self):
+        return RUNTIME_EXT_BASE if self.gameplay else BANK_END
 
 
 def compile_effects(project, profile: bool) -> EffectPlan:
@@ -80,7 +88,12 @@ def compile_effects(project, profile: bool) -> EffectPlan:
                 pending.append(f'#{cid}: {action} requer outra rotina de duelo no PS1.')
                 continue
             effect = check_effect(raw)
-            if effect.get('atributo_id', -1) != -1 or effect.get('origem_contagem') in ('mao', 'cemiterio'):
+            if action == 'dano_lp' and effect['evento'] != 'invocar':
+                pending.append(f'#{cid}: dano direto PS1 exige gatilho de entrada em campo.')
+                continue
+            attribute = effect.get('atributo_id', -1)
+            if ((attribute != -1 and action == 'bonus_cemiterio_tipo')
+                    or effect.get('origem_contagem') in ('mao', 'cemiterio')):
                 pending.append(f'#{cid}: {action} com esse filtro ou zona funciona no Studio.')
                 continue
             if max(effect['valor'], effect.get('valor_def', 0)) > 9999:
@@ -103,8 +116,12 @@ def compile_effects(project, profile: bool) -> EffectPlan:
                 else:
                     match = effect['tipo_id'] & 0xFFFF
                     code = BONUS_CODES[action]
-                bonuses.append(struct.pack('<BBHHH', code, SCOPES[effect['escopo']], match,
+                scope = SCOPES[effect['escopo']] | ((attribute + 1) << 2)
+                bonuses.append(struct.pack('<BBHHH', code, scope, match,
                                            effect['valor'], effect.get('valor_def', 0)))
+            elif action == 'dano_lp':
+                receiver = int(effect['alvo'] == 'inimigo')
+                bonuses.append(struct.pack('<BBHHH', SUMMON_DAMAGE, receiver, 0, effect['valor'], 0))
             elif action in PROTECTIONS:
                 protections |= PROTECTIONS[action]
             elif action == 'ataques_multiplos':
@@ -136,9 +153,10 @@ def compile_effects(project, profile: bool) -> EffectPlan:
             data.extend(payload)
         struct.pack_into('<H', data, 2 + 2 * cid, offsets[payload])
         accepted.extend(entries)
-        if CONFIG_ADDRESS + len(data) > BANK_END:
-            raise ModError('A tabela de efeitos excede a área reservada do perfil Drop x15.')
-    return EffectPlan(bytes(data) if accepted else b'', tuple(accepted), tuple(pending), default)
+    plan = EffectPlan(bytes(data) if accepted else b'', tuple(accepted), tuple(pending), default)
+    if plan.data_end > plan.bank_end:
+        raise ModError('A tabela de efeitos excede a área reservada do perfil Drop x15.')
+    return plan
 
 
 def _jump(target: int, *, link=False) -> int:
@@ -202,6 +220,9 @@ def verify_effects(exe: bytes, plan: EffectPlan) -> dict:
     """Read the resident code, rules and hooks from the selected BIN/CUE."""
     code_start, cfg_start = RUNTIME_BASE - EXE_DELTA, CONFIG_ADDRESS - EXE_DELTA
     code_ok = exe[code_start:code_start+len(RUNTIME)] == RUNTIME
+    if plan.gameplay:
+        ext_start = RUNTIME_EXT_BASE - EXE_DELTA
+        code_ok = code_ok and exe[ext_start:ext_start+len(RUNTIME_EXT)] == RUNTIME_EXT
     if not plan.data:
         return {'status': 'sem_regras_configuradas', 'rotina_presente': code_ok, 'quantidade': 0}
     table_ok = exe[cfg_start:cfg_start+len(plan.data)] == plan.data
@@ -223,12 +244,21 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
     start, end = RUNTIME_BASE - EXE_DELTA, RUNTIME_END - EXE_DELTA
     data_start, data_end = DUEL_STATE - EXE_DELTA, plan.data_end - EXE_DELTA
     if (end - start != len(RUNTIME) or hashlib.sha256(RUNTIME).hexdigest() != RUNTIME_SHA256
-            or end > 0x80100000 - EXE_DELTA or data_end > BANK_END - EXE_DELTA):
+            or end > 0x80100000 - EXE_DELTA or data_end > plan.bank_end - EXE_DELTA):
         raise ModError('Extensão PS1 incompleta ou fora dos limites da RAM.')
     if any(exe[start:end]) or any(exe[data_start:data_end]):
         raise ModError('Extensão PS1 conflita com código ou texto no espaço reservado.')
     out = bytearray(exe)
     out[start:end] = RUNTIME
+    if plan.gameplay:
+        ext_start, ext_end = RUNTIME_EXT_BASE - EXE_DELTA, RUNTIME_EXT_END - EXE_DELTA
+        if (not RUNTIME_EXT or ext_end - ext_start != len(RUNTIME_EXT)
+                or hashlib.sha256(RUNTIME_EXT).hexdigest() != RUNTIME_EXT_SHA256
+                or RUNTIME_EXT_END > 0x801CFF00 or ext_end > len(exe)):
+            raise ModError('Extensão de efeitos PS1 incompleta ou fora da área reservada.')
+        if any(exe[ext_start:ext_end]):
+            raise ModError('Extensão PS1 conflita com código ou texto no espaço reservado.')
+        out[ext_start:ext_end] = RUNTIME_EXT
     offsets = []
 
     def patch(pc, before, after):

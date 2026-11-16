@@ -42,7 +42,7 @@ class DuelLab:
     `cards`: registros {id: {tipo_id, defesa...}}, `effects`: por ID da carta.
     Qualquer evento só é aplicado quando trigger() é explicitamente invocado.
     """
-    state_fields = ('monsters', 'equipments', 'decks', 'graveyards', 'turns',
+    state_fields = ('monsters', 'equipments', 'decks', 'initial_decks', 'graveyards', 'turns',
                     'summoned_turn', 'hands', 'lp', 'damage', 'attacks_used', 'logs')
 
     def __init__(self, cards: dict, effects: dict, *, summoning_delay: bool = False,
@@ -52,6 +52,7 @@ class DuelLab:
         self.monsters: list[dict] = []
         self.equipments: list[dict] = []
         self.decks = {side: [] for side in SIDES}
+        self.initial_decks = {side: () for side in SIDES}
         self.graveyards = {side: [] for side in SIDES}
         self.summoning_delay = summoning_delay
         self.turns = {side: 0 for side in SIDES}
@@ -90,6 +91,7 @@ class DuelLab:
             raise ModError('Deck: lado inválido.')
         validate_deck(self.cards, self.effects, ids, self.default_copies)
         self.decks[side] = list(ids)
+        self.initial_decks[side] = tuple(ids)
 
     def set_hand(self, side: str, ids: list[int]):
         if side not in SIDES or len(ids) > MAX_HAND:
@@ -139,7 +141,8 @@ class DuelLab:
                              catalog=self.cards,zones=self.zones())
 
     def zones(self):
-        return {'deck': self.decks, 'mao': self.hands, 'cemiterio': self.graveyards}
+        return {'deck': self.decks, 'deck_inicial': self.initial_decks,
+                'mao': self.hands, 'cemiterio': self.graveyards}
 
     def effective_card(self, side: str, cid: int):
         return project_stats(self.card(cid), cid, side, card_effects(self.effects, cid),
@@ -312,8 +315,8 @@ class DuelLab:
                 *, target_side: str | None = None, target_slot: int | None = None,
                 kind='monstro') -> list[dict]:
         source=self.get(side,slot)
-        if source is None or not source.get('face_up',True):
-            raise ModError('Escolha um monstro de origem virado para cima')
+        if source is None or (event != 'invocar' and not source.get('face_up', True)):
+            raise ModError('Escolha um monstro de origem disponível para o gatilho.')
         if kind not in ('monstro','magia','armadilha'):
             raise ModError('Tipo de origem inválido')
         return self.apply_event(int(source['card_id']), side, event, source_slot=slot,
@@ -328,8 +331,16 @@ class DuelLab:
         # Transação: um efeito inválido não pode aplicar cura/descarte parcial.
         before=self._snapshot()
         try:
-            return self._apply_trigger(card_effects(self.effects, cid), event, side, opposing,
-                                       target_side, target_slot, kind, source_slot, strict)
+            source = self.get(side, source_slot) if source_slot is not None else None
+            visible = source.get('face_up', True) if source is not None else kind != 'armadilha' or event != 'invocar'
+            summary = self._apply_trigger(card_effects(self.effects, cid), event, side, opposing,
+                                          target_side, target_slot, kind, source_slot, strict)
+            for entry in summary:
+                record = dict(entry)
+                if entry['acao'] in ('dano_lp', 'cura_lp', 'dano_lp_deck_tipo', 'cura_lp_deck_tipo'):
+                    record.update(lado=side, carta=cid, evento=event, face_up=visible)
+                self.logs.append(record)
+            return summary
         except (ModError,ValueError,KeyError,TypeError):
             self._restore(before)
             raise
@@ -386,5 +397,4 @@ class DuelLab:
                 delta = value if action.startswith('aumentar_') else -value
                 unit[key] = unit.get(key, 0) + delta
                 summary.append({'acao':action,'alvo':(receiver, slot),'valor':delta})
-        self.logs.extend(summary)
         return summary

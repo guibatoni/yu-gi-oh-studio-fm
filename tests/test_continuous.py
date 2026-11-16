@@ -70,11 +70,13 @@ class ContinuousTests(unittest.TestCase):
         result,_=resolve_field(field[1:],{'1':[aura()]})
         self.assertEqual(result[1]['ataque'],1500)
 
-    def test_face_down_card_neither_activates_nor_counts(self):
-        field=[m(1,1,DRAGON,face_up=False),m(2,2,FAIRY)]
-        self.assertEqual(resolve_field(field,{'1':[aura()]})[0][1]['ataque'],1000)
-        field=[m(1,1,DRAGON),m(2,2,FAIRY,face_up=False)]
-        self.assertEqual(resolve_field(field,{'1':[scaling()]})[0][0]['ataque'],1000)
+    def test_face_down_cards_grant_receive_and_count_for_field_bonuses(self):
+        field = [m(1,1,DRAGON,face_up=False), dict(m(2,2,FAIRY,face_up=False), atributo_id=3),
+                 dict(m(3,3,FAIRY), atributo_id=4)]
+        effects = {'1': [dict(aura(), atributo_id=3), dict(scaling(), atributo_id=3)]}
+        resolved, _ = resolve_field(field, effects)
+        self.assertEqual([(row['ataque'], row['defesa']) for row in resolved],
+                         [(1200, 1300), (1500, 1500), (1000, 1200)])
 
     def test_reject_invalid_configs(self):
         with self.assertRaises(ModError): check_effect({**aura(), 'evento':'invocar'})

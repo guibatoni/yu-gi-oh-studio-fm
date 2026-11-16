@@ -25,6 +25,7 @@ def _public_view(match, side):
     view.cards = {**view.cards, placeholder: {'tipo_id': -1, 'atributo_id': -1, 'ataque': 0, 'defesa': 0}}
     view.hands[enemy] = [placeholder] * len(view.hands[enemy])
     view.decks[enemy] = [placeholder] * len(view.decks[enemy])
+    view.initial_decks[enemy] = (placeholder,) * len(view.initial_decks[enemy])
     view.traps[enemy] = []
     hidden = [unit for unit in view._field(enemy) if not unit.get('face_up', True)]
     if hidden:
@@ -35,7 +36,7 @@ def _public_view(match, side):
         view.equipments = [e for e in view.equipments
                            if e['lado'] != enemy or e['slot'] not in hidden_slots]
         for unit in hidden:
-            unit.update(card_id=placeholder, tipo_id=0, atributo_id=-1,
+            unit.update(card_id=placeholder, tipo_id=31, atributo_id=-1,
                         ataque=0, defesa=uncertainty, guardian_id=0,
                         modificador_atk=0, modificador_def=0)
     # A unit's displayed ATK/DEF is public even when one of its effects

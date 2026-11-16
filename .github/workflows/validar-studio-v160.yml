@@ -19,6 +19,7 @@ jobs:
           echo FM_STUDIO_RUNTIME_BEGIN
           cat fmstudio/ps1_runtime_blob.py
           echo FM_STUDIO_RUNTIME_END
+          git diff --exit-code -- fmstudio/ps1_runtime_blob.py
       - name: Compilar Python e testar
         run: |
           python3 -m compileall -q app.py fmstudio tools tests
@@ -29,5 +30,6 @@ jobs:
           export PYTHONPATH=.
           xvfb-run -a python3 tests/gui_expansion_smoke.py
           xvfb-run -a python3 tests/gui_mod_smoke.py
+          xvfb-run -a python3 tests/gui_mod_tools_smoke.py
       - name: Empacotar versão fonte
         run: python3 tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip

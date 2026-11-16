@@ -9,7 +9,8 @@ from fmstudio.abilities import quick_settings, replace_quick_effects
 from fmstudio.core import ModError
 from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_sprite_words
 from fmstudio.ps1_runtime import (
-    CONFIG_ADDRESS, DUEL_STATE, _rule_patches, compile_effects, install_runtime, verify_effects,
+    CONFIG_ADDRESS, DUEL_STATE, RUNTIME_EXT_BASE, SUMMON_DAMAGE,
+    _rule_patches, compile_effects, install_runtime, verify_effects,
 )
 from fmstudio.ps1_text import ICON_CODES, patch_descriptions
 from test_ps1_content import sample_exe, where
@@ -47,6 +48,19 @@ class TestNativeRules(unittest.TestCase):
         self.assertEqual(struct.unpack_from('<BBBBHH', plan.data, offset), (1, 3, 40, 1, 0, 0))
         self.assertEqual(struct.unpack_from('<BBHHH', plan.data, offset+8), (5, 1, 16, 100, 50))
 
+    def test_summon_damage_and_attribute_aura_compile_for_monsters(self):
+        self.project.effects = {'9': [
+            effect('dano_lp', 600, event='invocar', target='inimigo'),
+            effect('dano_lp', 500, event='atacar', target='inimigo'),
+            effect('aura_tipo', 250, target='aliados_tipo', tipo_id=2, atributo_id=3, valor_def=50),
+        ]}
+        plan = compile_effects(self.project, True)
+        start = struct.unpack_from('<H', plan.data, 2 + 2*9)[0]
+        self.assertEqual(plan.accepted, ((9, 'dano_lp'), (9, 'aura_tipo')))
+        self.assertEqual(len(plan.pending), 1)
+        self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+8), (SUMMON_DAMAGE, 1, 0, 600, 0))
+        self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+16), (1, 16, 2, 250, 50))
+
     def test_three_copies_can_override_the_profile_default(self):
         effects = replace_quick_effects([], {'limite_copias': '3'}, default_copies=None)
         self.assertEqual(quick_settings(effects, default_copies=None)['limite_copias'], 3)
@@ -73,6 +87,7 @@ class TestNativeRules(unittest.TestCase):
             self.assertEqual(verify_effects(result, plan)['quantidade'], 5)
             self.assertEqual(struct.unpack_from('<28I', result, where(SPRITE_RAM)), extended_sprite_words())
             for address, key in ((CONFIG_ADDRESS, 'tabela_confere'),
+                                 (RUNTIME_EXT_BASE, 'rotina_presente'),
                                  (next(_rule_patches(plan))[0], 'pontos_mips_conferem')):
                 divergent = bytearray(result)
                 divergent[where(address)] ^= 1
