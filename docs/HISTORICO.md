@@ -1,3 +1,12 @@
+## v1.4.23 — God24 na fileira de monstros
+
+- A seleção da fileira no Drop x15 reconhece God24 como monstro ao
+  baixar a carta virada para cima ou para baixo. A regra de armadilha
+  continua reservada a cartas de armadilha.
+- A mesa e a tela ampliada mostram os atributos de monstro para o tipo 24.
+- A verificação do BIN exige 18 pontos. Uma cópia da v1.4.22 aparece
+  como parcial, com o ponto da fileira pendente.
+
 ## v1.4.22 — God24 experimental na colocação e confirmação
 
 - O teste já marcado para God24 na mão também cobre colocação e estrela

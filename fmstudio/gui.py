@@ -1293,7 +1293,7 @@ class Studio(tk.Tk):
         self._update_status('God24 no baú ativado. Gere uma nova cópia BIN/CUE.')
 
     def toggle_god24_hand_preview(self):
-        """Configura o teste God24 na mão, na colocação e na confirmação."""
+        """Configura o teste God24 na mão e no campo."""
         if not self._ready_native_effect() or not self.selected_id:
             return
         self._stage_current()
@@ -1331,7 +1331,7 @@ class Studio(tk.Tk):
             return
         if not messagebox.askyesno('God24 em duelo (teste)',
                 'Ativar o teste para jogar God24 como monstro na cópia BIN/CUE?\n\n'
-                'O teste cobre a seleção na mão, a colocação no campo '
+                'O teste inclui a fileira de monstros, a exibição dos atributos '
                 'e a confirmação com a estrela guardiã. Depois de gerar '
                 'a cópia, jogue um duelo no ePSXe para conferir.',
                 parent=self):
@@ -2341,7 +2341,7 @@ class Studio(tk.Tk):
                     + ('GOD24 NO BAÚ: duas máscaras e três opcodes do renderizador. '
                        'NÃO modifica combate nem ícone.\n'
                        if self.project.metadata.get('ps1_god_chest_preview') else '')
-                    + ('GOD24 EM DUELO: teste de mão, colocação e confirmação. '
+                    + ('GOD24 EM DUELO: teste de mão, fileira de monstros e confirmação. '
                        'Valide a jogada no ePSXe.\n'
                        if self.project.metadata.get('ps1_god_hand_preview') else '')
                     + ('GOD 24: gravação experimental do campo tipo (24) '

@@ -10,6 +10,7 @@ from .tables import EXE_DELTA
 
 REGIONS = {
     "mao": ("DuelScene_UpdateHandActions", 0x8001BD88, 0x14B8),
+    "fileira": ("func_8001B938", 0x8001B938, 0x1B8),
     "uso_carta_especial": ("DuelScene_UpdateCardUse", 0x80019608, 0x400),
     "colocacao": ("DuelScene_UpdateCardPlacement", 0x80019D18, 0x13B4),
     "campo": ("DuelScene_UpdateFieldActions", 0x8001D670, 0x1600),
@@ -114,6 +115,6 @@ def analyze_god24_duel(exe: bytes, maximum_per_region: int = 48) -> dict:
         row["truncado"] = row["encontrados"] > len(row["amostras"])
         report["rotinas"][label] = row
     report["proximo_patch"] = (
-        "Identificar as ramificacoes de tipo no caminho da mao e na colocacao; "
-        "preservar os tipos 0-23, o load delay e as rotinas de combate.")
+        "Use Verificar BIN/CUE na cópia gerada para conferir os pontos "
+        "da mão, fileira, colocação, confirmação e exibição.")
     return report

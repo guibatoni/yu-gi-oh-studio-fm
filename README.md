@@ -1,3 +1,20 @@
+# Studio FM v1.4.23 — God24 na fileira de monstros (teste)
+
+A seleção da fileira ainda usava o limite dos tipos originais. Se o
+God24 fosse baixado virado para baixo, essa rotina podia colocá-lo na
+fileira de magias e armadilhas. Agora o tipo 24 passa pela mesma regra de
+colocação dos monstros nas duas posições da carta.
+
+O painel de atributos da mesa e a tela ampliada também passam a usar
+o layout de monstro para God24. A carta mantém o tipo 24 gravado no BIN.
+
+Com **PS1: God24 em duelo (teste)** ativo, gere outra cópia usando o
+Drop x15 original do projeto. **Verificar BIN/CUE** deve confirmar
+18/18 pontos, incluindo **fileira de monstros 1/1**. Abra a nova cópia
+e comece um duelo no ePSXe para conferir a colocação.
+
+---
+
 # Studio FM v1.4.22 — God24 da mão ao campo (teste)
 
 **PS1: God24 em duelo (teste)** prepara o tipo 24 para seguir o caminho de

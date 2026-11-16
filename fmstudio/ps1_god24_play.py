@@ -1,4 +1,4 @@
-"""Roteamento experimental de God24 na mão e na colocação do PS1.
+"""Roteamento experimental de God24 na mão e no campo do PS1.
 
 Perfil do SLUS de Drop x15. As janelas são reescritas no próprio lugar,
 com os destinos e delay slots dos desvios originais. O jogo continua
@@ -37,17 +37,16 @@ def _shift_left_type(type_reg: int, bits_reg: int, result_reg: int) -> int:
     return type_reg << 21 | bits_reg << 16 | result_reg << 11 | 0x04
 
 
-def _branch_by_sign(branch: int) -> int:
+def _branch_by_sign(branch: int, register: int = 2) -> int:
     # O classificador original devolvia zero para cartas especiais.
     # Na nova sequência, um valor negativo indica a mesma categoria.
     positive = int(branch >> 26 == 5)
-    return _immediate(1, 2, positive, branch & 0xFFFF)
+    return _immediate(1, register, positive, branch & 0xFFFF)
 
 
-def _hand_site(offset: int, label: str, branch: int, delay: int, *,
-               keep_type_in_s0: bool = True) -> Site:
-    type_reg = 16 if keep_type_in_s0 else 2
-    bits_reg = 2 if keep_type_in_s0 else 3
+def _card_stats_site(offset: int, phase: str, label: str, branch: int,
+                     delay: int, *, type_reg: int = 16) -> Site:
+    bits_reg = 3 if type_reg == 2 else 2
     original = (
         0x8C420000, 0, 0x00021683,                     # lw; load delay; sra
         _immediate(12, 2, type_reg, 31),              # andi tipo, v0, 31
@@ -58,53 +57,99 @@ def _hand_site(offset: int, label: str, branch: int, delay: int, *,
         _immediate(35, 2, type_reg, 0),               # lw tipo, 0(v0)
         _immediate(13, 0, bits_reg, SPECIAL_TYPE_BITS),  # load delay independente
         type_reg << 16 | type_reg << 11 | 26 << 6 | 2,  # srl tipo, tipo, 26
-        _immediate(12, type_reg, type_reg, 31),        # mantém o tipo exato em s0
+        _immediate(12, type_reg, type_reg, 31),        # mantém o tipo exato
         _shift_left_type(type_reg, bits_reg, 2),
         _branch_by_sign(branch), delay,
     )
-    # No primeiro ponto v1 só tinha o endereço da tabela, já consumido.
-    # Os outros pontos voltam a ler s0 para distinguir Equip e Armadilha.
-    return Site(offset, 'mao', label, original, replacement)
+    # Na seleção inicial, v1 só tinha o endereço já consumido da tabela.
+    # Os demais pontos consultam o tipo para Equip ou Armadilha.
+    return Site(offset, phase, label, original, replacement)
 
 
-def _placement_site(offset: int, phase: str, label: str, load: int,
-                    branch: int, delay: int) -> Site:
+def _object_type_site(offset: int, phase: str, label: str, load: int,
+                      branch: int, delay: int) -> Site:
     # O byte 0x68 vem do campo de tipo de cinco bits. Nestas janelas,
-    # at está livre e v0 é consumido pelo desvio antes de ser reescrito.
-    original = (load, 0, 0x2C420014, branch, delay)
+    # at está livre e o resultado é consumido pelo desvio.
+    register = (load >> 16) & 31
+    original = (load, 0, _immediate(11, register, register, 20), branch, delay)
     replacement = (
         load,
         _immediate(13, 0, 1, SPECIAL_TYPE_BITS),      # load delay independente
-        _shift_left_type(2, 1, 2),
-        _branch_by_sign(branch), delay,
+        _shift_left_type(register, 1, register),
+        _branch_by_sign(branch, register), delay,
     )
     return Site(offset, phase, label, original, replacement)
 
 
+def _panel_stats_site(offset: int, label: str, extract: int, register: int,
+                      branch: int, delay: int) -> Site:
+    # sllv já ignora tudo acima dos cinco bits do tipo. O valor completo
+    # de stats em v1 segue disponível no painel da mesa para ler as estrelas.
+    original = (
+        extract, _immediate(12, register, register, 31),
+        _immediate(10, register, register, 20), branch, delay,
+    )
+    replacement = (
+        extract, _immediate(13, 0, 1, SPECIAL_TYPE_BITS),
+        _shift_left_type(register, 1, register),
+        _branch_by_sign(branch, register), delay,
+    )
+    return Site(offset, 'exibicao', label, original, replacement)
+
+
+def _display_marker_site() -> Site:
+    # O construtor de obj do duelo inicializa os bytes adjacentes 0x68 (tipo)
+    # e 0x69 (zero). O endereço de obj é alinhado e nenhum dos bytes é lido
+    # entre as escritas. Inicializamos os dois juntos no branch delay para
+    # usar a primeira instrução de store como espaço para a máscara.
+    original = (
+        0xA0800069, 0x00431025, 0xAC820004, 0x3C02801D, 0x24424244,
+        0x02028021, 0x3C028001, 0x8E030000, 0x24426778, 0xAC820010,
+        0x240200C0, 0xA080005C, 0xA082005D, 0xA4800042, 0x00031E83,
+        0x3063001F, 0x28620014, 0x14400017, 0xA0830068,
+    )
+    replacement = (
+        _immediate(13, 0, 17, SPECIAL_TYPE_BITS),  # s1 já foi salvo no prólogo
+        *original[1:-3],
+        _shift_left_type(3, 17, 2),
+        _branch_by_sign(original[-2]),
+        0xA4830068,                               # sh v1,0x68(a0)
+    )
+    return Site(0x15474, 'exibicao', 'marcador da carta', original, replacement)
+
+
 SITES = (
-    _hand_site(0xCA08, 'seleção inicial', 0x10400009, 0x3C02800F,
-               keep_type_in_s0=False),
-    _hand_site(0xCBF4, 'confirmação na mão', 0x1440000F, 0x3C028002),
-    _hand_site(0xD1F0, 'posição da carta', 0x14400003, 0x24020015),
-    _hand_site(0xD528, 'saída da mão', 0x1440001D, 0),
-    _placement_site(0xA64C, 'colocacao', 'carta única', 0x90420068,
+    _card_stats_site(0xCA08, 'mao', 'seleção inicial', 0x10400009, 0x3C02800F,
+                     type_reg=2),
+    _card_stats_site(0xCBF4, 'mao', 'confirmação na mão', 0x1440000F, 0x3C028002),
+    _card_stats_site(0xD1F0, 'mao', 'posição da carta', 0x14400003, 0x24020015),
+    _card_stats_site(0xD528, 'mao', 'saída da mão', 0x1440001D, 0),
+    _card_stats_site(0xC204, 'fileira', 'destino da carta no campo', 0x1440000D, 0,
+                     type_reg=4),
+    _object_type_site(0xA64C, 'colocacao', 'carta única', 0x90420068,
                     0x10400002, 0x24020001),
-    _placement_site(0xB32C, 'colocacao', 'carta restante', 0x90820068,
+    _object_type_site(0xB32C, 'colocacao', 'carta restante', 0x90820068,
                     0x10400007, 0),
-    _placement_site(0xB594, 'colocacao', 'primeiro slot', 0x90420068,
+    _object_type_site(0xB594, 'colocacao', 'primeiro slot', 0x90420068,
                     0x10400008, 0x26109EF0),
-    _placement_site(0xB5B0, 'colocacao', 'segundo slot', 0x90420068,
+    _object_type_site(0xB5B0, 'colocacao', 'segundo slot', 0x90420068,
                     0x14400002, 0),
-    _placement_site(0xB760, 'colocacao', 'ordem do segundo slot', 0x90620068,
+    _object_type_site(0xB760, 'colocacao', 'ordem do segundo slot', 0x90620068,
                     0x14400009, 0),
-    _placement_site(0xB774, 'colocacao', 'ordem do primeiro slot', 0x92220068,
+    _object_type_site(0xB774, 'colocacao', 'ordem do primeiro slot', 0x92220068,
                     0x10400004, 0),
-    _placement_site(0xB854, 'colocacao', 'entrada no campo', 0x90620068,
+    _object_type_site(0xB854, 'colocacao', 'entrada no campo', 0x90620068,
                     0x10400010, 0x24024008),
-    _placement_site(0xB9CC, 'confirmacao', 'posição e estrela predefinidas',
+    _object_type_site(0xB9CC, 'confirmacao', 'posição e estrela predefinidas',
                     0x92220068, 0x1040001C, 0x3C02801A),
-    _placement_site(0xBB10, 'confirmacao', 'escolha de estrela guardiã',
+    _object_type_site(0xBB10, 'confirmacao', 'escolha de estrela guardiã',
                     0x92220068, 0x1040004C, 0x24020003),
+    _panel_stats_site(0x139CC, 'atributos na mesa', 0x00031683, 2, 0x1040001B, 0),
+    _display_marker_site(),
+    _panel_stats_site(0x18D80, 'texto da carta ampliada', 0x00031E83, 3,
+                      0x14600002, 0x24050003),
+    _object_type_site(0x19578, 'exibicao', 'atributos da carta ampliada',
+                      0x92630068, 0x106000B1, 0x00829821),
 )
 
 
@@ -121,7 +166,7 @@ def inspect(exe: bytes) -> dict:
     code_end = _code_end(exe)
     phases = {
         phase: {'aplicados': 0, 'total': 0}
-        for phase in ('mao', 'colocacao', 'confirmacao')
+        for phase in ('mao', 'fileira', 'colocacao', 'confirmacao', 'exibicao')
     }
     points = []
     for site in SITES:

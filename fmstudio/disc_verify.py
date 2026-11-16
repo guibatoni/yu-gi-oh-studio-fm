@@ -137,12 +137,16 @@ def describe(result):
         text.append('  '+status['status']+' ('+str(status['total_aplicados'])+'/2)')
         duel=result['god24_roteamento_duelo']
         if result.get('god24_teste_mao_ativado_no_projeto') or duel['pontos_aplicados']:
-            labels={'mao':'mão','colocacao':'colocação','confirmacao':'confirmação'}
+            labels={'mao':'mão','fileira':'fileira de monstros','colocacao':'colocação',
+                    'confirmacao':'confirmação','exibicao':'exibição'}
             phases=', '.join(f"{labels[name]} {phase['aplicados']}/{phase['total']}"
                              for name,phase in duel['etapas'].items())
             text.append(f"  GOD24 EM DUELO ({duel['status']}): {phases}.")
             if duel['status']=='aplicado':
                 text.append('  Patch conferido no BIN. Valide a jogada no ePSXe.')
+            elif duel['status']=='parcial' and not duel['etapas']['fileira']['aplicados']:
+                text.append('  Esta cópia ainda não tem a correção da fileira de monstros. '
+                            'Gere outro BIN/CUE a partir do disco de origem.')
         if result['god24_mascara_da_mao']['quantidade_aplicada']:
             text.append('  Detectado o teste anterior, limitado à mão. '
                         'Gere uma nova cópia para testar a colocação.')
