@@ -347,6 +347,8 @@ class DeckProfileEditor(ttk.Frame):
             'ids': self.fixed.get(), 'rows': deepcopy(self.rows), 'index': self.current,
             'draws': self.draws.get(), 'weights': dict(self.table.weights),
             'selected': self.table.selected.get(), 'weight': self.table.weight.get(),
+            'deck_selection': self.deck.selection(), 'deck_top': self.deck.yview()[0],
+            'feedback': self.feedback.get(),
         }
 
     def restore(self, draft):
@@ -361,6 +363,10 @@ class DeckProfileEditor(ttk.Frame):
         self.table._search()
         self.loading = False
         self._render_deck()
+        self.deck.selection_set([item for item in draft['deck_selection'] if self.deck.exists(item)])
+        self.deck.yview_moveto(draft['deck_top'])
+        self.feedback.set(draft['feedback'])
+        self._update_buttons()
 
     def _show(self, index):
         self.current = index

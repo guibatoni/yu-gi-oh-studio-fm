@@ -103,7 +103,7 @@ def audit(project) -> dict:
         blocked.extend(pending)
     for key,rel in project.arts.items():
         cid=int(key)
-        if cid>CARD_COUNT or project.cards[cid].get('virtual'):
+        if cid>CARD_COUNT or str(cid) in project.new_cards:
             blocked.append(f'#{cid}: arte exige expansão de cards do console')
         elif not known or not wa_pinned:
             blocked.append(f'#{cid}: arte precisa de SLUS e WA_MRG.MRG de origem verificados')
