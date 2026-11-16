@@ -32,11 +32,11 @@ def directory(name, location, size, flags=0):
     return bytes(out)
 
 
-def create_disc(path, atk):
+def create_disc(path, atk, typ=1):
     exe=bytearray(1902592)
     exe[:8]=b'PS-X EXE'
     off=STATS_ADDR-EXE_DELTA+(16-1)*4
-    raw=(1<<26)|(10<<22)|(8<<18)|(40<<9)|(atk//10)
+    raw=(typ<<26)|(10<<22)|(8<<18)|(40<<9)|(atk//10)
     struct.pack_into('<I',exe,off,raw)
     exe[LEVEL_ADDR-EXE_DELTA+16]=2
     file_lba=25
@@ -70,6 +70,31 @@ class CardValueVerificationTests(unittest.TestCase):
             project=SimpleNamespace(
                 edits={'16':{'ataque':3000,'tipo_id':24}},
                 cards={16:base},get=lambda cid:edited)
+            with self.assertRaisesRegex(ModError,'incompatível'):
+                verify_image_stats(project,path)
+
+    def test_opt_in_god_type_24_rechecked_in_generated_bin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'god24.bin'
+            other=Path(tmp)/'wrongtype.bin'
+            create_disc(path,3000,typ=24)
+            create_disc(other,3000,typ=1)
+            base={'id':16,'nome':'Time Wizard','ataque':500,'defesa':400,
+                  'tipo_id':1,'atributo_id':0,'nivel':2,
+                  'guardian_1_id':10,'guardian_2_id':8}
+            edited={**base,'ataque':3000,'tipo_id':24}
+            project=SimpleNamespace(
+                metadata={'ps1_god_type_test_card_id':16},
+                edits={'16':{'ataque':3000,'tipo_id':24}},
+                cards={16:base},get=lambda cid:edited)
+            good=verify_image_stats(project,path)
+            bad=verify_image_stats(project,other)
+            self.assertEqual((good['total'],good['corretas'],good['divergentes']),
+                             (1,1,0))
+            self.assertEqual(bad['divergentes'],1)
+            self.assertEqual(good['god24_tipo_gravado_e_verificado'],[16])
+            self.assertIn('God 24 gravado',describe(good))
+            project.metadata={}
             with self.assertRaisesRegex(ModError,'incompatível'):
                 verify_image_stats(project,path)
 

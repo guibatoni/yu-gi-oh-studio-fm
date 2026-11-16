@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib
 from pathlib import Path
-from .core import ModError
+from .core import ModError, god24_experiment_enabled
 from .disc import DiscReader, DiscError
 from .tables import decode_cards, CARD_COUNT
 
@@ -29,7 +29,8 @@ def verify_image_stats(project, source):
             continue
         requested = project.get(cid)
         original = project.cards[cid]
-        if int(requested.get('tipo_id',0)) >= 24 or int(requested.get('atributo_id',0)) > 5:
+        if (int(requested.get('tipo_id',0)) >= 24 and
+                not god24_experiment_enabled(project,cid)) or int(requested.get('atributo_id',0)) > 5:
             if set(edits) & set(FIELDS):
                 raise ModError(f'Carta #{cid:03d}: tipo/atributo incompatível com '
                                'o motor PS1. Não é seguro omitir esta carta da '
@@ -49,7 +50,11 @@ def verify_image_stats(project, source):
             result.append({'id':cid,'nome':str(requested.get('nome','')),
                            'campos':fields,
                            'ok':all(f['ok'] for f in fields.values())})
+    experimental=[r['id'] for r in result
+                  if god24_experiment_enabled(project,r['id'])]
     return {'imagem':image_path,'sha256_slus':hashlib.sha256(exe).hexdigest(),
+            'god24_tipo_gravado_e_verificado':experimental,
+            'god24_aviso':'Byte tipo 24 verificado; comportamento no ePSXe NÃO confirmado.' if experimental else '',
             'total':len(result),'corretas':sum(r['ok'] for r in result),
             'divergentes':sum(not r['ok'] for r in result),'cartas':result}
 
@@ -58,6 +63,9 @@ def describe(result):
     text = [f'Imagem selecionada: {result["imagem"]}', '',
             f'Cartas numéricas conferidas: {result["total"]}',
             f'Corretas: {result["corretas"]} | Divergentes: {result["divergentes"]}']
+    if result.get('god24_tipo_gravado_e_verificado'):
+        text.append('God 24 gravado como 5 bits: SIM (experimental). '
+                    'O jogo pode não reconhecer como monstro; validar no ePSXe.')
     for card in result['cartas'][:10]:
         text.append(f'\n#{card["id"]:03d} {card["nome"]}: '
                     + ('OK' if card['ok'] else 'DIVERGENTE'))

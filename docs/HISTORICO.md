@@ -1,3 +1,15 @@
+## v1.4.8 — Permitir ensaio do tipo Deus 24 sem converter para outro tipo
+
+- Modal de confirmação explícita ao gerar BIN com God24 na carta selecionada.
+- Opt-in limitado a uma carta; exportador grava 24 real nos 5 bits de tipo,
+  mantém ATK/DEF e bloqueia qualquer edição fora do escopo autorizado.
+- Auditoria e verificador de imagem distinguem bytes realmente gravados
+  de comportamento de monstro ainda não implementado no motor original.
+- Teste de ícone 16×16 via descrição passa a aceitar God24 autorizado.
+- Regressões de hash da imagem original, rejeição sem opt-in, diferença de
+  tipo detectada e confirmação do par ATK/tipo no BIN sintético.
+- **Ainda não implementa novo ícone fixo de tipo nem novos hooks do motor**.
+
 ## v1.4.7 — Teste nativo de símbolo Deus no texto de uma carta
 
 - Usa o PNG \`god.png\` já distribuído pelo Studio.

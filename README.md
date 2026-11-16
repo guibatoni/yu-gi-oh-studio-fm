@@ -1,3 +1,33 @@
+# Studio FM v1.4.8 — Gravação experimental do tipo real God 24
+
+Corrige o bloqueio mostrado ao tentar gerar BIN da carta Time Wizard #016
+definida como tipo 24. Agora, ao clicar **Gerar jogo BIN/CUE**, o Studio
+pergunta se autoriza explicitamente **gravar 24 no campo original de 5 bits**
+da carta selecionada. A escolha do usuário é preservada: não reclassifica
+a carta como Spellcaster, Dragon, Equip ou qualquer outra.
+
+A autorização fica no projeto em \`ps1_god_type_test_card_id\` e é restrita
+a UMA carta #001–#722 cujo tipo é 24. Números 25–31, atributos incompatíveis,
+ATK/DEF fora do campo de 9 bits e outras cartas God sem autorização ainda são
+bloqueados. A exportação, a regravação de setores BIN/CUE e a verificação da
+imagem confirmam **tipo 24 / ATK / DEF efetivamente presentes**. A auditoria
+registra explicitamente que o comportamento em duelo ainda é desconhecido.
+
+O botão **Teste no BIN: símbolo Deus** também aceita tipo 24, com aviso
+específico, e ativa o opt-in do tipo junto ao teste de glifo. O ícone
+continua sendo um **protótipo inserido na descrição**, não o novo ícone
+definitivo de tipo.
+
+**ATENÇÃO: registro de cinco bits ≠ novo tipo jogável!** O motor retail
+foi criado com tipos 00–23. Gravar 24 pode fazê-lo interpretar a carta
+incorretamente, tratá-la como não-monstro, exibir ícone Dragon ou falhar.
+Não há hook God24 validado no ePSXe e nenhum foi afirmado aqui.
+Teste em uma cópia e mantenha seu BIN original e saves preservados.
+Se a gravação passar mas God24 não for criatura, os dados de diagnóstico
+orientarão o desenvolvimento da classificação MIPS nativa.
+
+---
+
 # Studio FM v1.4.7 — Primeiro teste de ícone Deus dentro do BIN/CUE
 
 O ícone \`assets/icons/god.png\` já existia, mas só funcionava no Studio.

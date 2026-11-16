@@ -60,6 +60,33 @@ class StudioCoreTests(unittest.TestCase):
         self.assertEqual(self.p.get(16)['raridade'],'deus')
         self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),source_sha)
 
+    def test_explicit_god24_experiment_writes_exact_type_and_attack(self):
+        from fmstudio.core import god24_experiment_enabled
+        from fmstudio.tables import decode_cards
+        original_sha=hashlib.sha256(self.file.read_bytes()).hexdigest()
+        self.p.set_card(16, {'ataque':3000,'defesa':400,'tipo_id':24,
+                             'raridade':'deus'})
+        self.assertFalse(god24_experiment_enabled(self.p,16))
+        self.p.metadata['ps1_god_type_test_card_id']=16
+        self.assertTrue(god24_experiment_enabled(self.p,16))
+        self.assertFalse(god24_experiment_enabled(self.p,17))
+        output,manifest=self.p.export()
+        exe=(output/'build_local'/'SLUS_014.11').read_bytes()
+        cards,_=decode_cards(exe)
+        self.assertEqual(cards[15]['tipo_id'],24)
+        self.assertEqual(cards[15]['ataque'],3000)
+        self.assertEqual(cards[15]['defesa'],400)
+        self.assertEqual(manifest['tipo_god_status'],
+                         'TIPO_24_GRAVADO_EXPERIMENTAL_NAO_VALIDADO_EPSXE')
+        self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),
+                         original_sha)
+        self.p.metadata['ps1_god_type_test_card_id']=17
+        with self.assertRaisesRegex(ModError,'teste'):
+            self.p.export()
+        self.p.metadata['ps1_god_type_test_card_id']=True
+        with self.assertRaises(ModError):
+            self.p.export()
+
     def test_large_stats_saved_for_simulator_but_ps1_export_blocked(self):
         from fmstudio.core import simulation_nonnegative_int, check_card_edit
         from fmstudio.continuous import resolve_field

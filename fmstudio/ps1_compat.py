@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from .tables import CARD_COUNT
 from .ps1_content import name_patch_info, description_patch_info
-from .core import ModError
+from .core import ModError, god24_experiment_enabled
 
 
 def audit(project) -> dict:
@@ -33,8 +33,9 @@ def audit(project) -> dict:
         changed=set(edits)
         numeric=changed & {'ataque','defesa','tipo_id','atributo_id','nivel','guardian_1_id','guardian_2_id'}
         if numeric:
-            if cid>CARD_COUNT or int(current.get('tipo_id',0))>=24 or int(current.get('atributo_id',0))>5:
-                blocked.append(f'#{cid}: atributos de carta virtual/God/atributo não original requerem patch de motor')
+            if cid>CARD_COUNT or (int(current.get('tipo_id',0))>=24 and
+                                  not god24_experiment_enabled(project,cid)) or int(current.get('atributo_id',0))>5:
+                blocked.append(f'#{cid}: atributos de carta virtual/God sem teste autorizado/atributo não original requerem patch de motor')
             elif ('ataque' in numeric or 'defesa' in numeric) and any(
                     int(current[stat])>5110 or int(current[stat])%10
                     for stat in ('ataque','defesa')):
@@ -43,7 +44,14 @@ def audit(project) -> dict:
                 blocked.append(f'#{cid}: SLUS original ainda não vinculado/verificado')
             else:
                 counts['estatisticas']+=1
-                supported.append(f'#{cid}: estatísticas de carta original')
+                supported.append(f'#{cid}: estatísticas de carta original'
+                                 + (' (TIPO GOD 24 GRAVÁVEL EM TESTE; jogabilidade NÃO VALIDADA)'
+                                    if god24_experiment_enabled(project,cid) else ''))
+                if god24_experiment_enabled(project,cid):
+                    blocked.append(f'#{cid}: reconhecimento do God 24 como monstro, '
+                                   'regras de combate e ícone definitivo '
+                                   'dependem de validação/patch MIPS; a gravação '
+                                   'do campo não comprova funcionamento.')
         if 'nome' in changed:
             if known:
                 try:
@@ -163,7 +171,7 @@ def audit(project) -> dict:
         'raridade_e_cor_nomes':'PENDENTE',
         'icones_personalizados':'PENDENTE',
         'cartas_maiores_722':'PENDENTE_MIPS_MEMORIA_TABELAS',
-        'tipo_god':'PENDENTE_MIPS_UI',
+        'tipo_god':'GRAVACAO_EXPERIMENTAL_DO_CAMPO_24_SOB_CONFIRMACAO; JOGABILIDADE_PENDENTE_MIPS',
         'buffs_auras_cemiterio':'PENDENTE_MIPS_EVENTOS',
         'equipamentos_imunidades':'PENDENTE_MIPS_REGRAS; alvos de Equip stock podem ser gravados',
         'rituais_tres_tributos_originais':'gravavel_na_tabela_WA_SEM_NOVOS_IDS',

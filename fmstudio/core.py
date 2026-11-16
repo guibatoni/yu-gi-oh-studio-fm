@@ -145,6 +145,20 @@ def ps1_stat_export_errors(project) -> list[str]:
 
 
 
+
+def god24_experiment_enabled(project, cid: int) -> bool:
+    """Permissão EXPLÍCITA para escrever valor 24 no campo tipo de 5 bits.
+
+    Não habilita a jogabilidade do God no PS1. Apenas permite provar
+    empiricamente o comportamento, sem mutar outras cartas do projeto.
+    """
+    metadata = getattr(project,'metadata',{}) or {}
+    selected = metadata.get('ps1_god_type_test_card_id')
+    return (type(selected) is int and type(cid) is int and
+            1 <= cid <= CARD_COUNT and selected == cid and
+            int(project.get(cid)['tipo_id']) == 24)
+
+
 def ps1_unwritable_numeric_edits(project) -> list[str]:
     """Recusa edição numérica que o gerador anterior ignorava silenciosamente."""
     errors=[]
@@ -156,13 +170,13 @@ def ps1_unwritable_numeric_edits(project) -> list[str]:
         typ=int(current['tipo_id'])
         attr=int(current['atributo_id'])
         name=str(current.get('nome') or '')
-        if typ >= 24:
+        if typ >= 24 and not god24_experiment_enabled(project,cid):
             errors.append(
-                f'Carta #{cid:03d} {name}: tipo {typ} não é jogável como monstro '
-                'no motor original (God 24 é somente visual no Studio). '
-                'Escolha QUALQUER tipo de monstro entre 00 e 19; '
-                'para manter a aparência Deus, selecione a raridade Deus. '
-                'Não é necessário voltar ao tipo original.'
+                f'Carta #{cid:03d} {name}: tipo {typ} requer teste PS1 '
+                'explícito. Para God 24, selecione a carta e ative '
+                '"Teste no BIN: símbolo Deus", ou confirme a experiência '
+                'quando clicar em "Gerar jogo BIN/CUE". '
+                'Não alteramos seu tipo para Spellcaster.'
             )
         if attr > 5:
             errors.append(
@@ -853,7 +867,10 @@ class Project:
                     'efeitos_planejados':sum(map(len,self.effects.values())),
                     'alerta':'Efeitos e textos NÃO foram implementados no motor PS1 nesta versão',
                     'patch_jogavel':False, 'arquivos': ['alteracoes_cartas.json','novas_cartas.json','classes_cartas.json','textos_e_codigos.json','efeitos_planejados.json','artes_referencia.json'],
-                    'cartas_virtuais':len(self.new_cards), 'tipo_god_status':'EDITOR_ONLY'}
+                    'cartas_virtuais':len(self.new_cards),
+                    'tipo_god_status':('TIPO_24_GRAVADO_EXPERIMENTAL_NAO_VALIDADO_EPSXE'
+                                       if any(god24_experiment_enabled(self,int(k))
+                                              for k in self.edits) else 'EDITOR_ONLY')}
         source = self.folder/'base'/'source_SLUS_014.11'
         if source.exists() and any(row['id'] <= CARD_COUNT and any(k in NUMERIC for k in row) for row in changes):
             data = bytearray(source.read_bytes())
@@ -863,9 +880,9 @@ class Project:
             for row in changes:
                 cid = row['id']
                 if cid > CARD_COUNT: continue
-                if int(self.get(cid)['tipo_id']) >= 24:
-                    raise ModError(f'Carta #{cid:03d}: tipo não gravável no PS1. '
-                                   'A geração foi bloqueada para evitar perder atributos.')
+                if int(self.get(cid)['tipo_id']) >= 24 and not god24_experiment_enabled(self,cid):
+                    raise ModError(f'Carta #{cid:03d}: tipo 24+ sem autorização de '
+                                   'teste God 24 no PS1. Nenhum byte foi alterado.')
                 base = self.cards[cid]
                 off = STATS_ADDR - EXE_DELTA + (cid - 1) * 4
                 before = struct.unpack_from('<I', data, off)[0]

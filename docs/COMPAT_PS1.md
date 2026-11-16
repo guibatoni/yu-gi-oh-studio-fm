@@ -1,3 +1,14 @@
+## v1.4.8 — Experiência de campo God24 no BIN
+
+A tabela codifica cada tipo em cinco bits e portanto permite escrever o
+número **24**. A interface solicita autorização explícita para UMA carta
+#001–#722: gravação e readback são verificáveis (incluindo ATK/DEF).
+A categoria Deus permanece experimental: o motor original foi concebido
+para vinte tipos de monstros mais quatro categorias especiais e não foi
+modificado para garantir que 24 atue como criatura. Ícone experimental
+continua na descrição, não no rótulo do tipo. A experiência pode não
+funcionar no ePSXe; não substitua a fonte do jogo.
+
 ## v1.4.0 — Motor de habilidades inéditas e deck experimental
 
 - Confirmado no ePSXe: alteração ATK/DEF e compatibilidade de Equip no Drop X15.

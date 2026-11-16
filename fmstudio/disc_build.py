@@ -151,6 +151,15 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if not expected or hashlib.sha256(original_exe).hexdigest()!=expected:
         raise ModError('SLUS da imagem não corresponde ao executável vinculado ao projeto.')
 
+    from .core import god24_experiment_enabled
+    god_type_test=metadata.get('ps1_god_type_test_card_id')
+    if god_type_test is not None:
+        if type(god_type_test) is not int or not god24_experiment_enabled(project,god_type_test):
+            raise ModError('Teste God 24 configurado para carta inválida ou tipo '
+                           'diferente de 24. Desative a experiência e configure novamente.')
+        if not project.edits.get(str(god_type_test)):
+            raise ModError('Teste God 24 sem edição numérica salva para a carta.')
+
     audit_report=None
     if hasattr(project,'edits') and hasattr(project,'new_cards'):
         from .ps1_compat import audit
@@ -283,9 +292,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         if not 1 <= god_test_card <= 722:
             raise ModError('O ícone God experimental exige ID de carta 1–722.')
         card=project.get(god_test_card)
-        if not 0 <= int(card['tipo_id']) <= 19:
-            raise ModError('O teste de ícone Deus não implementa o tipo God 24. '
-                           'Selecione primeiro um tipo de monstro PS1 entre 00 e 19.')
+        if not (0 <= int(card['tipo_id']) <= 19 or
+                god24_experiment_enabled(project,god_test_card)):
+            raise ModError('Teste de ícone: escolha tipo 00–19 ou ative '
+                           'explicitamente o teste God 24 desta carta.')
         if original_wa is None:
             raise ModError('O teste de ícone Deus exige DATA/WA_MRG.MRG no BIN de origem.')
         provenance=project.folder/'base'/'resumo.json'
@@ -387,6 +397,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'limite_global_copias_ps1_aplicado':deck_copies_written,
                 'lp_inicial_mips_aplicado':lp_written,
                 'teste_visual_icone_deus':god_icon_report,
+                'teste_tipo_god24':({'carta_id':god_type_test,
+                                      'status':'CAMPO_TIPO_24_GRAVADO_SEM_MOTOR_VALIDADO',
+                                      'aviso':'Pode não funcionar como monstro; '
+                                              'necessário teste em duelo no ePSXe.'}
+                                     if god_type_test is not None else None),
                 'modo_equip_ps1':equip_mode,
                 'estrategia_equip_ps1':equip_strategy if (native_equips or replacements) else 'sem-equip',
                 'tamanho_bin':stage_bin.stat().st_size,

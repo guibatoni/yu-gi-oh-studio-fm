@@ -1056,10 +1056,13 @@ class Studio(tk.Tk):
         try:
             typ=int(self.vars['tipo_id'].get().split(' — ',1)[0])
             cid=self.selected_id
-            if typ>=24:
-                msg=('Tipo God 24 é visual no Studio e não tem suporte jogável '
-                     'comprovado no PS1. Clique "Escolher tipo jogável (PS1)" '
-                     'para transformar a carta sem perder ATK/DEF nem visual Deus.')
+            if typ==24:
+                msg=('God 24 é experimental no PS1: pode gravar o tipo 24 '
+                     'de verdade sem reverter a carta. Clique '
+                     '"Teste no BIN: símbolo Deus", confirme e gere a cópia. '
+                     'Comportamento do monstro no ePSXe ainda não validado.')
+            elif typ>24:
+                msg='Tipo desconhecido: ainda sem suporte de exportação PS1.'
             elif 20<=typ<=23:
                 msg=('Este é um tipo de magia, armadilha, ritual ou equipamento, '
                      'não uma criatura. Escolha um tipo 00–19 para jogar como monstro.')
@@ -1265,13 +1268,12 @@ class Studio(tk.Tk):
             messagebox.showerror('Ícone Deus','Escolha uma carta original #001–#722.',parent=self)
             return
         card=self.project.get(cid)
-        if not 0 <= int(card['tipo_id']) < 20:
+        if not (0 <= int(card['tipo_id']) < 20 or int(card['tipo_id'])==24):
             messagebox.showwarning(
-                'Tipo God 24 ainda não é jogável no PS1',
-                'Para testar só o símbolo visual, escolha qualquer tipo de '
-                'monstro PS1 (00–19) para esta carta e salve. '
-                'O tipo God 24 precisa de mudanças adicionais no motor.',
-                parent=self)
+                'Tipo não suportado para o teste de ícone',
+                'Selecione um tipo de monstro PS1 (00–19) ou God 24 '
+                'experimental. Equip, Ritual e outros tipos não serão '
+                'convertidos em monstros automaticamente.', parent=self)
             return
         if not messagebox.askyesno(
                 'Teste real do símbolo Deus no ePSXe',
@@ -1281,12 +1283,18 @@ class Studio(tk.Tk):
                 'descrição substituídos pelo símbolo. O projeto, a descrição '
                 'original e o BIN fonte continuam intactos.\n\n'
                 'O símbolo aparecerá na descrição da carta para testar a '
-                'fonte nativa. NÃO substituirá o ícone de tipo na interface '
-                'nem implementará o tipo God 24.\n\n'
-                'A imagem só será gerada se o slot gráfico estiver vazio e '
+                'fonte nativa. NÃO substituirá o ícone de tipo na interface.\n\n'
+                + ('Também autorizaremos gravar o TIPO 24 REAL na tabela do '
+                   'PS1 para este cartão. ATK/DEF e tipo serão conferidos '
+                   'no BIN, mas o motor original PODE NÃO RECONHECER como '
+                   'monstro e o duelo pode falhar. Use somente uma cópia.\n\n'
+                   if int(card['tipo_id'])==24 else '')
+                + 'A imagem só será gerada se o slot gráfico estiver vazio e '
                 'o código for compatível. Continuar?', parent=self):
             return
         self.project.metadata['ps1_god_icon_test_card_id']=cid
+        if int(card['tipo_id'])==24:
+            self.project.metadata['ps1_god_type_test_card_id']=cid
         self.project.save()
         self._refresh_project()
         self._update_status(
@@ -2140,6 +2148,31 @@ class Studio(tk.Tk):
             return
         from .ps1_compat import audit, save_audit, explain_no_writable_changes
         from .core import ps1_unwritable_numeric_edits, ps1_stat_export_errors
+        # O usuário pode aceitar uma única gravação experimental do tipo
+        # real 24, sem alterar a escolha feita no editor e sem substituir
+        # o BIN original. Outros tipos 25–31 continuam bloqueados.
+        from .core import god24_experiment_enabled
+        unapproved=[int(k) for k,fields in self.project.edits.items()
+                    if 1<=int(k)<=722 and
+                    set(fields)&{'ataque','defesa','tipo_id','nivel',
+                                 'atributo_id','guardian_1_id','guardian_2_id'}
+                    and int(self.project.get(int(k))['tipo_id'])==24
+                    and not god24_experiment_enabled(self.project,int(k))]
+        if len(unapproved)==1 and unapproved[0]==self.selected_id:
+            target=unapproved[0]
+            if messagebox.askyesno(
+                'TESTE EXPERIMENTAL — tipo Deus (24)',
+                f'Carta #{target:03d} está definida como God 24.\n\n'
+                'Gravar exatamente o número 24 no campo de tipo e '
+                'conferir o ATK/DEF no BIN de teste?\n\n'
+                'Isto NÃO implementa o motor de Deus: o jogo pode não '
+                'reconhecer a carta como monstro ou apresentar falhas. '
+                'A imagem original e seus efeitos salvos não mudarão.\n\n'
+                'Continuar com a experiência?',parent=self):
+                self.project.metadata['ps1_god_type_test_card_id']=target
+                self.project.save()
+            else:
+                return
         unexportable=ps1_unwritable_numeric_edits(self.project)
         oversized=ps1_stat_export_errors(self.project)
         if unexportable or oversized:
@@ -2174,6 +2207,9 @@ class Studio(tk.Tk):
                        'três caracteres originais são trocados só na cópia. '
                        'Não implementa o tipo God 24.\n'
                        if self.project.metadata.get('ps1_god_icon_test_card_id') else '')
+                    + ('GOD 24: gravação experimental do campo tipo (24) '
+                       'autorizada; jogabilidade NÃO validada no ePSXe.\n'
+                       if self.project.metadata.get('ps1_god_type_test_card_id') else '')
                     + f'PENDÊNCIAS DE MOTOR: {len(pending)}. Novos efeitos, cartas extras e cores de nomes NÃO serão aplicados.\n\n'
                     + ('\n'.join(pending[:3]) + '\n\n' if pending else '') + 'Gerar somente a cópia parcial de teste?')
         if not messagebox.askyesno('Gerar cópia de teste', question, parent=self):
@@ -2210,6 +2246,8 @@ class Studio(tk.Tk):
             f'Regra de deck MIPS: {len(manifest.get("limite_global_copias_ps1_aplicado",[]))} patch(es).\n'
             f'Ícone Deus (teste visual na descrição): '
             f'{manifest.get("teste_visual_icone_deus",{}).get("status") if manifest.get("teste_visual_icone_deus") else "não habilitado"}.\n'
+            f'Tipo 24 God (gravação experimental): '
+            f'{manifest.get("teste_tipo_god24",{}).get("status") if manifest.get("teste_tipo_god24") else "não habilitado"}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
 
