@@ -126,7 +126,6 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 raise ModError('SLUS_014.11 não encontrado na imagem.')
             original_exe=b''.join(reader.read_entry(exe))
             wa_entry=entries.get('DATA/WA_MRG.MRG')
-            # WA só é lido quando houver artes vinculadas.
             requested_art={int(k):v for k,v in getattr(project,'arts',{}).items() if int(k)<=722}
             metadata=getattr(project,'metadata',{})
             equip_mode=metadata.get('ps1_equip_mode','adicionar')
@@ -143,7 +142,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             native_traps=metadata.get('ps1_trap_thresholds',{})
             native_terrain=metadata.get('ps1_terrain_boosts',{})
             god_test_card=metadata.get('ps1_god_icon_test_card_id')
-            original_wa=b''.join(reader.read_entry(wa_entry)) if (requested_art or native_equips or replacements or native_rituals or god_test_card) and wa_entry else None
+            god_chest_enabled=metadata.get('ps1_god_chest_preview',False)
+            needs_wa=(requested_art or native_equips or replacements or native_rituals
+                      or god_test_card or god_chest_enabled)
+            original_wa=b''.join(reader.read_entry(wa_entry)) if needs_wa and wa_entry else None
     except DiscError as exc:
         raise ModError(f'Imagem original inválida: {exc}') from exc
 
@@ -285,7 +287,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             patched_wa if patched_wa is not None else original_wa,native_rituals)
 
     god_icon_report=None
-    if god_test_card is not None:
+    legacy_god_icon=(god_test_card is not None and not
+                     (god_chest_enabled and type(god_test_card) is int
+                      and god_test_card==god_type_test))
+    if legacy_god_icon:
         from .ps1_god_icon import try_patch_god_icon, god_icon_asset
         if isinstance(god_test_card,bool) or not isinstance(god_test_card,int):
             raise ModError('ID inválido do teste God; reconfigure o projeto.')
@@ -311,7 +316,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             patched_exe,god_test_card,god_icon_asset())
 
     god_chest_report=None
-    if metadata.get('ps1_god_chest_preview',False):
+    god_display_report=None
+    if god_chest_enabled:
         from .ps1_god24_chest import patch_god24_chest_preview
         if type(god_type_test) is not int or not god24_experiment_enabled(project,god_type_test):
             raise ModError('God24 baú: tipo 24 não está autorizado para teste.')
@@ -323,10 +329,15 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         from .ps1_god24_row_patch import apply as patch_real_list
         patched_exe,row_report=patch_real_list(original_exe,patched_exe,kinds)
         god_chest_report['renderizador_lista_bau']=row_report
+        if original_wa is None:
+            raise ModError('Tipo God: DATA/WA_MRG.MRG é necessário para exibir o ícone.')
+        from .ps1_god24_display import apply as patch_god_display
+        patched_exe,patched_wa,god_display_report=patch_god_display(
+            original_exe,patched_exe,patched_wa if patched_wa is not None else original_wa)
 
     god_duel_report=None
     if metadata.get('ps1_god_hand_preview',False):
-        if not metadata.get('ps1_god_chest_preview',False):
+        if not god_chest_enabled:
             raise ModError('God24 em duelo: primeiro ative o teste de ATK/DEF no baú.')
         from .ps1_god24_play import apply as patch_duel
         patched_exe,god_duel_report=patch_duel(
@@ -411,17 +422,19 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'limite_global_copias_ps1_aplicado':deck_copies_written,
                 'lp_inicial_mips_aplicado':lp_written,
                 'teste_visual_icone_deus':god_icon_report,
+                'exibicao_tipo_god24':god_display_report,
                 'teste_god24_atk_def_bau':god_chest_report,
                 'teste_god24_roteamento_duelo':god_duel_report,
                 'teste_tipo_god24':({'carta_id':god_type_test,
-                                      'status':'CAMPO_TIPO_24_GRAVADO_SEM_MOTOR_VALIDADO',
+                                      'status':('TIPO_24_COM_NOME_E_ICONE' if god_display_report else
+                                                'CAMPO_TIPO_24_GRAVADO_SEM_MOTOR_VALIDADO'),
                                       'aviso':('Teste de mão e colocação gravado. '
                                                'Valide o duelo no ePSXe.' if god_duel_report else
                                                'O motor original trata o tipo 24 '
                                                'como carta especial.'),
                                       'atk_def_visiveis_no_bau':False,
                                       'tipo_deus_funcional_no_epsxe':False,
-                                      'icone_de_tipo_instalado':False}
+                                      'icone_de_tipo_instalado':bool(god_display_report)}
                                      if god_type_test is not None else None),
                 'modo_equip_ps1':equip_mode,
                 'estrategia_equip_ps1':equip_strategy if (native_equips or replacements) else 'sem-equip',
@@ -435,13 +448,16 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             if checked['divergentes']:
                 raise ModError('BIN de teste diverge dos atributos do projeto. '
                                'A cópia anterior foi preservada.')
-            if metadata.get('ps1_god_chest_preview',False):
+            if god_chest_enabled:
                 if (checked['god24_mascaras_bau']['status']!='aplicado_2_de_2'
                         or checked['god24_renderizador_lista_bau']
                         ['god24_patch_lista']['status']!='aplicado_3_de_3'):
                     raise ModError('God24: falta confirmação de 2/2 máscaras ou '
                                    '3/3 opcodes do renderizador no BIN final. '
                                    'A cópia anterior foi preservada.')
+                if checked['god24_exibicao_tipo']['status']!='aplicado':
+                    raise ModError('God24: nome ou ícone divergente na releitura do '
+                                   'BIN final. Cópia anterior preservada.')
             if god_duel_report and checked['god24_roteamento_duelo']['status']!='aplicado':
                 raise ModError('God24 em duelo: faltam instruções na releitura '
                                'do BIN final. Cópia anterior preservada.')

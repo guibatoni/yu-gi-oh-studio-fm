@@ -1,3 +1,10 @@
+## v1.4.24 — Nome e ícone do tipo God
+
+- God 24 tem rótulo e ícone próprios nos detalhes da carta no PS1.
+- A configuração de baú de projetos God24 existentes ativa a exibição
+  na nova cópia do Drop x15.
+- A conferência BIN/CUE valida o código, o texto e a textura do ícone.
+
 ## v1.4.23 — God24 na fileira de monstros
 
 - A seleção da fileira no Drop x15 reconhece God24 como monstro ao

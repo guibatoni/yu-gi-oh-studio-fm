@@ -524,7 +524,7 @@ class Studio(tk.Tk):
         self._form_entry(left,'Tipo','tipo_id',3,kind='type')
         ttk.Button(left,text='Escolher tipo jogável (PS1)',command=self.choose_playable_monster_type).grid(row=8,column=0,sticky='w',pady=(5,2))
         ttk.Button(left,text='Teste glifo na descrição (não no tipo)',command=self.toggle_god_icon_ps1).grid(row=11,column=0,sticky='w',pady=(6,2))
-        ttk.Button(left,text='PS1: ATK/DEF God no baú (teste)',command=self.toggle_god24_chest_preview).grid(row=12,column=0,sticky='w',pady=(6,2))
+        ttk.Button(left,text='PS1: Tipo God no baú (teste)',command=self.toggle_god24_chest_preview).grid(row=12,column=0,sticky='w',pady=(6,2))
         ttk.Button(left,text='PS1: God24 em duelo (teste)',command=self.toggle_god24_hand_preview).grid(row=13,column=0,sticky='w',pady=(6,2))
         ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
         self.card_type_warning=ttk.Label(left,text='',wraplength=330)
@@ -1057,12 +1057,9 @@ class Studio(tk.Tk):
             return
         try:
             typ=int(self.vars['tipo_id'].get().split(' — ',1)[0])
-            cid=self.selected_id
             if typ==24:
-                msg=('God 24 é experimental no PS1: pode gravar o tipo 24 '
-                     'de verdade sem reverter a carta. Clique '
-                     '"Teste no BIN: símbolo Deus", confirme e gere a cópia. '
-                     'Comportamento do monstro no ePSXe ainda não validado.')
+                msg=('God (24) no PS1: salve a carta e ative "PS1: Tipo God no baú". '
+                     'Para jogar como monstro, ative também "PS1: God24 em duelo".')
             elif typ>24:
                 msg='Tipo desconhecido: ainda sem suporte de exportação PS1.'
             elif 20<=typ<=23:
@@ -1250,7 +1247,7 @@ class Studio(tk.Tk):
         return True
 
     def toggle_god24_chest_preview(self):
-        """Ativa duas máscaras e três opcodes do renderizador da lista."""
+        """Configura a exibição do tipo God e dos atributos na cópia PS1."""
         if not self._ready_native_effect() or not self.selected_id:
             return
         self._stage_current()
@@ -1261,7 +1258,7 @@ class Studio(tk.Tk):
         cid=int(self.selected_id)
         if self.project.metadata.get('ps1_god_chest_preview',False):
             if messagebox.askyesno('Desativar teste do baú',
-                'Desativar God24 ATK/DEF no próximo BIN/CUE?',parent=self):
+                'Desativar a exibição do tipo God e o teste de duelo no próximo BIN/CUE?',parent=self):
                 self.project.metadata.pop('ps1_god_chest_preview',None)
                 self.project.metadata.pop('ps1_god_hand_preview',None)
                 self.project.save()
@@ -1278,13 +1275,10 @@ class Studio(tk.Tk):
                         f'Carta #{other:03d} possui tipo 25–31. '
                         'Não é seguro ativar a máscara.',parent=self)
                     return
-        if not messagebox.askyesno('God24 no baú — teste MIPS',
-            'Testar ATK/DEF God24 com duas máscaras e três instruções '
-            'no renderizador da lista (func_80031874)?\n\n'
-            'Tipos 0–23 preservados; sem alteração nos combates, na '
-            'invocação ou no ícone. O funcionamento no ePSXe ainda precisa '
-            'ser confirmado. Somente o SLUS original do seu mod será aceito. '
-            'A imagem original não será alterada.\n\nAtivar?',parent=self):
+        if not messagebox.askyesno('Tipo God no PS1',
+            'Exibir ATK/DEF e o ícone dourado no baú e o tipo God '
+            'nos detalhes da carta?\n\nA próxima cópia BIN/CUE usa '
+            'o perfil Drop x15. Abra os detalhes com Triângulo no ePSXe.',parent=self):
             return
         self.project.metadata['ps1_god_type_test_card_id']=cid
         self.project.metadata['ps1_god_chest_preview']=True
@@ -1315,7 +1309,7 @@ class Studio(tk.Tk):
             return
         if not self.project.metadata.get('ps1_god_chest_preview',False):
             messagebox.showwarning('Ative primeiro o baú',
-                'Ative PS1: ATK/DEF God no baú (teste) antes do teste em duelo.',
+                'Ative PS1: Tipo God no baú (teste) antes do teste em duelo.',
                 parent=self)
             return
         if self.project.metadata.get('ps1_god_type_test_card_id')!=cid:
@@ -1360,6 +1354,12 @@ class Studio(tk.Tk):
             return
         if not 1 <= cid <= 722:
             messagebox.showerror('Ícone Deus','Escolha uma carta original #001–#722.',parent=self)
+            return
+        if (self.project.metadata.get('ps1_god_chest_preview')
+                and self.project.metadata.get('ps1_god_type_test_card_id')==cid):
+            messagebox.showinfo('Ícone do tipo God',
+                'Gere a cópia BIN/CUE para ver o ícone no campo de tipo '
+                'dos detalhes da carta.',parent=self)
             return
         card=self.project.get(cid)
         if not (0 <= int(card['tipo_id']) < 20 or int(card['tipo_id'])==24):
@@ -2152,6 +2152,7 @@ class Studio(tk.Tk):
                 f'Limiar Trap PS1: {len(pr.metadata.get("ps1_trap_thresholds",{}))}\n'
                 f'Bônus terreno PS1: {len(pr.metadata.get("ps1_terrain_boosts",{}))}\n'
                 f'Limite global deck MIPS: {pr.metadata.get("ps1_deck_global_limit",3)} cópias\n'
+                f'Exibição do tipo God no BIN: {"ativada" if pr.metadata.get("ps1_god_chest_preview") else "desativada"}\n'
                 f'Ícone Deus no BIN (teste no texto): {pr.metadata.get("ps1_god_icon_test_card_id","desativado")}\n'
                 f'Artes PNG vinculadas: {len(pr.arts)} (somente prévia)\n'
                 f'Extração profunda: {pr.metadata.get("deep_extraction", {}).get("completed", "ainda não realizada")}\n'
@@ -2310,12 +2311,10 @@ class Studio(tk.Tk):
                 and not self.project.metadata.get('ps1_god_chest_preview',False)):
             opt=messagebox.askyesnocancel(
                 'God24 — patch do baú desativado',
-                f'A carta #{god_cid:03d} tem tipo God24, mas o teste '
-                'de ATK/DEF no baú está DESATIVADO.\n\n'
-                'SIM: aplicar duas máscaras e o patch da lista à cópia BIN/CUE.\n'
-                'NÃO: gerar sem o patch (ATK/DEF podem continuar em branco).\n'
-                'CANCELAR: não gerar.\n\n'
-                'O ícone Deus, a invocação e o combate continuam pendentes.',
+                f'Ativar a exibição do tipo God na carta #{god_cid:03d}?\n\n'
+                'Escolha Sim para aplicar ATK/DEF e ícone no baú e o nome God nos detalhes.\n'
+                'Escolha Não para gerar a cópia com a exibição original.\n'
+                'Escolha Cancelar para voltar ao projeto.',
                 parent=self)
             if opt is None:
                 return
@@ -2330,17 +2329,16 @@ class Studio(tk.Tk):
         from .ps1_compat import audit
         report=audit(self.project)
         pending=report['pendente_de_motor']
+        god_chest=self.project.metadata.get('ps1_god_chest_preview')
+        description_icon=self.project.metadata.get('ps1_god_icon_test_card_id')
         question = ('Será criada ou atualizada a cópia de teste do disco, sem modificar o original.\n'
                     'Mesmo nome de origem: substitui o teste anterior. Outro nome: cria outro arquivo.\n'
                     'Se o ePSXe estiver usando a imagem anterior, feche o jogo antes de substituí-la.\n\n'
                     'Compatível para teste: estatísticas, textos curtos e artes em paleta original.\n'
-                    + ('Ícone Deus: prova visual no TEXTO de uma carta; '
-                       'três caracteres originais são trocados só na cópia. '
-                       'Não implementa o tipo God 24.\n'
-                       if self.project.metadata.get('ps1_god_icon_test_card_id') else '')
-                    + ('GOD24 NO BAÚ: duas máscaras e três opcodes do renderizador. '
-                       'NÃO modifica combate nem ícone.\n'
-                       if self.project.metadata.get('ps1_god_chest_preview') else '')
+                    + ('Ícone Deus na descrição: três caracteres são trocados só na cópia.\n'
+                       if description_icon and not (god_chest and description_icon==god_cid) else '')
+                    + ('GOD24: ATK/DEF e ícone dourado no baú. Tipo God nos detalhes da carta.\n'
+                       if god_chest else '')
                     + ('GOD24 EM DUELO: teste de mão, fileira de monstros e confirmação. '
                        'Valide a jogada no ePSXe.\n'
                        if self.project.metadata.get('ps1_god_hand_preview') else '')
@@ -2380,7 +2378,9 @@ class Studio(tk.Tk):
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             f'God24 ATK/DEF BAÚ: {"2 máscaras + 3 opcodes da lista" if manifest.get("teste_god24_atk_def_bau") else "DESATIVADO"}.\n'
             f'God24 EM DUELO: {duel_status}.\n'
-            f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
+            + ('Tipo God e ícone conferidos no BIN. Abra os detalhes com Triângulo.\n'
+               if manifest.get('exibicao_tipo_god24') else '')
+            + f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             f'Método: {manifest.get("estrategia_equip_ps1","não aplicado")}.\n'
             f'Rituais: {len(manifest.get("rituais_ps1_aplicados",[]))}; '
             f'Armadilhas: {len(manifest.get("armadilhas_ps1_aplicadas",[]))}; '
@@ -2463,6 +2463,8 @@ class Studio(tk.Tk):
                 report['god24_mascaras_bau']['status']!='aplicado_2_de_2'
                 or report['god24_renderizador_lista_bau']['god24_patch_lista']
                 ['status']!='aplicado_3_de_3'
+                or (self.project.metadata.get('ps1_god_chest_preview',False)
+                    and report['god24_exibicao_tipo']['status']!='aplicado')
                 or (self.project.metadata.get('ps1_god_hand_preview',False)
                     and report['god24_roteamento_duelo']['status']!='aplicado'))
             if report['divergentes'] or god24_unpatched:

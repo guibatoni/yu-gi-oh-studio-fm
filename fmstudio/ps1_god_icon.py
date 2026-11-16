@@ -160,13 +160,13 @@ def decode_god_png(image_path: Path) -> list[tuple[int, int, int, int]]:
     return pixels
 
 
-def patch_god_glyph(wa: bytes, image_path: Path) -> tuple[bytes, dict]:
-    """Pinta apenas um slot comprovadamente vazio, com a paleta do próprio jogo."""
-    if PALETTE_OFFSET + 32 > len(wa):
+def god_glyph_rows(wa: bytes, image_path: Path, *,
+                   palette_offset: int = PALETTE_OFFSET) -> list[bytes]:
+    """Converte o símbolo 16x16 para as cores de uma CLUT original de 4 bits."""
+    if palette_offset < 0 or palette_offset + 32 > len(wa):
         raise ModError('Paleta original de ícones ausente no WA_MRG.MRG.')
     pixels=decode_god_png(Path(image_path))
-    palette = [struct.unpack_from('<H', wa, PALETTE_OFFSET + 2*i)[0]
-               for i in range(16)]
+    palette = struct.unpack_from('<16H', wa, palette_offset)
     available = [i for i in range(1, 16) if palette[i] != 0]
     if not available:
         raise ModError('Paleta de ícones está vazia; não há cores para o teste.')
@@ -188,6 +188,12 @@ def patch_god_glyph(wa: bytes, image_path: Path) -> tuple[bytes, dict]:
         row = bytes(idx[y*16 + x] | (idx[y*16 + x+1] << 4)
                     for x in range(0, 16, 2))
         desired.append(row)
+    return desired
+
+
+def patch_god_glyph(wa: bytes, image_path: Path) -> tuple[bytes, dict]:
+    """Pinta apenas um slot comprovadamente vazio, com a paleta do próprio jogo."""
+    desired=god_glyph_rows(wa,image_path)
     slot,condition=find_god_icon_slot(wa,desired)
     token=f'F8 0B {slot:02X}'
     if condition=='ja_presente':

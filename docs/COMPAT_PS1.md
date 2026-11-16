@@ -1,3 +1,11 @@
+## v1.4.24 — Exibição do tipo God 24
+
+No perfil Drop x15, a opção **PS1: Tipo God no baú (teste)** ativa o
+rótulo God e o ícone 16×16 nos detalhes da carta. O interpretador separa
+os comandos de tipo dos comandos de estrela guardiã. O exportador usa
+uma célula vazia da textura de boot e confirma a exibição por releitura
+do SLUS e do WA_MRG na cópia BIN/CUE. A fonte do rótulo é a do jogo.
+
 ## v1.4.10 — Fonte de glifos de mods
 
 Os endereços gráficos no WA_MRG não possuem garantia de slots livres em

@@ -43,7 +43,7 @@ SOURCE_FILES = frozenset({
     'fmstudio/disc_build.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'fmstudio/ps1_god_icon.py', 'fmstudio/ps1_god24_hook.py', 'fmstudio/ps1_god24_chest.py', 'fmstudio/ps1_god24_row_patch.py', 'fmstudio/ps1_god24_duel.py', 'fmstudio/ps1_god24_hand.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
     'fmstudio/disc.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_effects_lab.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
     'fmstudio/gui.py', 'fmstudio/updates.py',
-    'fmstudio/ps1_god24_play.py',
+    'fmstudio/ps1_god24_play.py', 'fmstudio/ps1_god24_display.py',
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
     'PUBLICAR_GITHUB.bat', 'PUBLICAR_GITHUB.ps1', 'LEIA-ME.txt',
     'README.md', 'docs/HISTORICO.md', 'docs/ATUALIZACOES_GITHUB.md',
@@ -51,7 +51,7 @@ SOURCE_FILES = frozenset({
     'docs/MIGRACAO_REPOSITORIO.md', 'docs/COMPAT_PS1.md', 'docs/EXPANSAO_722_GOD_TEXTO.md', 'docs/CLASSES_E_CORES.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md',
 })
 SOURCE_REQUIRED = frozenset({
-    'fmstudio/ps1_god24_play.py',
+    'fmstudio/ps1_god24_play.py', 'fmstudio/ps1_god24_display.py',
     'app.py', 'updater_main.py', 'fmstudio/__init__.py', 'fmstudio/gui.py',
     'fmstudio/core.py', 'fmstudio/abilities.py', 'fmstudio/continuous.py', 'fmstudio/duel_engine.py', 'fmstudio/expanded.py', 'fmstudio/richtext.py', 'fmstudio/rarities.py',
     'assets/icons/perfurar.png', 'assets/icons/ataque_2x.png', 'assets/icons/ataque_3x.png',

@@ -9,6 +9,7 @@ from pathlib import Path
 from .tables import CARD_COUNT
 from .ps1_content import name_patch_info, description_patch_info
 from .core import ModError, god24_experiment_enabled
+from .ps1_god24_chest import SOURCE_SHA256 as GOD24_SOURCE_SHA256
 
 
 def audit(project) -> dict:
@@ -44,14 +45,20 @@ def audit(project) -> dict:
                 blocked.append(f'#{cid}: SLUS original ainda não vinculado/verificado')
             else:
                 counts['estatisticas']+=1
+                god24=god24_experiment_enabled(project,cid)
                 supported.append(f'#{cid}: estatísticas de carta original'
-                                 + (' (TIPO GOD 24 GRAVÁVEL EM TESTE; jogabilidade NÃO VALIDADA)'
-                                    if god24_experiment_enabled(project,cid) else ''))
-                if god24_experiment_enabled(project,cid):
-                    blocked.append(f'#{cid}: reconhecimento do God 24 como monstro, '
-                                   'regras de combate e ícone definitivo '
-                                   'dependem de validação/patch MIPS; a gravação '
-                                   'do campo não comprova funcionamento.')
+                                 + (' (tipo 24)' if god24 else ''))
+                if god24:
+                    if pinned!=GOD24_SOURCE_SHA256:
+                        blocked.append(f'#{cid}: exibição e duelo God24 exigem o perfil Drop x15.')
+                    elif project.metadata.get('ps1_god_chest_preview'):
+                        supported.append(f'#{cid}: nome e ícone God nos detalhes da carta')
+                        if project.metadata.get('ps1_god_hand_preview'):
+                            supported.append(f'#{cid}: roteamento God24 como monstro no duelo')
+                        else:
+                            blocked.append(f'#{cid}: opção God24 em duelo desativada.')
+                    else:
+                        blocked.append(f'#{cid}: opção Tipo God no baú desativada.')
         if 'nome' in changed:
             if known:
                 try:
@@ -171,7 +178,7 @@ def audit(project) -> dict:
         'raridade_e_cor_nomes':'PENDENTE',
         'icones_personalizados':'PENDENTE',
         'cartas_maiores_722':'PENDENTE_MIPS_MEMORIA_TABELAS',
-        'tipo_god':'CAMPO_24_GRAVAVEL_POREM_NAO_MONSTRO; ATK_DEF_PODEM_FICAR_OCULTOS; JOGABILIDADE_PENDENTE_MIPS',
+        'tipo_god':'Tipo 24, rótulo e ícone nativos e roteamento de monstro disponíveis no perfil Drop x15 com as opções God24 ativas',
         'buffs_auras_cemiterio':'PENDENTE_MIPS_EVENTOS',
         'equipamentos_imunidades':'PENDENTE_MIPS_REGRAS; alvos de Equip stock podem ser gravados',
         'rituais_tres_tributos_originais':'gravavel_na_tabela_WA_SEM_NOVOS_IDS',

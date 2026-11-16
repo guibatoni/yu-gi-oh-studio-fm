@@ -49,6 +49,7 @@ def inspect_god24_chest_mips(exe: bytes) -> dict:
 
 
 def verify_image_stats(project, source):
+    from .ps1_god24_display import inspect as inspect_god_display
     try:
         with DiscReader(Path(source)) as image:
             entries = {e.path.upper():e for e in image.files() if not e.is_dir}
@@ -56,6 +57,11 @@ def verify_image_stats(project, source):
                 raise ModError('SLUS_014.11 ausente do disco.')
             exe = b''.join(image.read_entry(entries['SLUS_014.11']))
             cards, _ = decode_cards(exe)
+            god_display = inspect_god_display(exe)
+            if god_display['status'] == 'aguardando_textura':
+                entry = entries.get('DATA/WA_MRG.MRG')
+                wa = b''.join(image.read_entry(entry)) if entry else b''
+                god_display = inspect_god_display(exe, wa)
             image_path = str(image.path.resolve())
     except DiscError as exc:
         raise ModError(f'Imagem de disco inválida: {exc}') from exc
@@ -111,6 +117,7 @@ def verify_image_stats(project, source):
             'god24_renderizador_lista_bau':row_renderer,
             'god24_mascara_da_mao':legacy_hand_patch,
             'god24_roteamento_duelo':duel_patch,
+            'god24_exibicao_tipo':god_display,
             'god24_teste_mao_ativado_no_projeto':bool(config.get('ps1_god_hand_preview')),
             'god24_teste_bau_ativado_no_projeto':bool(config.get('ps1_god_chest_preview')),
             'god24_total_cartas_no_bin':len(card_types_24),
@@ -129,12 +136,16 @@ def describe(result):
             f'Cartas numéricas conferidas: {result["total"]}',
             f'Corretas: {result["corretas"]} | Divergentes: {result["divergentes"]}']
     if result.get('god24_tipo_gravado_e_verificado'):
-        text.append('God 24 gravado como 5 bits: SIM (experimental). '
-                    'O jogo pode não reconhecer como monstro; validar no ePSXe.')
+        text.append('God 24 gravado como 5 bits: SIM.')
     if result.get('god24_total_cartas_no_bin') or result.get('god24_teste_bau_ativado_no_projeto'):
         status=result['god24_mascaras_bau']
         text.append('\nGOD24 — MÁSCARAS MIPS NO BIN/CUE SELECIONADO:')
         text.append('  '+status['status']+' ('+str(status['total_aplicados'])+'/2)')
+        display=result.get('god24_exibicao_tipo',{})
+        if display.get('icone_instalado'):
+            text.append('  Tipo God e ícone conferidos no BIN. Veja os detalhes da carta com Triângulo.')
+        elif result.get('god24_teste_bau_ativado_no_projeto'):
+            text.append('  Exibição do tipo God pendente. Gere uma nova cópia a partir do BIN de origem.')
         duel=result['god24_roteamento_duelo']
         if result.get('god24_teste_mao_ativado_no_projeto') or duel['pontos_aplicados']:
             labels={'mao':'mão','fileira':'fileira de monstros','colocacao':'colocação',

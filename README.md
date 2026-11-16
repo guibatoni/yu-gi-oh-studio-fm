@@ -1,3 +1,19 @@
+# Studio FM v1.4.24 — Nome e ícone do tipo God no PS1
+
+As cartas de tipo 24 mostram o ícone dourado do Studio na lista do baú
+e do deck. A tela de detalhes, acessível com **Triângulo** no baú, no deck
+e no duelo, mostra o ícone ao lado do nome **God**.
+O tipo numérico 24 continua a usar a fileira de monstros quando a opção
+**PS1: God24 em duelo (teste)** está ativa. Marte continua disponível como
+estrela guardiã com seu nome e símbolo originais.
+
+O projeto que já usava God24 no baú recebe a exibição ao gerar uma nova
+cópia BIN/CUE a partir da imagem Drop x15 usada na importação. Para novos
+testes, use **PS1: Tipo God no baú (teste)** na carta salva com tipo 24.
+**Verificar BIN/CUE** confere o nome e a textura na imagem gerada.
+
+---
+
 # Studio FM v1.4.23 — God24 na fileira de monstros (teste)
 
 A seleção da fileira ainda usava o limite dos tipos originais. Se o
