@@ -10,9 +10,13 @@ exato do SLUS e cinco opcodes de contexto por instrução; converte
 somente o operando imediato das quatro instruções ANDI de `0x1F`
 para `0x17`, sem tocar em saltos, tabelas ou delay slots.
 
-Este filtro deixa todos os tipos 0–23 intactos e normaliza somente
-God24 como tipo local 16 na rotina da mão, preservando o tipo real
-gravado no BIN como 24. Por precaução, tipos 25–31 não são aceitos.
+Este filtro preserva a CLASSIFICAÇÃO dos tipos 0–23: 0–19 continuam
+monstros e 20–23 mantêm suas categorias especiais. Dentro da rotina
+da mão, a operação ANDI também normaliza temporariamente os valores
+8–15 para 0–7; não altera o tipo gravado na carta, mas requer testes de
+possíveis efeitos colaterais. God24 vira tipo local 16 para as decisões
+da mão, permanecendo tipo 24 no BIN. Por precaução, tipos 25–31 são
+recusados e a função é opt-in.
 
 O gerador reabre o BIN/CUE final e exige a presença das quatro
 instruções antes de substituir a cópia anterior. O verificador

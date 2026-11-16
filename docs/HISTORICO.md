@@ -2,8 +2,9 @@
 
 - Usa o diagnóstico real da v1.4.19 para corrigir quatro máscaras
   MIPS, com SHA original e cinco opcodes de contexto obrigatórios.
-- Tipos 0–23 preservados; somente o tipo local 24 é normalizado
-  para 16 antes do teste de monstro da mão.
+- Classificação monstro/especial preservada para 0–23; a máscara
+  modifica temporariamente 8–15 para 0–7 no registrador local,
+  e God24 para 16. Possíveis efeitos indiretos exigem teste no emulador.
 - Tipo real no BIN continua 24; nenhum SLUS original é sobrescrito.
 - Novo botão de ativação; sem ativação automática.
 - Readback no BIN exige 4/4 modificações ou mantém imagem anterior.

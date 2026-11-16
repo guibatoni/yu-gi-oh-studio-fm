@@ -4,7 +4,10 @@ A v1.4.18 corrigiu ATK/DEF no baú, mas God24 ainda entra no fluxo de
 carta especial. Este patch modifica SOMENTE 4 máscaras de tipo na função
 DuelScene_UpdateHandActions. Tipo gravado no SLUS permanece 24; nesta
 rotina a máscara local normaliza 24 -> 16 antes do teste <20.
-Tipo 0..23 não muda, 25..31 ficam expressamente proibidos.
+A CLASSIFICAÇÃO monstro/não-monstro de 0..23 não muda; os tipos 8..15
+são normalizados TEMPORARIAMENTE para 0..7 dentro do registrador local.
+Isso deve ser testado no emulador quanto a efeitos indiretos.
+25..31 ficam expressamente proibidos.
 
 NÃO modifica DuelScene_UpdateCardPlacement nem afirma invocação,
 ataque ou fusão funcionando no ePSXe.
@@ -93,10 +96,11 @@ def apply(original_exe: bytes, edited_exe: bytes,
             or any(type(k) is not int or not 0 <= k <= 24 for k in kinds)):
         raise ModError("God24 mão: exige God (24) e recusa tipos 25–31.")
     for kind in range(25):
-        if (kind & NEW_LOW_BITS) != (kind if kind < 24 else 16):
-            raise ModError("God24 mão: alteração de classe fora do tipo 24.")
-        if ((kind & NEW_LOW_BITS) < 20) != (kind < 20 or kind == 24):
-            raise ModError("God24 mão: a regra mudaria tipos 20–23.")
+        normalized=kind & NEW_LOW_BITS
+        if (normalized < 20) != (kind < 20 or kind == 24):
+            raise ModError("God24 mão: a classificação de monstro foi alterada.")
+        if kind in (20,21,22,23) and normalized != kind:
+            raise ModError("God24 mão: as categorias especiais foram alteradas.")
     if (inspect(original_exe)["status"] != "nao_aplicado_0_de_4"
             or inspect(edited_exe)["status"] != "nao_aplicado_0_de_4"):
         raise ModError("God24 mão: janela MIPS modificada ou incompatível.")

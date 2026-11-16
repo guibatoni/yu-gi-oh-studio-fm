@@ -38,7 +38,14 @@ class GodHandTests(unittest.TestCase):
     def test_original_types_and_god_only(self):
         for n in range(25):
             normalized=n & 0x17
-            self.assertEqual(normalized,n if n<24 else 16)
+            if n in (20,21,22,23):
+                self.assertEqual(normalized,n)
+            elif n==24:
+                self.assertEqual(normalized,16)
+            elif 8<=n<=15:
+                self.assertEqual(normalized,n-8)
+            else:
+                self.assertEqual(normalized,n)
             self.assertEqual(normalized<20,n<20 or n==24)
 
     def test_suspicious_and_partial_images_fail_closed(self):
