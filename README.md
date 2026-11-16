@@ -1,3 +1,25 @@
+# Studio FM v1.4.10 — Não substituir ícones existentes no mod
+
+A célula 0x29 pode estar ocupada por gráficos de mods. Agora o Studio
+procura a primeira célula 16×16 integralmente zerada entre os códigos
+endereçáveis 0x27–0x30 (sem usar os ícones retail de 0x00–0x26). O código
+gráfico escolhido é refletido no token F8 0B XX da descrição. A faixa
+foi verificada na rotina de renderização de sprites do jogo.
+
+Se TODAS as células estiverem ocupadas, nenhum byte gráfico ou texto
+será alterado. O manifesto relata explicitamente
+`icone_nao_inserido_sem_espaco_livre`; o Studio pode continuar gerando
+o BIN para testar **God 24 e ATK/DEF**, desde que sejam modificações
+válidas e autorizadas de forma independente. Nunca sobrescreve gráficos
+de terceiros ou tenta desenhar em regiões não mapeadas.
+
+O resultado continua experimental: célula zerada no arquivo não garante
+que outros sistemas do motor não referenciem essa célula. O símbolo
+aparece apenas na descrição, não substitui o ícone de tipo. God 24
+ainda necessita validação MIPS e testes no ePSXe.
+
+---
+
 # Studio FM v1.4.9 — Corrigida exportação de ícone Deus sem Pillow
 
 O erro "A exportação do ícone God necessita de Pillow" foi corrigido.

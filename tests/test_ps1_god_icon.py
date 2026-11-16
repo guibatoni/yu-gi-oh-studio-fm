@@ -11,6 +11,7 @@ from fmstudio.ps1_god_icon import (
     ICON_PALETTE_SECTOR, PALETTE_OFFSET, ICON_SHEET_SECTOR,
     GLYPH_U, GLYPH_V, TOKEN_BYTES, glyph_rows,
     patch_god_glyph, patch_god_icon_description, god_icon_asset, decode_god_png,
+    FREE_SLOT_CANDIDATES, NoFreeGodIconSlot, icon_cell_start, try_patch_god_icon,
 )
 from fmstudio.deep_extract import exe_pos, BANK_DESC, STRING_TABLE
 
@@ -114,12 +115,54 @@ class GodIconNativeTests(unittest.TestCase):
         self.assertTrue(all(a==b for pos,(a,b) in enumerate(zip(source,changed))
                             if pos not in offsets))
 
-    def test_refuse_occupied_slot_and_blank_palette(self):
+    def test_occupied_29_uses_blank_alternative_and_preserves_mod_pixels(self):
+        original=bytearray(self.fixture_wa())
+        original[icon_cell_start(0x29)]=0xF0
+        baseline=bytes(original)
+        modified,info=patch_god_glyph(baseline,god_icon_asset())
+        self.assertEqual(info['slot'],0x27)
+        self.assertEqual(info['codigo'],'F8 0B 27')
+        self.assertEqual(glyph_rows(baseline,0x29),glyph_rows(modified,0x29))
+        self.assertNotEqual(glyph_rows(modified,0x27),glyph_rows(baseline,0x27))
+        self.assertEqual(len(baseline),len(modified))
+        self.assertEqual(modified[icon_cell_start(0x29)],0xF0)
+
+    def test_no_free_slot_reports_and_keeps_icon_and_description_unchanged(self):
         wa=bytearray(self.fixture_wa())
-        pos=ICON_SHEET_SECTOR*2048+GLYPH_V*128+GLYPH_U//2
-        wa[pos]=0xF0
-        with self.assertRaisesRegex(ModError,'não está vazia'):
-            patch_god_glyph(bytes(wa),god_icon_asset())
+        for slot in FREE_SLOT_CANDIDATES:
+            wa[icon_cell_start(slot)]=0xF0
+        original=bytes(wa)
+        with self.assertRaises(NoFreeGodIconSlot):
+            patch_god_glyph(original,god_icon_asset())
+        exe,_=self.fixture_exe()
+        output_wa,output_exe,report=try_patch_god_icon(
+            original,exe,16,god_icon_asset())
+        self.assertEqual(report['status'],'icone_nao_inserido_sem_espaco_livre')
+        self.assertEqual(output_wa,original)
+        self.assertEqual(output_exe,exe)
+
+    def test_dynamic_slot_is_written_to_the_correct_description_token(self):
+        wa=bytearray(self.fixture_wa())
+        wa[icon_cell_start(0x29)]=0x12
+        exe,desc=self.fixture_exe()
+        result_wa,result_exe,report=try_patch_god_icon(
+            bytes(wa),exe,16,god_icon_asset())
+        self.assertEqual(report['glifo']['slot'],0x27)
+        self.assertEqual(result_exe[desc:desc+3],bytes((0xF8,0x0B,0x27)))
+        self.assertEqual(result_exe[:desc],exe[:desc])
+        self.assertEqual(result_exe[desc+3:],exe[desc+3:])
+        self.assertEqual(glyph_rows(bytes(wa),0x29),glyph_rows(result_wa,0x29))
+
+    def test_reject_unmapped_slots(self):
+        wa=self.fixture_wa()
+        for code in (0x26,0x31,0xFF,-1,True):
+            with self.assertRaises(ModError):
+                glyph_rows(wa,code)
+        exe,_=self.fixture_exe()
+        with self.assertRaises(ModError):
+            patch_god_icon_description(exe,16,0x31)
+
+    def test_refuse_occupied_slot_and_blank_palette(self):
         blank=bytearray(self.fixture_wa())
         blank[PALETTE_OFFSET:PALETTE_OFFSET+32]=b'\0'*32
         with self.assertRaisesRegex(ModError,'Paleta'):

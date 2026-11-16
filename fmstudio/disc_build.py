@@ -286,7 +286,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
 
     god_icon_report=None
     if god_test_card is not None:
-        from .ps1_god_icon import patch_god_glyph, patch_god_icon_description, god_icon_asset
+        from .ps1_god_icon import try_patch_god_icon, god_icon_asset
         if isinstance(god_test_card,bool) or not isinstance(god_test_card,int):
             raise ModError('ID inválido do teste God; reconfigure o projeto.')
         if not 1 <= god_test_card <= 722:
@@ -306,17 +306,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         if not origin_hash or hashlib.sha256(original_wa).hexdigest()!=origin_hash:
             raise ModError('Teste God: WA_MRG.MRG não corresponde ao arquivo importado '
                            'ou o hash de origem está ausente.')
-        patched_wa,glyph_report=patch_god_glyph(
-            patched_wa if patched_wa is not None else original_wa,god_icon_asset())
-        patched_exe,description_report=patch_god_icon_description(
-            patched_exe,god_test_card)
-        god_icon_report={'card_id':god_test_card,
-                         'glifo':glyph_report,
-                         'descricao_temporaria':description_report,
-                         'status':'prototipo_visual_pendente_epsxe',
-                         'aviso':'Ícone God temporário NA DESCRIÇÃO da carta. '
-                                 'Não cria o tipo God 24 nem altera o ícone de '
-                                 'tipo permanente do motor.'}
+        patched_wa,patched_exe,god_icon_report=try_patch_god_icon(
+            patched_wa if patched_wa is not None else original_wa,
+            patched_exe,god_test_card,god_icon_asset())
 
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:

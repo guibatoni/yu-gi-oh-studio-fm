@@ -1,3 +1,12 @@
+## v1.4.10 — Fonte de glifos de mods
+
+Os endereços gráficos no WA_MRG não possuem garantia de slots livres em
+qualquer MOD. O exportador considera apenas códigos 0x27–0x30 para teste
+visual, verifica todos os 16×16 pixels zerados e não sobregrava conteúdo
+ocupado. Falta de espaço omite o glifo, sem bloquear patches independentes
+de estatísticas ou o valor experimental de tipo God 24. A UI deixa claro
+que o desenho ainda é experimental e não substitui o ícone de tipo.
+
 ## v1.4.8 — Experiência de campo God24 no BIN
 
 A tabela codifica cada tipo em cinco bits e portanto permite escrever o

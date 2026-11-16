@@ -1,3 +1,12 @@
+## v1.4.10 — Seleção segura de célula para ícone God
+
+- Diagnóstico de células 0x27–0x30 antes de inserir pixels 4bpp.
+- Se 0x29 estiver ocupada, procura uma célula vazia e usa o F8 0B XX correspondente.
+- Nunca substitui pixels do mod em uma célula não vazia.
+- Quando nenhuma célula está vazia, omite apenas o ícone e mantém teste independente de God 24 / ATK.
+- Manifesto e mensagem de geração distinguem claramente ícone omitido de tipo gravado.
+- Testes de célula 0x29 ocupada, remapeamento, nenhuma livre e isolamento da descrição.
+
 ## v1.4.9 — Correção da dependência do ícone God no Windows
 
 - Leitor PNG RGBA 16×16 sem Pillow, com validação de CRC, limites e filtros.

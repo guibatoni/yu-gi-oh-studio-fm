@@ -2246,6 +2246,10 @@ class Studio(tk.Tk):
             f'Regra de deck MIPS: {len(manifest.get("limite_global_copias_ps1_aplicado",[]))} patch(es).\n'
             f'Ícone Deus (teste visual na descrição): '
             f'{manifest.get("teste_visual_icone_deus",{}).get("status") if manifest.get("teste_visual_icone_deus") else "não habilitado"}.\n'
+            + ('AVISO: sem slot gráfico livre neste MOD; ícone e descrição '
+               'não foram alterados. O teste do tipo God 24 é independente.\n'
+               if (manifest.get('teste_visual_icone_deus') or {}).get('status')
+                  == 'icone_nao_inserido_sem_espaco_livre' else '')
             f'Tipo 24 God (gravação experimental): '
             f'{manifest.get("teste_tipo_god24",{}).get("status") if manifest.get("teste_tipo_god24") else "não habilitado"}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)
