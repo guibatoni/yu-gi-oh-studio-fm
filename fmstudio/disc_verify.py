@@ -119,7 +119,7 @@ def describe(result):
                     'O jogo pode não reconhecer como monstro; validar no ePSXe.')
     if result.get('god24_total_cartas_no_bin') or result.get('god24_teste_bau_ativado_no_projeto'):
         status=result['god24_mascaras_bau']
-        text.append('\\nGOD24 — MÁSCARAS MIPS NO BIN/CUE SELECIONADO:')
+        text.append('\nGOD24 — MÁSCARAS MIPS NO BIN/CUE SELECIONADO:')
         text.append('  '+status['status']+' ('+str(status['total_aplicados'])+'/2)')
         for site in status['pontos']:
             text.append('  '+site['rotina']+' em '+site['offset_slus']+
