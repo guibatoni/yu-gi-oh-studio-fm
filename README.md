@@ -1,3 +1,27 @@
+# Studio FM v1.7.0 — Cartas, decks e recompensas
+
+Crie e salve uma carta com ID livre em **Nova carta**. Em **Edição do Mod →
+Deck do oponente**, busque a carta pelo ID, nome ou tipo, ajuste as cópias e
+salve. Use **Novo deck fixo** para começar uma lista manual ou **Gerar Deck
+Aleatório** para montar uma composição por tipo.
+
+Abra **Passwords e baú** durante o duelo do Studio para resgatar um código de
+oito dígitos ou escolher uma carta pelo ID, inclusive cartas God e IDs acima
+de 722. Para jogar com a carta na próxima partida, marque **Adicionar também
+ao deck inicial** e escolha um perfil.
+
+Em **Drops do oponente**, **Dropar Cartas do Próprio Deck** usa as cartas que
+entraram no baralho do adversário naquela partida. Cada cópia tem uma chance
+no sorteio e a recompensa da vitória vai para o baú.
+
+No **Drop x15**, use **Ativar passwords por ID no BIN/CUE Drop x15** após
+carregar a tabela de códigos originais. Gere o BIN/CUE e use os oito dígitos
+da coluna **Código PS1** na tela de passwords. O resgate custa 1 Star Chip
+e segue as regras originais de compra. Os IDs disponíveis no BIN/CUE são
+#001–#722. As cartas adicionais usam o simulador do Studio.
+
+---
+
 # Studio FM v1.6.1 — Ataque no primeiro turno
 
 No turno de abertura, só monstros com **Ataca no 1º turno** podem atacar.

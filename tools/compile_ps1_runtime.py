@@ -19,7 +19,7 @@ ENTRIES = (
     'AttackTrap', 'Battle', 'Resume', 'BoardDestruction', 'MonsterRemoval',
     'StopDefense', 'Raigeki', 'Reveal', 'StatPenalty', 'Swords',
     'FieldActions', 'Placement', 'ConfirmPlacement', 'DeckCopyGate',
-    'DescriptionIcon', 'SpellUsed', 'CollectTargets',
+    'DescriptionIcon', 'SpellUsed', 'CollectTargets', 'SelectDeckDrop', 'UpdatePasswordShop',
 )
 FLAGS = ('-march=r3000', '-mabi=32', '-msoft-float', '-mno-abicalls', '-fno-pic',
          '-G0', '-ffreestanding', '-fno-builtin', '-fno-stack-protector',
@@ -53,6 +53,7 @@ def main():
 
         content = section_bytes('.runtime')
         extension = section_bytes('.runtime_ext')
+        password = section_bytes('.runtime_password')
 
     pieces = ['"""Gerado por tools/compile_ps1_runtime.py a partir de tools/ps1."""\n',
               f'RUNTIME_SHA256 = {hashlib.sha256(content).hexdigest()!r}',
@@ -62,12 +63,14 @@ def main():
         pieces.append(f'    {name!r}: 0x{symbols[name]:08X},')
     pieces.extend(('}', 'RUNTIME = bytes.fromhex("""'))
     pieces.extend(content[i:i+32].hex(' ') for i in range(0, len(content), 32))
-    pieces.extend(('""")', '',
-                   f'RUNTIME_EXT_SHA256 = {hashlib.sha256(extension).hexdigest()!r}',
-                   f'RUNTIME_EXT_BASE = 0x{symbols["__runtime_ext_start"]:08X}',
-                   f'RUNTIME_EXT_END = 0x{symbols["__runtime_ext_end"]:08X}',
-                   'RUNTIME_EXT = bytes.fromhex("""'))
-    pieces.extend(extension[i:i+32].hex(' ') for i in range(0, len(extension), 32))
+    for label, binary, symbol in (('RUNTIME_EXT', extension, '__runtime_ext'),
+                                  ('RUNTIME_PASSWORD', password, '__password')):
+        pieces.extend(('""")', '',
+                       f'{label}_SHA256 = {hashlib.sha256(binary).hexdigest()!r}',
+                       f'{label}_BASE = 0x{symbols[symbol + "_start"]:08X}',
+                       f'{label}_END = 0x{symbols[symbol + "_end"]:08X}',
+                       f'{label} = bytes.fromhex("""'))
+        pieces.extend(binary[i:i+32].hex(' ') for i in range(0, len(binary), 32))
     pieces.append('""")\n')
     OUTPUT.write_text('\n'.join(pieces), encoding='utf-8', newline='\n')
     print(f'{len(content)} bytes de código, reserva até 0x{symbols["__runtime_end"]:08X}')

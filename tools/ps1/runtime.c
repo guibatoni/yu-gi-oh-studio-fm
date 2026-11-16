@@ -9,7 +9,7 @@ enum {
     OCCUPIED = 0x8000, USED = 0x4000, FACE_DOWN = 0x1000, DEFENSE = 0x800,
     MAGIC = 1, TRAP = 2, INDESTRUCTIBLE = 4, PIERCING = 8, DIRECT = 16, FIRST_TURN = 32,
     FIELD = 5, PLACING = 7, BATTLE = 9,
-    CARD_COUNT = 722, DECK_SIZE = 40, RECORD_COUNT = 30,
+    CARD_COUNT = 722, DECK_SIZE = 40, RECORD_COUNT = 30, DUELIST_COUNT = 40,
     AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE
 };
 
@@ -36,6 +36,8 @@ typedef struct {
 typedef struct {
     u8 default_copies, pad;
     u16 offsets[CARD_COUNT + 1];
+    u16 password_prefix;
+    u8 deck_drops[DUELIST_COUNT / 8];
 } Config;
 _Static_assert(sizeof(Bonus) == 8 && sizeof(Rules) == 8, "rule pack format");
 
@@ -489,4 +491,49 @@ ENTRY unsigned DeckAllowsCopies(int id, unsigned copies)
     unsigned limit = rule && rule->copies ? rule->copies :
                      (unsigned)(id - 17) < 5 ? 1 : CONFIG->default_copies;
     return copies < limit;
+}
+
+
+ENTRY int SelectDeckDrop(int rank)
+{
+    unsigned opponent = GAME(u8, 0x8009B361);
+    if (duel.deck_ready && opponent < DUELIST_COUNT &&
+        (CONFIG->deck_drops[opponent / 8] & (1u << (opponent % 8)))) {
+        u16 eligible[DECK_SIZE];
+        unsigned count = 0;
+        for (unsigned i = 0; i < DECK_SIZE; i++) {
+            unsigned id = duel.deck[1][i];
+            if (id >= 1 && id <= CARD_COUNT) eligible[count++] = id;
+        }
+        if (count) return eligible[FN(unsigned, 0x800358FC, unsigned)(count)];
+    }
+    return FN(int, 0x80021810, int)(rank);
+}
+
+typedef struct {
+    u32 price, password;
+} PasswordRecord;
+
+__attribute__((used, noinline, section(".runtime.password")))
+void UpdatePasswordShop(void)
+{
+    const volatile u8 *digits = (const volatile u8 *)0x8016D410;
+    u32 packed = 0;
+    for (unsigned i = 0; i < 8; i++) packed = (packed << 4) | digits[i];
+    unsigned id = 100 * digits[5] + 10 * digits[6] + digits[7];
+    unsigned stage = AT(u16, 0x8016D424) & 31;
+    if ((packed >> 12) != CONFIG->password_prefix || (unsigned)(id - 1) >= CARD_COUNT ||
+        (stage && AT(u16, 0x8016D4DC) != id)) {
+        FN(void, 0x8016A37C, void)();
+        return;
+    }
+    /* Route the alias through the stock preview, purchase and chest code. */
+    volatile PasswordRecord *entry = (volatile PasswordRecord *)0x801A8000 + id;
+    u32 price = entry->price;
+    u32 password = entry->password;
+    entry->price = 1;
+    entry->password = packed;
+    FN(void, 0x8016A37C, void)();
+    entry->price = price;
+    entry->password = password;
 }

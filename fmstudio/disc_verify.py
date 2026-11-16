@@ -81,6 +81,8 @@ def verify_image_stats(project, source):
         if cid < 1 or cid > CARD_COUNT:
             continue
         requested = project.get(cid)
+        if requested.get('virtual'):
+            continue
         original = project.cards[cid]
         typ=int(requested.get('tipo_id',0))
         if (typ > GOD_TYPE_ID or (typ == GOD_TYPE_ID and not profile)
@@ -156,6 +158,11 @@ def describe(result):
     runtime=result.get('efeitos_nativos_ps1',{})
     if runtime.get('status')=='aplicado':
         text.append(f'Efeitos nativos conferidos na cópia: {runtime["quantidade"]}.')
+        if runtime.get('drops_do_deck'):
+            text.append(f'Drops do próprio deck conferidos para {len(runtime["drops_do_deck"])} duelista(s).')
+        prefix = runtime.get('password_id_prefix')
+        if prefix is not None:
+            text.append(f'Passwords por ID usam {prefix:05d} + os três dígitos do ID da carta.')
     elif runtime.get('status')=='divergente':
         text.append('A tabela de efeitos desta cópia diverge do projeto. Gere outro BIN/CUE.')
     mod=result.get('edicao_do_mod_ps1',{})

@@ -5,12 +5,13 @@ from pathlib import Path
 from random import Random
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from fmstudio.core import ModError, Project, _write_csv
 from fmstudio.deck_generator import generate_deck
 from fmstudio.duel_match import make_match
-from fmstudio.mod_data import MONSTER_TYPES, save_rules
-from fmstudio.passwords import id_code, original_passwords, redeem_id, redeem_original
+from fmstudio.mod_data import DROP_FROM_DECK, MONSTER_TYPES, drop_weights, save_rules
+from fmstudio.passwords import chest_cards, grant_card, id_code, original_passwords, redeem_id, redeem_original
 
 
 def card(kind, atk=0, defense=0):
@@ -59,6 +60,75 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(redeem_id(id_code(custom).lower(), project.cards), custom)
             with self.assertRaises(ModError):
                 redeem_id('FM-00000999', project.cards)
+
+    def test_free_id_and_partial_edits_persist_atomically(self):
+        with TemporaryDirectory() as path:
+            project = Project.create(Path(path), 'Catálogo')
+            cid = project.add_card(card_id=343, type_id=20, name='Magia do Studio')
+            project.set_card(cid, {'descricao': 'Descrição preservada'})
+            project.set_card(cid, {'nome': 'Nova magia'})
+            before = (project.folder / 'projeto.json').read_bytes()
+            with patch.object(project, 'save', side_effect=OSError('volume cheio')):
+                with self.assertRaises(OSError):
+                    project.add_card(card_id=724)
+                with self.assertRaises(OSError):
+                    project.set_card(cid, {'nome': 'Falhou'})
+            self.assertNotIn(724, project.cards)
+            self.assertEqual(project.get(cid)['nome'], 'Nova magia')
+            self.assertEqual((project.folder / 'projeto.json').read_bytes(), before)
+            project = Project.open(project.folder)
+            self.assertEqual(project.get(cid)['descricao'], 'Descrição preservada')
+            self.assertEqual(project.validate(), [])
+            with self.assertRaisesRegex(ModError, 'já pertence'):
+                project.add_card(card_id=cid)
+
+    def test_redeem_direct_id_and_commit_both_destinations(self):
+        with TemporaryDirectory() as path:
+            project = Project.create(Path(path), 'Baú')
+            cid = project.add_card(type_id=24, card_id=999_887)
+            for entry in (str(cid), f'#{cid}', id_code(cid)):
+                self.assertEqual(redeem_id(entry, project.cards), cid)
+                grant_card(project, cid, starter='Deck do baú')
+            with self.assertRaisesRegex(ModError, 'máximo'):
+                grant_card(project, cid, starter='Deck do baú')
+            with patch.object(project, 'save', side_effect=OSError('volume cheio')):
+                with self.assertRaises(OSError):
+                    grant_card(project, cid)
+            project = Project.open(project.folder)
+            self.assertEqual(chest_cards(project), {str(cid): 3})
+            self.assertEqual(project.metadata['edicao_mod']['iniciais']['Deck do baú']['cartas'], [cid]*3)
+
+    def test_deck_victory_reward_is_drawn_from_dealt_cards_and_granted_once(self):
+        with TemporaryDirectory() as path:
+            project = Project.create(Path(path), 'Drops')
+            hero, fixed, rare, spare, legacy = [project.add_card() for _ in range(5)]
+            config = save_rules(project, {
+                'iniciais': {'Principal': {'cartas': [hero]}},
+                'duelistas': {'1': {DROP_FROM_DECK: True,
+                                   'deck': {'cartas': [fixed, fixed],
+                                            'pools': [{'compras': 1, 'pesos': {rare: 3, spare: 1}}]},
+                                   'drops': {'pow': {legacy: 10}}}},
+            })
+            game = make_match(project, None, 1, 'Principal', rng=Random(4))
+            initial = game.initial_decks['adversario']
+            self.assertCountEqual(initial[:2], [fixed, fixed])
+            self.assertFalse(game.decks['adversario'])
+            grant = lambda cid: grant_card(project, cid)
+            with self.assertRaises(ModError):
+                game.claim_reward(config, {}, 1, 'A-TEC', grant)
+            game.lp['adversario'] = 0
+            rng = Random(0)
+            with self.assertRaises(OSError):
+                with patch.object(project, 'save', side_effect=OSError('volume cheio')):
+                    game.claim_reward(config, {}, 1, 'A-TEC', grant, rng=rng)
+            card = game.claim_reward(config, {}, 1, 'A-TEC', grant, rng=rng)
+            self.assertIn(card, initial)
+            self.assertEqual(game.claim_reward(config, {}, 1, 'S-POW', grant), card)
+            self.assertEqual(chest_cards(Project.open(project.folder)), {str(card): 1})
+            self.assertEqual(drop_weights(config, {}, 1, 'S-POW', dealt_deck=initial), Counter(initial))
+            config['duelistas']['1'][DROP_FROM_DECK] = False
+            self.assertEqual(drop_weights(config, {}, 1, 'S-POW', dealt_deck=initial), {legacy: 10})
+
 
 class DeckGeneratorTests(unittest.TestCase):
     def setUp(self):

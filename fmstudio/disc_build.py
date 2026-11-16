@@ -118,6 +118,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     source_image=Path(source_image).resolve()
     from .ps1_runtime import SOURCE_SHA256, compile_effects, install_runtime
     from .ps1_mod import LP_BANK_END, LP_CODE, compile_mod, patch_executable, patch_wa, wa_sha
+    from .passwords import validate_ps1_prefix
     texts={int(cid):project.get(int(cid)).get('descricao','')
            for cid,rows in getattr(project,'edits',{}).items()
            if 'descricao' in rows and 1<=int(cid)<=722}
@@ -141,6 +142,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             metadata=getattr(project,'metadata',{})
             expected_wa=wa_sha(project) if metadata.get('edicao_mod') else None
             mod_plan=compile_mod(project,profile=native_profile,wa_verified=bool(expected_wa))
+            native_plan=compile_effects(project,native_profile)
             equip_mode=metadata.get('ps1_equip_mode','adicionar')
             if equip_mode not in ('adicionar','substituir'):
                 raise ModError('Modo de equipamento inválido no projeto.')
@@ -155,7 +157,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             native_traps=metadata.get('ps1_trap_thresholds',{})
             native_terrain=metadata.get('ps1_terrain_boosts',{})
             needs_wa=(requested_art or native_equips or replacements or native_rituals or mod_plan.needs_wa
-                      or god_icon_card or god24_enabled
+                      or god_icon_card or god24_enabled or native_plan.password_prefix is not None
                       or (native_profile and any('{icon:' in desc for desc in texts.values())))
             original_wa=b''.join(reader.read_entry(wa_entry)) if needs_wa and wa_entry else None
     except DiscError as exc:
@@ -164,7 +166,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     expected=getattr(project,'metadata',{}).get('base_sha256',{}).get('slus')
     if not expected or source_digest!=expected:
         raise ModError('SLUS da imagem não corresponde ao executável vinculado ao projeto.')
-    native_plan=compile_effects(project,native_profile)
+    if native_plan.password_prefix is not None:
+        if original_wa is None:
+            raise ModError('Passwords por ID exigem o DATA/WA_MRG.MRG da imagem de origem.')
+        linked_wa = wa_sha(project)
+        if linked_wa and hashlib.sha256(original_wa).hexdigest() != linked_wa:
+            raise ModError('O WA_MRG da imagem de passwords diverge do projeto.')
+        validate_ps1_prefix(original_wa, native_plan.password_prefix)
     desc_bank_end=min(native_plan.bank_end, LP_CODE if mod_plan.has_lp else LP_BANK_END)
     if native_plan.data_end>desc_bank_end:
         raise ModError('A tabela de efeitos excede a área reservada para esta cópia.')

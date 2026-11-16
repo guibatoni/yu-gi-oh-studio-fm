@@ -9,8 +9,8 @@ from fmstudio.abilities import quick_settings, replace_quick_effects
 from fmstudio.core import ModError
 from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_sprite_words
 from fmstudio.ps1_runtime import (
-    CONFIG_ADDRESS, DUEL_STATE, RUNTIME_EXT_BASE, SUMMON_DAMAGE,
-    _rule_patches, compile_effects, install_runtime, verify_effects,
+    CONFIG_ADDRESS, DUEL_STATE, RUNTIME_EXT_BASE, RUNTIME_PASSWORD_BASE, SUMMON_DAMAGE,
+    _jump, _option_calls, _rule_patches, compile_effects, install_runtime, verify_effects,
 )
 from fmstudio.ps1_text import ICON_CODES, patch_descriptions
 from test_ps1_content import sample_exe, where
@@ -98,6 +98,36 @@ class TestNativeRules(unittest.TestCase):
             occupied[where(DUEL_STATE)] = 1
             with self.assertRaisesRegex(ModError, 'espaço reservado'):
                 install_runtime(source, occupied, plan, description_icons=False)
+
+
+    def test_drop_and_password_installation_check_each_native_call(self):
+        self.project.effects = {}
+        self.project.metadata.update({
+            'edicao_mod': {'duelistas': {'1': {'drops_do_deck': True}, '39': {'drops_do_deck': True}}},
+            'ps1_password_id_prefix': 10,
+        })
+        plan = compile_effects(self.project, True)
+        self.assertEqual(plan.bank_end, RUNTIME_PASSWORD_BASE)
+        self.assertFalse(plan.gameplay)
+        source = bytearray(sample_exe())
+        for pc, old, _ in _rule_patches(plan):
+            struct.pack_into(f'<{len(old)}I', source, where(pc), *old)
+        for pc, _, target, _ in _option_calls(plan):
+            struct.pack_into('<I', source, where(pc), _jump(target, link=True))
+        original = bytes(source)
+        with patch('fmstudio.ps1_runtime.SOURCE_SHA256', hashlib.sha256(original).hexdigest()):
+            output, report = install_runtime(original, original, plan, description_icons=False)
+        self.assertEqual(report['drops_do_deck'], [1, 39])
+        check = verify_effects(output, plan)
+        self.assertEqual(check['password_id_prefix'], 10)
+        self.assertEqual(check['drops_do_deck'], [1, 39])
+        for pc, _, target, _ in _option_calls(plan):
+            divergent = bytearray(output)
+            struct.pack_into('<I', divergent, where(pc), _jump(target, link=True))
+            self.assertEqual(verify_effects(divergent, plan)['status'], 'divergente')
+        unsupported = compile_effects(self.project, False)
+        self.assertEqual(unsupported.data, b'')
+        self.assertEqual(len(unsupported.pending), 3)
 
 
 class TestRichDescriptions(unittest.TestCase):

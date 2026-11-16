@@ -6,19 +6,24 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from .core import ModError
+from .core import ModError, ps1_supports_god24
 from .deck_generator import DIFFICULTIES, SUPPORT_TYPES, generate_deck
 from .expanded import display_name
-from .gui import ACCENT, compact_number
-from .mod_data import MONSTER_TYPES, deck_copy_limit
-from .passwords import id_code, import_original_passwords, original_passwords, redeem_id, redeem_original
-from .tables import DECK_SIZE, TYPE_NAMES
+from .gui import ACCENT, ROW_ALT, compact_number
+from .mod_data import CONFIG_KEY, MONSTER_TYPES, STOCK_STARTER, deck_copy_limit
+from .passwords import (
+    PS1_ID_PREFIX, chest_cards, grant_card, id_code, import_original_passwords, ps1_id_code,
+    redeem_id, redeem_original, set_ps1_id_passwords,
+)
+from .tables import CARD_COUNT, DECK_SIZE, TYPE_NAMES
 
 
-def _tree(parent, columns):
+def _tree(parent, columns, *, height=6):
     holder = ttk.Frame(parent)
     holder.pack(fill='both', expand=True, pady=(6, 0))
-    tree = ttk.Treeview(holder, columns=[row[0] for row in columns], show='headings', selectmode='browse')
+    tree = ttk.Treeview(holder, columns=[row[0] for row in columns], show='headings',
+                        selectmode='browse', height=height)
+    tree.tag_configure('stripe', background=ROW_ALT)
     tree.pack(side='left', fill='both', expand=True)
     scroll = ttk.Scrollbar(holder, command=tree.yview)
     scroll.pack(side='right', fill='y')
@@ -29,79 +34,116 @@ def _tree(parent, columns):
     return tree
 
 
+
 class PasswordPanel(ttk.Frame):
-    def __init__(self, parent, cards, *, by_id, open_card, reload_codes=None):
-        super().__init__(parent, padding=12)
+    def __init__(self, parent, cards, *, by_id, open_card, grant, reload_codes=None, project=None):
+        super().__init__(parent, padding=9)
         self.cards = cards
         self.by_id = by_id
         self.open_card = open_card
+        self.grant = grant
+        self.project = project
         self.reload_codes = reload_codes
         self.records = {}
         self.query = tk.StringVar()
         self.status = tk.StringVar()
+        ttk.Label(self, text='Nome, ID ou código FM' if by_id else 'Nome ou password de oito dígitos').pack(anchor='w')
         bar = ttk.Frame(self)
-        bar.pack(fill='x')
-        self.entry = ttk.Entry(bar, textvariable=self.query, width=30)
+        bar.pack(fill='x', pady=(3, 0))
+        self.entry = ttk.Entry(bar, textvariable=self.query, width=24)
         self.entry.pack(side='left', fill='x', expand=True)
         self.entry.bind('<Return>', lambda _event: self.redeem())
-        ttk.Button(bar, text='Resgatar código', command=self.redeem).pack(side='left', padx=(5, 0))
-        columns = [('id', 'ID', 72), ('nome', 'Carta', 240), ('codigo', 'Código', 150)]
-        if not by_id:
-            columns.append(('custo', 'Star Chips', 110))
+        ttk.Button(bar, text='Resgatar carta', style='Accent.TButton',
+                   command=self.redeem).pack(side='left', padx=(5, 0))
+        columns = [('id', 'ID', 65), ('nome', 'Carta', 230), ('codigo', 'Código', 136)]
+        columns.append(('ps1', 'Código PS1', 96) if by_id else ('custo', 'Star Chips no PS1', 130))
         self.tree = _tree(self, columns)
         self.tree.bind('<Double-1>', lambda _event: self._open())
         actions = ttk.Frame(self)
         actions.pack(fill='x', pady=(7, 0))
         if reload_codes is not None:
             ttk.Button(actions, text='Ler códigos do BIN/CUE', command=self._reload).pack(side='left')
+        if by_id:
+            self.copy_ps1 = ttk.Button(actions, text='Copiar código PS1', command=lambda: self._copy(ps1=True))
+            self.copy_ps1.pack(side='left')
         ttk.Button(actions, text='Copiar código', command=self._copy).pack(side='right', padx=(6, 0))
-        ttk.Button(actions, text='Abrir carta', command=self._open, style='Accent.TButton').pack(side='right')
-        ttk.Label(self, textvariable=self.status, foreground=ACCENT, wraplength=630).pack(anchor='w', pady=(7, 0))
+        ttk.Button(actions, text='Abrir carta', command=self._open).pack(side='right')
+        ttk.Label(self, textvariable=self.status, foreground=ACCENT, wraplength=520).pack(anchor='w', pady=(7, 0))
         self.query.trace_add('write', lambda *_: self.render())
         self.render()
+
+    def _ps1_code(self, cid):
+        prefix = self.project.metadata.get(PS1_ID_PREFIX)
+        if prefix is not None and cid <= CARD_COUNT and not self.cards[cid].get('virtual'):
+            return ps1_id_code(prefix, cid)
+        return '—'
 
     def render(self, results=None):
         self.tree.delete(*self.tree.get_children())
         query = self.query.get().strip().casefold()
         ids = sorted(self.cards if self.by_id else self.records) if results is None else results
+        index = 0
         for cid in ids:
             name = display_name(cid, self.cards)
             code = id_code(cid) if self.by_id else self.records[cid].code
+            extra = self._ps1_code(cid) if self.by_id else self.records[cid].cost
             if results is None and query and not any(query in item.casefold() for item in (f'#{cid}', name, code)):
                 continue
-            values = [compact_number(cid), name, code]
-            if not self.by_id:
-                values.append(self.records[cid].cost if self.records[cid].cost is not None else '—')
-            self.tree.insert('', 'end', iid=str(cid), values=values)
+            self.tree.insert('', 'end', iid=str(cid),
+                             values=(compact_number(cid), name, code, '—' if extra is None else extra),
+                             tags=('stripe',) if index % 2 else ())
+            index += 1
         if self.by_id:
-            self.status.set('Busque por nome, ID ou código FM. Use códigos por ID no Studio.')
+            prefix = self.project.metadata.get(PS1_ID_PREFIX)
+            self.copy_ps1.configure(state='disabled' if prefix is None else 'normal')
+            self.status.set('Digite o ID da carta ou selecione uma linha.' if prefix is None else
+                            f'No BIN/CUE, digite {prefix:05d} e o ID com três dígitos. Custo de 1 Star Chip.')
         elif not self.records:
-            self.status.set('Carregue os passwords de oito dígitos da imagem vinculada ao projeto.')
+            self.status.set('Carregue a tabela original do BIN/CUE vinculado ao projeto.')
         else:
-            self.status.set('Busque por nome, ID ou password original de oito dígitos.')
+            self.status.set('O resgate no simulador adiciona uma cópia ao baú.')
 
     def redeem(self):
         try:
-            query = self.query.get()
-            ids = [redeem_id(query, self.cards)] if self.by_id else redeem_original(query, self.records)
-            self.render(ids)
-            self.tree.selection_set(str(ids[0]))
-            self.tree.see(str(ids[0]))
-            self.status.set(f'{len(ids)} carta(s) localizada(s).')
-        except (ModError, ValueError) as exc:
+            cid = self._selection()
+            if cid is None:
+                query = self.query.get()
+                if self.by_id:
+                    cid = redeem_id(query, self.cards)
+                else:
+                    ids = redeem_original(query, self.records)
+                    if len(ids) > 1:
+                        self.render(ids)
+                        self.status.set('Selecione a carta desejada para concluir o resgate.')
+                        return
+                    cid = ids[0]
+            count = self.grant(cid)
+            self.render([cid])
+            self.tree.selection_set(str(cid))
+            self.tree.see(str(cid))
+            self.status.set(f'{display_name(cid, self.cards)} resgatada · {count} no baú.')
+        except (ModError, ValueError, OSError) as exc:
             self.status.set(str(exc))
 
     def _selection(self):
         chosen = self.tree.selection()
         return int(chosen[0]) if chosen else None
 
-    def _copy(self):
+    def _copy(self, *, ps1=False):
         cid = self._selection()
-        if cid is not None:
+        if cid is None:
+            self.status.set('Selecione uma carta para copiar seu código.')
+            return
+        if ps1:
+            code = self._ps1_code(cid)
+            if code == '—':
+                self.status.set('Esta carta usa código de resgate do Studio.')
+                return
+        else:
             code = id_code(cid) if self.by_id else self.records[cid].code
-            self.clipboard_clear()
-            self.clipboard_append(code)
-            self.status.set('Código copiado.')
+        self.clipboard_clear()
+        self.clipboard_append(code)
+        self.status.set('Código copiado.')
 
     def _open(self):
         cid = self._selection()
@@ -116,33 +158,111 @@ class PasswordPanel(ttk.Frame):
                 self.records = self.reload_codes(Path(source))
                 self.render()
             except (ModError, ValueError, OSError) as exc:
-                messagebox.showerror('Passwords originais', str(exc), parent=self)
+                self.status.set(str(exc))
 
 
 class PasswordsDialog(tk.Toplevel):
-    def __init__(self, studio, project, cards, originals):
-        super().__init__(studio)
-        self.title('Passwords de cartas')
-        self.transient(studio)
-        self.geometry('680x460')
-        self.minsize(550, 330)
+    def __init__(self, studio, project, cards, originals, *, owner=None, changed=None):
+        owner = owner or studio
+        super().__init__(owner)
+        self.title('Passwords e baú')
+        self.transient(owner)
+        self.geometry('710x500')
+        self.minsize(580, 395)
+        self.project, self.cards = project, cards
+        self.studio, self.changed = studio, changed
+        self.into_starter = tk.BooleanVar()
+        self.starter = tk.StringVar(value='Deck do baú')
+        self.ps1_enabled = tk.BooleanVar(value=PS1_ID_PREFIX in project.metadata)
+
         tabs = ttk.Notebook(self)
-        tabs.pack(fill='both', expand=True, padx=10, pady=10)
+        tabs.pack(fill='both', expand=True, padx=10, pady=(10, 5))
+        previous_grab = self.grab_current()
+
+        def close():
+            self.destroy()
+            if previous_grab is not None and previous_grab.winfo_exists():
+                previous_grab.grab_set()
 
         def reveal(cid):
-            studio.select_card(cid)
-            self.destroy()
+            if studio.project is project:
+                studio.select_card(cid)
+            close()
 
         self.original = PasswordPanel(tabs, cards, by_id=False, open_card=reveal,
+                                      grant=self._grant,
                                       reload_codes=lambda path: import_original_passwords(project, path))
         self.original.records = originals
         self.original.render()
-        self.ids = PasswordPanel(tabs, cards, by_id=True, open_card=reveal)
-        tabs.add(self.original, text='Códigos Originais')
+        self.ids = PasswordPanel(tabs, cards, by_id=True, open_card=reveal,
+                                 grant=self._grant, project=project)
+        chest = ttk.Frame(tabs, padding=9)
+        self.chest = _tree(chest, [('id', 'ID', 70), ('nome', 'Carta', 290), ('qtd', 'Cópias', 90)])
+        self.chest.bind('<Double-1>', lambda _e: reveal(int(self.chest.selection()[0]))
+                        if self.chest.selection() else None)
+        tabs.add(self.original, text='Códigos originais')
         tabs.add(self.ids, text='Códigos por ID')
-        self.bind('<Escape>', lambda _event: self.destroy())
+        tabs.add(chest, text='Baú')
+        if owner is not studio or not originals:
+            tabs.select(self.ids)
+
+        footer = ttk.Frame(self, padding=(12, 1, 12, 10))
+        footer.pack(fill='x')
+        if ps1_supports_god24(project):
+            ttk.Checkbutton(footer, text='Ativar passwords por ID no BIN/CUE Drop x15',
+                            variable=self.ps1_enabled, command=self._toggle_ps1).pack(anchor='w')
+        destination = ttk.Frame(footer)
+        destination.pack(fill='x', pady=(4, 3))
+        ttk.Checkbutton(destination, text='Adicionar também ao deck inicial',
+                        variable=self.into_starter, command=self._destination).pack(side='left')
+        self.profile = ttk.Combobox(destination, textvariable=self.starter, width=21, state='disabled')
+        self.profile.pack(side='left', fill='x', expand=True, padx=(5, 0))
+        ttk.Button(destination, text='Fechar', command=close).pack(side='right', padx=(6, 0))
+        self._refresh_chest()
+        self.protocol('WM_DELETE_WINDOW', close)
+        self.bind('<Escape>', lambda _event: close())
         self.grab_set()
-        self.original.entry.focus_set()
+        (self.ids.entry if tabs.select() == str(self.ids) else self.original.entry).focus_set()
+
+    def _check_project(self):
+        if self.studio.project is not self.project or self.studio._extract_running:
+            raise ModError('Abra os passwords no projeto disponível.')
+
+    def _destination(self):
+        self.profile.configure(state='normal' if self.into_starter.get() else 'disabled')
+
+    def _refresh_chest(self):
+        self.chest.delete(*self.chest.get_children())
+        for index, (key, count) in enumerate(sorted(chest_cards(self.project).items(), key=lambda item: int(item[0]))):
+            cid = int(key)
+            self.chest.insert('', 'end', iid=key, values=(compact_number(cid), display_name(cid, self.cards), count),
+                              tags=('stripe',) if index % 2 else ())
+        self.profile.configure(values=list(self.project.metadata.get(CONFIG_KEY, {}).get('iniciais', {})))
+
+    def _grant(self, cid):
+        self._check_project()
+        starter = self.starter.get().strip() if self.into_starter.get() else None
+        if starter == STOCK_STARTER:
+            raise ModError('Escolha outro nome para o deck inicial.')
+        count = grant_card(self.project, cid, starter=starter)
+        self._refresh_chest()
+        if self.changed:
+            self.changed(starter)
+        return count
+
+    def _toggle_ps1(self):
+        try:
+            self._check_project()
+            set_ps1_id_passwords(self.project, self.ps1_enabled.get())
+        except (ModError, ValueError, OSError) as exc:
+            self.ps1_enabled.set(PS1_ID_PREFIX in self.project.metadata)
+            self.ids.status.set(str(exc))
+            self.original.status.set(str(exc))
+            return
+        self.ids.render()
+        caption = 'Passwords por ID ativados para a próxima geração BIN/CUE.' if self.ps1_enabled.get() else 'Passwords por ID desativados no BIN/CUE.'
+        self.original.status.set(caption)
+        self.studio.notify(caption)
 
 
 def _suggest_quantities(cards, effects, default_copies, fixed):

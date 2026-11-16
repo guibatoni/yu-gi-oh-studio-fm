@@ -12,9 +12,11 @@ Nao mova ou apague FM-Mod-Studio-Updater.exe: ele e necessario para as
 atualizacoes automáticas. Se uma atualizacao falhar, veja o arquivo:
 %LOCALAPPDATA%\FM-Mod-Studio\logs\atualizador.log
 
-Na aba Edicao do Mod, use Simular duelo para jogar com os decks, LP e
-regras do seu projeto. Gerar jogo BIN/CUE grava as regras compativeis
-que aparecem no relatorio de exportacao do Drop x15.
+Na aba Edicao do Mod, use Jogar duelo para jogar com os decks, LP e
+regras do seu projeto. Abra Passwords e bau para resgatar cartas por
+codigo original ou ID. Use Drops do oponente para ativar recompensas
+do proprio deck. Gerar jogo BIN/CUE grava as regras do Drop x15 que
+aparecem no relatorio de exportacao.
 
 Codigo e atualizacoes:
 https://github.com/guibatoni/yu-gi-oh-studio-fm
