@@ -124,8 +124,12 @@ class StudioCoreTests(unittest.TestCase):
         with self.assertRaises(ModError): self.p.export()
 
     def test_bad_values(self):
-        with self.assertRaises(ModError): check_card_edit({'ataque':5130})
-        with self.assertRaises(ModError): check_card_edit({'defesa':111})
+        # Estatísticas altas e valores fora dos múltiplos de 10 são válidos
+        # no Studio, mas exportação PS1 deve recusá-los antes da gravação.
+        self.assertEqual(check_card_edit({'ataque':5130})['ataque'],5130)
+        self.assertEqual(check_card_edit({'defesa':111})['defesa'],111)
+        with self.assertRaises(ModError): check_card_edit({'ataque':-1})
+        with self.assertRaises(ModError): check_card_edit({'defesa':'a'*65})
         with self.assertRaises(ModError): check_effect({'evento':'invocar','acao':'comer','alvo':'proprio','valor':100})
         with self.assertRaises(ModError): check_effect({'evento':'invocar','acao':'cura_lp','alvo':'inimigo','valor':0})
 
