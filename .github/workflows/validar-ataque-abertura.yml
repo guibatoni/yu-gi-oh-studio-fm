@@ -1,0 +1,25 @@
+name: Validar Studio FM 1.6.1
+on:
+  push:
+    branches: ['validation/studio-v1.6.1']
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar compilador MIPS e Python
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gcc-mipsel-linux-gnu binutils-mipsel-linux-gnu python3-tk python3-pil python3-venv xvfb xauth
+          /usr/bin/python3 -m venv --system-site-packages "$RUNNER_TEMP/studio-env"
+          "$RUNNER_TEMP/studio-env/bin/python" -m pip install unicorn==2.1.4
+      - name: Compilar extensão e mostrar o blob gerado
+        run: |
+          python3 tools/compile_ps1_runtime.py
+          echo STUDIO_RUNTIME_BEGIN
+          cat fmstudio/ps1_runtime_blob.py
+          echo STUDIO_RUNTIME_END
+      - name: Exercitar o seletor de ataque em MIPS
+        run: PYTHONPATH=. "$RUNNER_TEMP/studio-env/bin/python" tests/verify_mips_opening.py
