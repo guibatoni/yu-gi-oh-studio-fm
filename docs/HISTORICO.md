@@ -1,3 +1,14 @@
+## v1.4.19 — Fluxo de God24 como magia no duelo
+
+- Confirmado o problema depois de v1.4.18: valores ATK/DEF aparecem,
+  mas o motor continua tratando God24 como carta especial.
+- Adicionado diagnóstico read-only das decisões de mão, colocação,
+  ativação especial, campo e criação de registro.
+- Coletados limites de tipo, máscaras, saltos e contexto MIPS,
+  preservando o SLUS original.
+- Novos testes sintéticos sem alterações na jogabilidade atual.
+- Não corrige invocação/combat; testes em ePSXe para isso pendentes.
+
 ## v1.4.18 — Patch experimental do renderizador verdadeiro do baú
 
 - Função func_80031874 corrigida na cópia BIN: três instruções MIPS.

@@ -13,6 +13,7 @@ import struct
 from pathlib import Path
 from .core import ModError
 from .tables import EXE_DELTA
+from .ps1_god24_duel import analyze_god24_duel
 
 # Funções documentadas pela recompilação SLUS_014.11. São endereços da
 # versão original, não promessas de endereços equivalentes em MODs.
@@ -650,7 +651,7 @@ def analyze_project_effects(project) -> dict:
             else:unknown.append(record)
     limit=project.metadata.get('ps1_deck_global_limit')
     return {
-        'versao_perfil':4,'alvo':'SLUS_014.11 (PS1 MIPS)',
+        'versao_perfil':5,'alvo':'SLUS_014.11 (PS1 MIPS)',
         'sha256_executavel_origem':hashlib.sha256(exe).hexdigest(),
         'funcoes_encontradas':scan_effect_sites(exe),
         'amostras_instrucoes_mips':{alias:inspect_function_instructions(exe,alias)
@@ -659,6 +660,7 @@ def analyze_project_effects(project) -> dict:
         'diagnostico_icone_tipo_god':diagnose_god_type_icon(exe),
         'chamadas_mips_icone_tipo_god':scan_god24_render_calls(exe),
         'diagnostico_god24_classe_monstro':diagnose_god24_monster_classification(exe),
+        'diagnostico_god24_fluxo_duelo':analyze_god24_duel(exe),
         'probe_lp_inicial':probe_initial_duel_lp(exe,project.metadata.get('ps1_starting_lp')),
         'perfil_limite_global_deck':deck_global_patch_probe(exe,limit),
         'grupos_programados_no_studio':grouped,

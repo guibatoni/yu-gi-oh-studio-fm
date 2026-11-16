@@ -1470,6 +1470,8 @@ class Studio(tk.Tk):
             identity=ic.get('comparacao_com_relatorio_anterior','sem comparação')
             god_class=report.get('diagnostico_god24_classe_monstro',{})
             god_predicates=god_class.get('comparacoes_imediato_20_total','sem validação')
+            duel_flow=report.get('diagnostico_god24_fluxo_duelo',{})
+            hand_candidates=duel_flow.get('rotinas',{}).get('mao',{}).get('encontrados','indisponível')
             deck=report['perfil_limite_global_deck']
             msg=(f'Funções MIPS encontradas: {ready}/{len(report["funcoes_encontradas"])}\n'
                  f'Efeitos cadastrados: {groups}\n'
@@ -1481,6 +1483,9 @@ class Studio(tk.Tk):
                  f'God24 como monstro: {god_predicates} possível(is) comparação(ões) '
                  'com 20 nas rotinas pesquisadas.\n'
                  'ATK/DEF em branco: tipo 24 não passa a verificação de monstro.\n'
+                 f'Fluxo da mão em duelo: {hand_candidates} candidatos MIPS analisados.\n'
+                 'God24 ainda é tratado como magia durante o duelo.\n'
+                 'Detalhes da mão e colocação no campo registrados no JSON.\n'
                  'A pesquisa NÃO ativou patch de invocação nem ícone.\n'
                  'Amostras de instruções MIPS adicionadas ao relatório.\n\n'
                  'Os endereços são referências do PS1 original; MODs podem usar hooks.\n'

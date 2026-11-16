@@ -1,3 +1,28 @@
+# Studio FM v1.4.19 — God24 tratado como magia no duelo
+
+O teste no ePSXe confirmou que o tipo God (24) agora exibe ATK/DEF no
+baú, mas ainda é tratado como carta especial quando usado na mão. A
+correção de renderização v1.4.18 não alterou o motor do duelo.
+
+O novo módulo ps1_god24_duel.py investiga cinco regiões do executável:
+DuelScene_UpdateHandActions, DuelScene_UpdateCardUse,
+DuelScene_UpdateCardPlacement, DuelScene_UpdateFieldActions e
+Duel_SetupCardRecord. O relatório Efeitos > Diagnosticar motor MIPS
+agora inclui a seção diagnostico_god24_fluxo_duelo com endereços,
+instruções, branches e seu contexto para cada rotina, até 48
+amostras por região. Nenhuma alteração é gravada por essa análise.
+
+O objetivo técnico é manter os tipos 00–19 como monstros, 20–23
+como Magia/Equip/Armadilha/Ritual e permitir SOMENTE God24 como
+monstro adicional na mão, campo e batalha. A alteração do limite
+20 diretamente para 25 não é segura. O patch de jogabilidade ainda
+não foi implantado e requer validação dos opcodes reais do mod.
+
+Referência:
+https://github.com/Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled
+
+---
+
 # Studio FM v1.4.18 — God24 na lista real do baú (teste experimental)
 
 O diagnóstico do usuário confirmou que as duas máscaras antigas estavam
