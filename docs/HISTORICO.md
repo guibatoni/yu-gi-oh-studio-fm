@@ -1,3 +1,8 @@
+## v1.4.26 — Exportação de ícones sem Pillow
+
+- A geração de BIN/CUE lê os dez ícones de descrição com a biblioteca
+  padrão do Python, incluindo a bota alada em PNG indexado.
+
 ## v1.4.25 — Efeitos de duelo e descrições no PS1
 
 - Ataques 2x/3x, imunidades, indestrutibilidade e bônus de ATK/DEF

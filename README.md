@@ -1,3 +1,11 @@
+# Studio FM v1.4.26 — Exportação de ícones sem Pillow
+
+A geração de BIN/CUE com ícones de descrição funciona no modo Python
+com as bibliotecas padrão. Atualize o Studio e gere novamente a cópia
+a partir da imagem original usada no projeto.
+
+---
+
 # Studio FM v1.4.25 — Efeitos de duelo e descrições no PS1
 
 No **Yu-Gi-Oh! FM Original (Drop x15)**, o Studio grava as habilidades

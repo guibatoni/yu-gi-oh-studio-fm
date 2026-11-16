@@ -8,7 +8,7 @@ from .core import ModError
 from .deep_extract import BANK_DESC, STRING_TABLE, exe_pos, glyph_map
 from .ps1_content import _encode_description, description_slot
 from .ps1_god24_display import GOLD_PALETTE, ICON_ROWS
-from .ps1_god_icon import PALETTE_OFFSET, ROW_BYTES, god_glyph_rows, god_icon_asset
+from .ps1_god_icon import PALETTE_OFFSET, ROW_BYTES, decode_icon_png, god_glyph_rows, god_icon_asset
 from .ps1_runtime import BANK_END, DUEL_STATE
 from .richtext import CUSTOM_ICONS
 from .tables import CARD_COUNT
@@ -110,17 +110,7 @@ def patch_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
 
 def _indexed_sprite(name: str) -> tuple[list[bytes], bytes]:
     """Give each icon a dedicated 4bpp CLUT, with index zero transparent."""
-    try:
-        from PIL import Image
-    except ImportError as exc:
-        raise ModError('Ícones personalizados exigem Pillow no modo Python do Studio.') from exc
-    try:
-        with Image.open(god_icon_asset().with_name(name + '.png')) as image:
-            if image.size != (16, 16):
-                raise ModError(f'Ícone {name} deve ter 16 × 16 pixels.')
-            pixels = list(image.convert('RGBA').getdata())
-    except OSError as exc:
-        raise ModError(f'Ícone {name} ausente ou inválido.') from exc
+    pixels = decode_icon_png(god_icon_asset().with_name(name + '.png'))
     colors = [0]
     indices = []
     for red, green, blue, alpha in pixels:

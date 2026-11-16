@@ -9,11 +9,13 @@ from pathlib import Path
 from fmstudio.core import ModError
 from fmstudio.ps1_god_icon import (
     ICON_PALETTE_SECTOR, PALETTE_OFFSET, ICON_SHEET_SECTOR,
-    GLYPH_U, GLYPH_V, TOKEN_BYTES, glyph_rows,
+    GLYPH_U, GLYPH_V, ROW_BYTES, TOKEN_BYTES, glyph_rows,
     patch_god_glyph, patch_god_icon_description, god_icon_asset, decode_god_png,
     FREE_SLOT_CANDIDATES, NoFreeGodIconSlot, icon_cell_start, try_patch_god_icon,
 )
 from fmstudio.deep_extract import exe_pos, BANK_DESC, STRING_TABLE
+from fmstudio.ps1_god24_display import GOLD_PALETTE, ICON_ROWS
+from fmstudio.ps1_text import ICON_CODES, patch_descriptions, patch_icons
 
 
 class GodIconNativeTests(unittest.TestCase):
@@ -41,6 +43,26 @@ class GodIconNativeTests(unittest.TestCase):
             output,report=patch_god_glyph(self.fixture_wa(),god_icon_asset())
             self.assertEqual(report['status'],'glifo_inserido_em_celula_vazia')
             self.assertTrue(any(any(r) for r in glyph_rows(output)))
+
+    def test_all_description_icons_export_without_pillow(self):
+        exe, _ = self.fixture_exe()
+        wa = bytearray(self.fixture_wa())
+        wa[GOLD_PALETTE:GOLD_PALETTE+32] = wa[PALETTE_OFFSET:PALETTE_OFFSET+32]
+        edited = ''.join(f'{{icon:{name}}}' for name in ICON_CODES)
+        with patch.dict('sys.modules', {'PIL': None, 'PIL.Image': None}):
+            slus, rows, icons, pending = patch_descriptions(exe, {16: edited}, {})
+            self.assertFalse(pending)
+            expected = b''.join(bytes((0xF8, 0x0B, code)) for code in ICON_CODES.values()) + b'\xff'
+            offset = rows[0]['offset_exe']
+            self.assertEqual(slus[offset:offset+len(expected)], expected)
+            self.assertEqual(icons, set(ICON_CODES))
+            output = patch_icons(wa, icons)
+            self.assertEqual(len(output), len(wa))
+            self.assertEqual(patch_icons(output, icons), output)
+        for name, code in ICON_CODES.items():
+            first = ICON_ROWS[0] if name == 'god' else ICON_ROWS[0] + (code - 0x40 + 1) * 8
+            self.assertTrue(any(any(output[start:start+8])
+                                for start in range(first, first+16*ROW_BYTES, ROW_BYTES)), name)
 
     def test_reject_corrupted_or_truncated_png(self):
         original=god_icon_asset().read_bytes()
