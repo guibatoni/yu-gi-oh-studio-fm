@@ -1,3 +1,12 @@
+## v1.5.1 — God 24 na seleção de tipo
+
+- A geração do BIN/CUE Drop x15 usa os tipos salvos para aplicar o
+  ícone, o nome e o roteamento de monstro de God 24.
+- Projetos antigos abrem normalmente e permitem trocar o Time Wizard
+  de volta para Spellcaster e gerar o jogo.
+- A verificação do BIN/CUE identifica uma cópia que ainda contém
+  cartas convertidas de volta para outro tipo no projeto.
+
 ## v1.5.0 — Edição do Mod e partidas contra IA
 
 - Compra do topo de baralhos embaralhados, combate desde o primeiro

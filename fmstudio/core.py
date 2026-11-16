@@ -14,6 +14,7 @@ from pathlib import Path
 from .tables import (CARD_COUNT, EXE_DELTA, LEVEL_ADDR, STATS_ADDR, SUPREME, decode_all,
                      sha256, TYPE_NAMES, ATTR_NAMES, STAR_NAMES)
 from .disc import DiscReader, DiscError
+from .expanded import GOD_TYPE_ID
 from .rarities import DEFAULT_RARITY, validate_rarity, name_style
 
 SCHEMA_VERSION = 1
@@ -154,24 +155,36 @@ def ps1_stat_export_errors(project) -> list[str]:
     return errors
 
 
+def ps1_supports_god24(project) -> bool:
+    """Identifica o perfil que tem nome, ícone e roteamento God24."""
+    from .ps1_god24_chest import SOURCE_SHA256
+    metadata = getattr(project, 'metadata', {}) or {}
+    return metadata.get('base_sha256', {}).get('slus') == SOURCE_SHA256
 
 
-def god24_experiment_enabled(project, cid: int) -> bool:
-    """Permissão EXPLÍCITA para escrever valor 24 no campo tipo de 5 bits.
+def ps1_god24_card_ids(project) -> list[int]:
+    """IDs originais com o tipo God salvo no projeto."""
+    return sorted(cid for cid in getattr(project, 'cards', {})
+                  if 1 <= cid <= CARD_COUNT
+                  and int(project.get(cid)['tipo_id']) == GOD_TYPE_ID)
 
-    Não habilita a jogabilidade do God no PS1. Apenas permite provar
-    empiricamente o comportamento, sem mutar outras cartas do projeto.
-    """
-    metadata = getattr(project,'metadata',{}) or {}
-    selected = metadata.get('ps1_god_type_test_card_id')
-    return (type(selected) is int and type(cid) is int and
-            1 <= cid <= CARD_COUNT and selected == cid and
-            int(project.get(cid)['tipo_id']) == 24)
+
+def legacy_god_description_icon_card(project) -> int | None:
+    """Preserva o glifo avulso dos projetos anteriores."""
+    metadata = getattr(project, 'metadata', {}) or {}
+    cid = metadata.get('ps1_god_icon_test_card_id')
+    if (type(cid) is int and 1 <= cid <= CARD_COUNT
+            and cid in getattr(project, 'cards', {})
+            and cid != metadata.get('ps1_god_type_test_card_id')
+            and 0 <= int(project.get(cid)['tipo_id']) < 20):
+        return cid
+    return None
 
 
 def ps1_unwritable_numeric_edits(project) -> list[str]:
     """Recusa edição numérica que o gerador anterior ignorava silenciosamente."""
     errors=[]
+    supports_god=ps1_supports_god24(project)
     for key, fields in sorted(getattr(project,'edits',{}).items(),key=lambda pair:int(pair[0])):
         cid=int(key)
         if cid < 1 or cid > CARD_COUNT or not (set(fields)&set(NUMERIC)):
@@ -180,14 +193,11 @@ def ps1_unwritable_numeric_edits(project) -> list[str]:
         typ=int(current['tipo_id'])
         attr=int(current['atributo_id'])
         name=str(current.get('nome') or '')
-        if typ >= 24 and not god24_experiment_enabled(project,cid):
-            errors.append(
-                f'Carta #{cid:03d} {name}: tipo {typ} requer teste PS1 '
-                'explícito. Para God 24, selecione a carta e ative '
-                '"Teste no BIN: símbolo Deus", ou confirme a experiência '
-                'quando clicar em "Gerar jogo BIN/CUE". '
-                'Não alteramos seu tipo para Spellcaster.'
-            )
+        if typ == GOD_TYPE_ID and not supports_god:
+            errors.append(f'Carta #{cid:03d} {name}: God 24 no PS1 exige '
+                          'o executável do perfil Drop x15 vinculado ao projeto.')
+        elif typ > GOD_TYPE_ID:
+            errors.append(f'Carta #{cid:03d} {name}: tipo {typ} incompatível com o motor PS1.')
         if attr > 5:
             errors.append(
                 f'Carta #{cid:03d} {name}: atributo {attr} não é suportado '
@@ -906,9 +916,7 @@ class Project:
                     'alerta':'Efeitos e textos NÃO foram implementados no motor PS1 nesta versão',
                     'patch_jogavel':False, 'arquivos': ['alteracoes_cartas.json','novas_cartas.json','classes_cartas.json','textos_e_codigos.json','efeitos_planejados.json','artes_referencia.json'],
                     'cartas_virtuais':len(self.new_cards),
-                    'tipo_god_status':('TIPO_24_GRAVADO_EXPERIMENTAL_NAO_VALIDADO_EPSXE'
-                                       if any(god24_experiment_enabled(self,int(k))
-                                              for k in self.edits) else 'EDITOR_ONLY')}
+                    'tipo_god_status':'EDITOR_ONLY'}
         if 'edicao_mod' in self.metadata:
             _write_json_atomic(output/'edicao_mod.json', self.metadata['edicao_mod'])
             manifest['arquivos'].append('edicao_mod.json')
@@ -920,10 +928,8 @@ class Project:
             byte_diffs = []
             for row in changes:
                 cid = row['id']
-                if cid > CARD_COUNT: continue
-                if int(self.get(cid)['tipo_id']) >= 24 and not god24_experiment_enabled(self,cid):
-                    raise ModError(f'Carta #{cid:03d}: tipo 24+ sem autorização de '
-                                   'teste God 24 no PS1. Nenhum byte foi alterado.')
+                if cid > CARD_COUNT or not (set(row) & set(NUMERIC)):
+                    continue
                 base = self.cards[cid]
                 off = STATS_ADDR - EXE_DELTA + (cid - 1) * 4
                 before = struct.unpack_from('<I', data, off)[0]
@@ -954,6 +960,8 @@ class Project:
             _write_json_atomic(output/'mudancas_binarias.json',byte_diffs)
             manifest['arquivos'].extend(['build_local/SLUS_014.11','mudancas_binarias.json'])
             manifest['slus_modificado_sha256'] = hashlib.sha256(data).hexdigest()
+            if ps1_supports_god24(self) and ps1_god24_card_ids(self):
+                manifest['tipo_god_status'] = 'TIPO_24_GRAVADO_NO_SLUS_AUXILIAR'
             manifest['observacao_executavel'] = ('Executável auxiliar modificado localmente; NÃO é imagem BIN/CUE '
                 'jogável e não deve ser distribuído. Ainda faltam empacotamento do disco e testes in-game.')
         _write_json_atomic(output/'manifesto.json',manifest)

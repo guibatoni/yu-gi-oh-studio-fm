@@ -47,7 +47,7 @@ class StudioCoreTests(unittest.TestCase):
         source_sha=hashlib.sha256(self.file.read_bytes()).hexdigest()
         # Reproduz captura do usuário: Time Wizard com ATK 3000 e tipo God.
         self.p.set_card(16, {'ataque':3000, 'tipo_id':24})
-        with self.assertRaisesRegex(ModError,'teste PS1 explícito'):
+        with self.assertRaisesRegex(ModError,'Drop x15'):
             self.p.export()
         self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),source_sha)
         # A escolha do usuário prevalece: NÃO é necessário voltar para Spellcaster.
@@ -60,32 +60,30 @@ class StudioCoreTests(unittest.TestCase):
         self.assertEqual(self.p.get(16)['raridade'],'deus')
         self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),source_sha)
 
-    def test_explicit_god24_experiment_writes_exact_type_and_attack(self):
-        from fmstudio.core import god24_experiment_enabled
+    def test_saved_god24_types_write_exact_stats_on_supported_profile(self):
+        from unittest.mock import patch
+        from fmstudio.core import ps1_god24_card_ids
+        from fmstudio.drafts import DraftSession
         from fmstudio.tables import decode_cards
         original_sha=hashlib.sha256(self.file.read_bytes()).hexdigest()
         self.p.set_card(16, {'ataque':3000,'defesa':400,'tipo_id':24,
                              'raridade':'deus'})
-        self.assertFalse(god24_experiment_enabled(self.p,16))
-        self.p.metadata['ps1_god_type_test_card_id']=16
-        self.assertTrue(god24_experiment_enabled(self.p,16))
-        self.assertFalse(god24_experiment_enabled(self.p,17))
-        output,manifest=self.p.export()
-        exe=(output/'build_local'/'SLUS_014.11').read_bytes()
-        cards,_=decode_cards(exe)
-        self.assertEqual(cards[15]['tipo_id'],24)
-        self.assertEqual(cards[15]['ataque'],3000)
-        self.assertEqual(cards[15]['defesa'],400)
+        with patch('fmstudio.ps1_god24_chest.SOURCE_SHA256', original_sha):
+            draft=DraftSession(self.p)
+            draft.choose_playable_monster_type(17,24)
+            draft.save()
+            self.assertEqual(ps1_god24_card_ids(self.p),[16,17])
+            output,manifest=self.p.export()
+            exe=(output/'build_local'/'SLUS_014.11').read_bytes()
+            cards,_=decode_cards(exe)
+            self.assertEqual(cards[15]['tipo_id'],24)
+            self.assertEqual(cards[15]['ataque'],3000)
+            self.assertEqual(cards[15]['defesa'],400)
+            self.assertEqual(cards[16]['tipo_id'],24)
         self.assertEqual(manifest['tipo_god_status'],
-                         'TIPO_24_GRAVADO_EXPERIMENTAL_NAO_VALIDADO_EPSXE')
+                         'TIPO_24_GRAVADO_NO_SLUS_AUXILIAR')
         self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),
                          original_sha)
-        self.p.metadata['ps1_god_type_test_card_id']=17
-        with self.assertRaisesRegex(ModError,'teste'):
-            self.p.export()
-        self.p.metadata['ps1_god_type_test_card_id']=True
-        with self.assertRaises(ModError):
-            self.p.export()
 
     def test_large_stats_saved_for_simulator_but_ps1_export_blocked(self):
         from fmstudio.core import simulation_nonnegative_int, check_card_edit

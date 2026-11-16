@@ -1,3 +1,10 @@
+## v1.5.1 — God 24 no Drop x15
+
+Nas cartas originais (#001–#722), o tipo salvo determina a exportação.
+Ao gerar o BIN/CUE do Drop x15, cartas God (24) recebem automaticamente
+o suporte de monstro em duelo e o nome e ícone nos detalhes. Ao retirar
+o tipo da última carta God, o Studio gera a nova cópia sem esses patches.
+
 ## v1.5.0 — Regras do duelo e tabelas do Drop x15
 
 | Recurso | Studio | BIN/CUE Drop x15 |

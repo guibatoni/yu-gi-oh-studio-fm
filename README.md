@@ -1,3 +1,13 @@
+# Studio FM v1.5.1 — God 24 na seleção de tipo
+
+Em **Cartas**, escolha **24 — God** no campo **Tipo** e salve o
+projeto. Ao gerar o BIN/CUE a partir do Drop x15, o Studio inclui
+automaticamente o nome, o ícone e o suporte de monstro em duelo.
+Para voltar ao tipo original do Time Wizard, selecione **01 — Spellcaster**,
+salve e gere outra cópia do jogo.
+
+---
+
 # Studio FM v1.5.0 — Partidas contra IA e Edição do Mod
 
 Em **Edição do Mod**, selecione um duelista para editar drops por rank,

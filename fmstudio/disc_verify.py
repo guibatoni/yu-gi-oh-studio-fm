@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import struct
 from pathlib import Path
-from .core import ModError, god24_experiment_enabled
+from .core import ModError, ps1_god24_card_ids, ps1_supports_god24
 from .disc import DiscReader, DiscError
+from .expanded import GOD_TYPE_ID
 from .tables import decode_cards, CARD_COUNT
 
 FIELDS = ('ataque', 'defesa', 'tipo_id', 'atributo_id', 'nivel',
@@ -50,10 +51,10 @@ def inspect_god24_chest_mips(exe: bytes) -> dict:
 
 def verify_image_stats(project, source):
     from .ps1_god24_display import inspect as inspect_god_display
-    from .ps1_runtime import SOURCE_SHA256, compile_effects, verify_effects
+    from .ps1_runtime import compile_effects, verify_effects
     from .ps1_mod import compile_mod, verify_executable, verify_wa, wa_sha
     config=getattr(project,'metadata',{}) or {}
-    profile=config.get('base_sha256',{}).get('slus')==SOURCE_SHA256
+    profile=ps1_supports_god24(project)
     mod_plan=compile_mod(project,profile=profile,
                          wa_verified=bool(config.get('edicao_mod') and wa_sha(project)))
     wa=b''
@@ -81,8 +82,9 @@ def verify_image_stats(project, source):
             continue
         requested = project.get(cid)
         original = project.cards[cid]
-        if (int(requested.get('tipo_id',0)) >= 24 and
-                not god24_experiment_enabled(project,cid)) or int(requested.get('atributo_id',0)) > 5:
+        typ=int(requested.get('tipo_id',0))
+        if (typ > GOD_TYPE_ID or (typ == GOD_TYPE_ID and not profile)
+                or int(requested.get('atributo_id',0)) > 5):
             if set(edits) & set(FIELDS):
                 raise ModError(f'Carta #{cid:03d}: tipo/atributo incompatível com '
                                'o motor PS1. Não é seguro omitir esta carta da '
@@ -102,15 +104,16 @@ def verify_image_stats(project, source):
             result.append({'id':cid,'nome':str(requested.get('nome','')),
                            'campos':fields,
                            'ok':all(f['ok'] for f in fields.values())})
-    experimental=[r['id'] for r in result
-                  if god24_experiment_enabled(project,r['id'])]
     card_types_24=[{'id':c['id'],'ataque':c['ataque'],'defesa':c['defesa']}
-                   for c in cards if c['tipo_id']==24]
+                   for c in cards if c['tipo_id']==GOD_TYPE_ID]
+    expected_gods=ps1_god24_card_ids(project)
+    actual_gods={c['id'] for c in card_types_24}
+    verified_gods=[cid for cid in expected_gods if cid in actual_gods]
+    god24_enabled=profile and bool(expected_gods)
     plan=compile_effects(project,profile)
     runtime=verify_effects(exe,plan)
     first_turn, life=verify_executable(exe,mod_plan)
-    cid=config.get('ps1_god_type_test_card_id')
-    tested=cards[cid-1] if type(cid) is int and 1<=cid<=CARD_COUNT else None
+    tested=cards[expected_gods[0]-1] if expected_gods else None
     chest=inspect_god24_chest_mips(exe)
     from .ps1_god24_chest import audit_god24_build_deck_rows
     row_renderer=audit_god24_build_deck_rows(exe)
@@ -130,15 +133,17 @@ def verify_image_stats(project, source):
             'god24_exibicao_tipo':god_display,
             'efeitos_nativos_ps1':runtime,
             'edicao_do_mod_ps1':{'ataque_primeiro_turno':first_turn,'lp':life,'tabelas':verify_wa(wa,mod_plan)},
-            'god24_teste_mao_ativado_no_projeto':bool(config.get('ps1_god_hand_preview')),
-            'god24_teste_bau_ativado_no_projeto':bool(config.get('ps1_god_chest_preview')),
+            'god24_teste_mao_ativado_no_projeto':god24_enabled,
+            'god24_teste_bau_ativado_no_projeto':god24_enabled,
+            'god24_cartas_esperadas':expected_gods,
+            'god24_tipos_conferem':actual_gods==set(expected_gods),
             'god24_total_cartas_no_bin':len(card_types_24),
             'god24_cartas_no_bin':card_types_24[:25],
             'god24_carta_teste_no_bin':(
-                {'id':cid,'tipo_id':tested['tipo_id'],'ataque':tested['ataque'],
+                {'id':tested['id'],'tipo_id':tested['tipo_id'],'ataque':tested['ataque'],
                  'defesa':tested['defesa']} if tested else None),
-            'god24_tipo_gravado_e_verificado':experimental,
-            'god24_aviso':'Byte tipo 24 verificado; comportamento no ePSXe NÃO confirmado.' if experimental else '',
+            'god24_tipo_gravado_e_verificado':verified_gods,
+            'god24_aviso':'Tipo 24 conferido na tabela do BIN.' if verified_gods else '',
             'total':len(result),'corretas':sum(r['ok'] for r in result),
             'divergentes':sum(not r['ok'] for r in result),'cartas':result}
 
@@ -158,7 +163,9 @@ def describe(result):
     if not mod.get('lp',True) or not mod.get('tabelas',True):
         text.append('Os LP ou as tabelas de duelistas desta cópia divergem do projeto.')
     if result.get('god24_tipo_gravado_e_verificado'):
-        text.append('God 24 gravado como 5 bits: SIM.')
+        text.append(f'God 24 gravado em {len(result["god24_tipo_gravado_e_verificado"])} carta(s).')
+    if not result.get('god24_tipos_conferem',True):
+        text.append('As cartas do tipo God no BIN divergem do projeto. Gere uma nova cópia.')
     if result.get('god24_total_cartas_no_bin') or result.get('god24_teste_bau_ativado_no_projeto'):
         status=result['god24_mascaras_bau']
         text.append('\nGOD24 — MÁSCARAS MIPS NO BIN/CUE SELECIONADO:')

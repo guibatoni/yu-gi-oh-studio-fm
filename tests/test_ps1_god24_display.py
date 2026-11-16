@@ -6,7 +6,9 @@ import unittest
 
 from fmstudio.core import ModError
 from fmstudio.deep_extract import NAME_TABLE
-from fmstudio.ps1_god24_display import GOLD_PALETTE, ICON_ROWS, NAME_OFFSET, REGIONS, apply, inspect
+from fmstudio.ps1_god24_display import (GOLD_PALETTE, ICON_ROWS, NAME_OFFSET, REGIONS, SPRITE_RAM,
+                                       apply, extended_sprite_words, inspect)
+from fmstudio.ps1_runtime_blob import RUNTIME, RUNTIME_BASE
 from fmstudio.tables import EXE_DELTA, STATS_ADDR
 
 
@@ -63,3 +65,13 @@ class God24DisplayTests(unittest.TestCase):
         self.wa[ICON_ROWS[0]] = 0x12
         with self.assertRaisesRegex(ModError, 'está ocupada'):
             apply(self.source, self.source, self.wa, source_sha256=self.digest)
+
+    def test_description_icons_can_be_present_without_the_god_type_icon(self):
+        exe = bytearray(self.source)
+        struct.pack_into('<28I', exe, SPRITE_RAM - EXE_DELTA, *extended_sprite_words())
+        self.assertEqual(inspect(exe)['status'], 'assinatura_divergente')
+        start = RUNTIME_BASE - EXE_DELTA
+        exe[start:start + len(RUNTIME)] = RUNTIME
+        report = inspect(exe)
+        self.assertEqual(report['status'], 'icones_de_descricao')
+        self.assertFalse(report['icone_instalado'])

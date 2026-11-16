@@ -8,8 +8,8 @@ import json
 from pathlib import Path
 from .tables import CARD_COUNT, SUPREME
 from .ps1_content import name_patch_info, description_patch_info
-from .core import ACTIONS, ModError, god24_experiment_enabled
-from .ps1_god24_chest import SOURCE_SHA256 as GOD24_SOURCE_SHA256
+from .core import ACTIONS, ModError, ps1_supports_god24
+from .expanded import GOD_TYPE_ID
 from .ps1_runtime import compile_effects
 from .ps1_mod import LP_CODE, LP_BANK_END, compile_mod
 
@@ -19,7 +19,7 @@ def audit(project) -> dict:
     exe=base.read_bytes() if base.is_file() else None
     pinned=project.metadata.get('base_sha256',{}).get('slus')
     known=bool(exe and pinned and hashlib.sha256(exe).hexdigest()==pinned)
-    native_profile=known and pinned==GOD24_SOURCE_SHA256
+    native_profile=known and ps1_supports_god24(project)
     native_plan=compile_effects(project,native_profile)
     wa_summary=project.folder/'base'/'resumo.json'
     wa_pinned=False
@@ -42,9 +42,11 @@ def audit(project) -> dict:
         changed=set(edits)
         numeric=changed & {'ataque','defesa','tipo_id','atributo_id','nivel','guardian_1_id','guardian_2_id'}
         if numeric:
-            if cid>CARD_COUNT or (int(current.get('tipo_id',0))>=24 and
-                                  not god24_experiment_enabled(project,cid)) or int(current.get('atributo_id',0))>5:
-                blocked.append(f'#{cid}: atributos de carta virtual/God sem teste autorizado/atributo não original requerem patch de motor')
+            typ=int(current.get('tipo_id',0))
+            if cid>CARD_COUNT or typ>GOD_TYPE_ID or int(current.get('atributo_id',0))>5:
+                blocked.append(f'#{cid}: carta adicional ou tipo/atributo incompatível com o PS1')
+            elif typ == GOD_TYPE_ID and not native_profile:
+                blocked.append(f'#{cid}: God 24 no PS1 exige o perfil Drop x15 vinculado ao projeto.')
             elif any(int(current.get(key,0)) == SUPREME for key in ('guardian_1_id','guardian_2_id')):
                 blocked.append(f'#{cid}: Supreme usa uma Guardian Star do Studio.')
             elif any(
@@ -55,20 +57,9 @@ def audit(project) -> dict:
                 blocked.append(f'#{cid}: SLUS original ainda não vinculado/verificado')
             else:
                 counts['estatisticas']+=1
-                god24=god24_experiment_enabled(project,cid)
-                supported.append(f'#{cid}: estatísticas de carta original'
-                                 + (' (tipo 24)' if god24 else ''))
-                if god24:
-                    if pinned!=GOD24_SOURCE_SHA256:
-                        blocked.append(f'#{cid}: exibição e duelo God24 exigem o perfil Drop x15.')
-                    elif project.metadata.get('ps1_god_chest_preview'):
-                        supported.append(f'#{cid}: nome e ícone God nos detalhes da carta')
-                        if project.metadata.get('ps1_god_hand_preview'):
-                            supported.append(f'#{cid}: roteamento God24 como monstro no duelo')
-                        else:
-                            blocked.append(f'#{cid}: opção God24 em duelo desativada.')
-                    else:
-                        blocked.append(f'#{cid}: opção Tipo God no baú desativada.')
+                supported.append(f'#{cid}: estatísticas de carta original')
+                if typ == GOD_TYPE_ID:
+                    supported.append(f'#{cid}: God 24 com nome, ícone e jogabilidade de monstro')
         if 'nome' in changed:
             if known:
                 try:
@@ -202,7 +193,7 @@ def audit(project) -> dict:
         'raridade_e_cor_nomes':'PENDENTE',
         'icones_personalizados':'Graváveis nas descrições no perfil Drop x15',
         'cartas_maiores_722':'PENDENTE_MIPS_MEMORIA_TABELAS',
-        'tipo_god':'Tipo 24, rótulo e ícone nativos e roteamento de monstro disponíveis no perfil Drop x15 com as opções God24 ativas',
+        'tipo_god':'O tipo 24 ativa automaticamente o nome, o ícone e o roteamento de monstro no Drop x15.',
         'buffs_auras_cemiterio':'Bônus contínuos de campo, deck e cemitério no Drop x15',
         'equipamentos_imunidades':'Equipamentos com ATK e proteção, imunidades e indestrutibilidade no Drop x15',
         'rituais_tres_tributos_originais':'gravavel_na_tabela_WA_SEM_NOVOS_IDS',

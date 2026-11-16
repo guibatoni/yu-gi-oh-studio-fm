@@ -126,12 +126,14 @@ def inspect(exe: bytes, wa: bytes | None = None) -> dict:
     regions = [exe[offset:offset + len(before)] for offset, before, _ in REGIONS]
     status = 'assinatura_divergente'
     if exe.startswith(b'PS-X EXE'):
+        original = [before for _, before, _ in REGIONS]
         wanted = [after for _, _, after in REGIONS]
         if regions[1] == struct.pack('<28I', *extended_sprite_words()):
             from .ps1_runtime_blob import RUNTIME, RUNTIME_BASE
             offset = RUNTIME_BASE - EXE_DELTA
             if exe[offset:offset + len(RUNTIME)] == RUNTIME:
                 wanted[1] = regions[1]
+                original[1] = regions[1]
         if regions == wanted:
             if wa is None:
                 status = 'aguardando_textura'
@@ -140,8 +142,8 @@ def inspect(exe: bytes, wa: bytes | None = None) -> dict:
                     status = 'aplicado' if _pixels(wa) == _god_pixels(wa) else 'textura_divergente'
                 except ModError:
                     status = 'textura_divergente'
-        elif regions == [before for _, before, _ in REGIONS]:
-            status = 'original'
+        elif regions == original:
+            status = 'original' if original[1] == REGIONS[1][1] else 'icones_de_descricao'
     return {'status': status, 'nome': 'God' if status == 'aplicado' else None,
             'icone_instalado': status == 'aplicado', 'validado_no_epsxe': False}
 

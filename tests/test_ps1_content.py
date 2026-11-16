@@ -136,7 +136,10 @@ class TestContentPatch(unittest.TestCase):
             p=type('ProjectStub',(),{})()
             p.folder=project_dir;p.edits={'1':{'nome':'A','descricao':'{color:vermelho}A{/color}'}};p.effects={};p.new_cards={}
             p.arts={'1':'assets/cartas/001.png'}
-            p.metadata={'base_sha256':{'slus':hashlib.sha256(exe).hexdigest()}}
+            p.metadata={'base_sha256':{'slus':hashlib.sha256(exe).hexdigest()},
+                        'ps1_god_type_test_card_id':1,
+                        'ps1_god_chest_preview':True,'ps1_god_hand_preview':True,
+                        'ps1_god_icon_test_card_id':1}
             p.get=lambda cid:{'nome':'A','descricao':'{color:vermelho}A{/color}','tipo_id':0,'atributo_id':0}
             def do_export():
                 path=project_dir/'exportacao';path.mkdir(exist_ok=True)
@@ -144,6 +147,8 @@ class TestContentPatch(unittest.TestCase):
             p.export=do_export
             original=src.read_bytes()
             result=build_test_disc(p,src)
+            self.assertEqual(result['god24_cartas'],[])
+            self.assertIsNone(result['teste_visual_icone_deus'])
             self.assertEqual(len(result['nomes_aplicados']),1)
             self.assertEqual(len(result['descricoes_aplicadas']),1)
             self.assertEqual(len(result['artes_aplicadas']),2)

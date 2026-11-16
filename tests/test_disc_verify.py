@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from fmstudio.disc import SYNC
 from fmstudio.disc_verify import verify_image_stats, describe
 from fmstudio.core import ModError
+from fmstudio.ps1_god24_chest import SOURCE_SHA256
 from fmstudio.tables import STATS_ADDR, LEVEL_ADDR, EXE_DELTA
 
 
@@ -81,7 +82,7 @@ class CardValueVerificationTests(unittest.TestCase):
             with self.assertRaisesRegex(ModError,'incompatível'):
                 verify_image_stats(project,path)
 
-    def test_opt_in_god_type_24_rechecked_in_generated_bin(self):
+    def test_saved_god24_rechecked_in_generated_bin(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'god24.bin'
             other=Path(tmp)/'wrongtype.bin'
@@ -92,7 +93,7 @@ class CardValueVerificationTests(unittest.TestCase):
                   'guardian_1_id':10,'guardian_2_id':8}
             edited={**base,'ataque':3000,'tipo_id':24}
             project=SimpleNamespace(
-                metadata={'ps1_god_type_test_card_id':16},
+                metadata={'base_sha256':{'slus':SOURCE_SHA256}},
                 edits={'16':{'ataque':3000,'tipo_id':24}},
                 cards={16:base},get=lambda cid:edited)
             good=verify_image_stats(project,path)
@@ -100,11 +101,33 @@ class CardValueVerificationTests(unittest.TestCase):
             self.assertEqual((good['total'],good['corretas'],good['divergentes']),
                              (1,1,0))
             self.assertEqual(bad['divergentes'],1)
+            self.assertTrue(good['god24_tipos_conferem'])
+            self.assertFalse(bad['god24_tipos_conferem'])
             self.assertEqual(good['god24_tipo_gravado_e_verificado'],[16])
             self.assertIn('God 24 gravado',describe(good))
             project.metadata={}
             with self.assertRaisesRegex(ModError,'incompatível'):
                 verify_image_stats(project,path)
+
+    def test_old_bin_is_detected_after_restoring_original_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old=Path(tmp)/'old.bin'
+            current=Path(tmp)/'current.bin'
+            create_disc(old,500,typ=24)
+            create_disc(current,500,typ=1)
+            base={'id':16,'tipo_id':1}
+            project=SimpleNamespace(
+                metadata={'base_sha256':{'slus':SOURCE_SHA256},
+                          'ps1_god_type_test_card_id':16,
+                          'ps1_god_chest_preview':True,
+                          'ps1_god_hand_preview':True},
+                edits={},cards={16:base},get=lambda cid:base)
+            stale=verify_image_stats(project,old)
+            fresh=verify_image_stats(project,current)
+            self.assertFalse(stale['god24_teste_bau_ativado_no_projeto'])
+            self.assertFalse(stale['god24_tipos_conferem'])
+            self.assertIn('As cartas do tipo God no BIN divergem',describe(stale))
+            self.assertTrue(fresh['god24_tipos_conferem'])
 
     def test_god24_chest_mask_readback_from_selected_images(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -118,8 +141,7 @@ class CardValueVerificationTests(unittest.TestCase):
                       'guardian_1_id':10,'guardian_2_id':8}
             edited={**baseline,'ataque':3000,'tipo_id':24}
             project=SimpleNamespace(
-                metadata={'ps1_god_type_test_card_id':16,
-                          'ps1_god_chest_preview':True},
+                metadata={'base_sha256':{'slus':SOURCE_SHA256}},
                 edits={'16':{'ataque':3000,'tipo_id':24}},
                 cards={16:baseline},get=lambda cid:edited)
             for path,status,count in (

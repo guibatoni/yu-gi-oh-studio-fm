@@ -8,7 +8,9 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from pathlib import Path
-from .core import Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR, ONCE_ACTIONS
+from .core import (Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR,
+                   ONCE_ACTIONS, legacy_god_description_icon_card, ps1_god24_card_ids,
+                   ps1_supports_god24)
 from .drafts import DraftSession
 from .disc import DiscError
 from .tables import CARD_COUNT, TYPE_NAMES, ATTR_NAMES, STAR_NAMES, SUPREME
@@ -16,7 +18,7 @@ from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
 from .abilities import QUICK_ACTIONS, BOOLEAN_ACTIONS, quick_settings
 from . import __version__
 from .rarities import RARITIES, DEFAULT_RARITY, name_style, rarity_options
-from .expanded import display_name, bonus_description, resolve_references
+from .expanded import GOD_TYPE_ID, display_name, bonus_description, resolve_references
 from .richtext import NATIVE_ICONS, CUSTOM_ICONS, TEXT_COLORS, tokens
 from .updates import read_latest, start_updater, UpdateError
 from .guardian import SUPREME_COLOR, guardian_name
@@ -1100,14 +1102,16 @@ class Studio(tk.Tk):
             return
         try:
             typ=int(self.vars['tipo_id'].get().split(' — ',1)[0])
-            if typ==24:
-                msg=('God (24) no PS1: salve a carta e ative "PS1: Tipo God no baú". '
-                     'Para jogar como monstro, ative também "PS1: God24 em duelo".')
-            elif typ>24:
+            if typ==GOD_TYPE_ID:
+                if self.selected_id<=CARD_COUNT and ps1_supports_god24(self.project):
+                    msg='God (24) será exportado como monstro com nome e ícone do tipo.'
+                else:
+                    msg='God (24) no BIN/CUE requer uma carta original e o perfil Drop x15.'
+            elif typ>GOD_TYPE_ID:
                 msg='Tipo desconhecido: ainda sem suporte de exportação PS1.'
             elif 20<=typ<=23:
-                msg=('Este é um tipo de magia, armadilha, ritual ou equipamento, '
-                     'não uma criatura. Escolha um tipo 00–19 para jogar como monstro.')
+                msg=('Este é um tipo de magia, armadilha, ritual ou equipamento. '
+                     'Para jogar como monstro, selecione um tipo de monstro ou God (24).')
             elif 0<=typ<20:
                 msg=('Tipo de monstro escolhido será exportado no PS1. '
                      'A classe visual Deus é configurada pela raridade.')
@@ -1323,101 +1327,12 @@ class Studio(tk.Tk):
         self._update_status(f'Projeto salvo! {count} carta(s) alterada(s), com backup do projeto.json.')
         return True
 
-    def toggle_god24_chest_preview(self):
-        """Configura a exibição do tipo God e dos atributos na cópia PS1."""
-        if not self._ready_native_effect() or not self.selected_id:
-            return
-        self._stage_current()
-        if self.drafts and self.drafts.is_dirty:
-            messagebox.showinfo('Salve primeiro',
-                'Clique Salvar projeto antes de ativar God24 no baú.',parent=self)
-            return
-        cid=int(self.selected_id)
-        if self.project.metadata.get('ps1_god_chest_preview',False):
-            if messagebox.askyesno('Desativar teste do baú',
-                'Desativar a exibição do tipo God e o teste de duelo no próximo BIN/CUE?',parent=self):
-                self.project.metadata.pop('ps1_god_chest_preview',None)
-                self.project.metadata.pop('ps1_god_hand_preview',None)
-                self.project.save()
-                self._update_status('Testes God24 do baú e do duelo desativados.')
-            return
-        if int(self.project.get(cid)['tipo_id'])!=24:
-            messagebox.showwarning('Carta God24',
-                'Selecione uma carta salva com tipo 24 — God.',parent=self)
-            return
-        for other in self.project.cards:
-            if type(other) is int and 1<=other<=722:
-                if int(self.project.get(other)['tipo_id'])>24:
-                    messagebox.showerror('Tipo incompatível',
-                        f'Carta #{other:03d} possui tipo 25–31. '
-                        'Não é seguro ativar a máscara.',parent=self)
-                    return
-        if not messagebox.askyesno('Tipo God no PS1',
-            'Exibir ATK/DEF e o ícone dourado no baú e o tipo God '
-            'nos detalhes da carta?\n\nA próxima cópia BIN/CUE usa '
-            'o perfil Drop x15. Abra os detalhes com Triângulo no ePSXe.',parent=self):
-            return
-        self.project.metadata['ps1_god_type_test_card_id']=cid
-        self.project.metadata['ps1_god_chest_preview']=True
-        self.project.save()
-        self._refresh_project()
-        self._update_status('God24 no baú ativado. Gere uma nova cópia BIN/CUE.')
-
-    def toggle_god24_hand_preview(self):
-        """Configura o teste God24 na mão e no campo."""
-        if not self._ready_native_effect() or not self.selected_id:
-            return
-        self._stage_current()
-        if self.drafts and self.drafts.is_dirty:
-            messagebox.showinfo('Salve primeiro',
-                'Salve as alterações antes de testar God24 em duelo.',parent=self)
-            return
-        cid=int(self.selected_id)
-        if self.project.metadata.get('ps1_god_hand_preview',False):
-            if messagebox.askyesno('Desativar teste God24 em duelo',
-                    'Desativar o teste em duelo na próxima cópia BIN/CUE?',parent=self):
-                self.project.metadata.pop('ps1_god_hand_preview',None)
-                self.project.save()
-                self._update_status('Teste God24 em duelo desativado na próxima cópia.')
-            return
-        if int(self.project.get(cid)['tipo_id'])!=24:
-            messagebox.showwarning('Tipo God24',
-                'Selecione uma carta salva como God (24).',parent=self)
-            return
-        if not self.project.metadata.get('ps1_god_chest_preview',False):
-            messagebox.showwarning('Ative primeiro o baú',
-                'Ative PS1: Tipo God no baú (teste) antes do teste em duelo.',
-                parent=self)
-            return
-        if self.project.metadata.get('ps1_god_type_test_card_id')!=cid:
-            messagebox.showerror('Carta de teste divergente',
-                'Selecione a mesma carta God24 autorizada para o BIN.',
-                parent=self)
-            return
-        if any(int(self.project.get(other)['tipo_id'])>24
-               for other in self.project.cards if type(other) is int
-               and 1<=other<=722):
-            messagebox.showerror('Tipo incompatível',
-                'Cartas com tipo 25–31 impedem este experimento.',parent=self)
-            return
-        if not messagebox.askyesno('God24 em duelo (teste)',
-                'Ativar o teste para jogar God24 como monstro na cópia BIN/CUE?\n\n'
-                'O teste inclui a fileira de monstros, a exibição dos atributos '
-                'e a confirmação com a estrela guardiã. Depois de gerar '
-                'a cópia, jogue um duelo no ePSXe para conferir.',
-                parent=self):
-            return
-        self.project.metadata['ps1_god_hand_preview']=True
-        self.project.save()
-        self._refresh_project()
-        self._update_status('Teste God24 em duelo ativado. Gere uma nova cópia BIN/CUE.')
-
     def toggle_god_icon_ps1(self):
-        """Opt-in para glifo Deus de texto em uma cópia de BIN, não tipo 24."""
+        """Configura o glifo Deus na descrição de um monstro original."""
         if not self._ready_native_effect() or not self.selected_id:
             return
         cid=int(self.selected_id)
-        current=self.project.metadata.get('ps1_god_icon_test_card_id')
+        current=legacy_god_description_icon_card(self.project)
         if current==cid:
             if not messagebox.askyesno(
                     'Desativar teste de ícone Deus',
@@ -1429,22 +1344,19 @@ class Studio(tk.Tk):
             self._refresh_project()
             self._update_status('Teste de símbolo Deus desativado.')
             return
-        if not 1 <= cid <= 722:
+        if not 1 <= cid <= CARD_COUNT:
             messagebox.showerror('Ícone Deus','Escolha uma carta original #001–#722.',parent=self)
             return
-        if (self.project.metadata.get('ps1_god_chest_preview')
-                and self.project.metadata.get('ps1_god_type_test_card_id')==cid):
+        typ = int(self.project.get(cid)['tipo_id'])
+        if typ == GOD_TYPE_ID:
             messagebox.showinfo('Ícone do tipo God',
-                'Gere a cópia BIN/CUE para ver o ícone no campo de tipo '
-                'dos detalhes da carta.',parent=self)
+                'O tipo God tem ícone próprio nos detalhes da carta no Drop x15. '
+                'Para incluir um ícone adicional no texto, use o editor de descrição.',parent=self)
             return
-        card=self.project.get(cid)
-        if not (0 <= int(card['tipo_id']) < 20 or int(card['tipo_id'])==24):
+        if not 0 <= typ < 20:
             messagebox.showwarning(
                 'Tipo não suportado para o teste de ícone',
-                'Selecione um tipo de monstro PS1 (00–19) ou God 24 '
-                'experimental. Equip, Ritual e outros tipos não serão '
-                'convertidos em monstros automaticamente.', parent=self)
+                'Selecione uma carta salva com tipo de monstro PS1 (00–19).', parent=self)
             return
         if not messagebox.askyesno(
                 'Teste real do símbolo Deus no ePSXe',
@@ -1453,19 +1365,11 @@ class Studio(tk.Tk):
                 'Apenas a cópia de teste terá os 3 PRIMEIROS CARACTERES da '
                 'descrição substituídos pelo símbolo. O projeto, a descrição '
                 'original e o BIN fonte continuam intactos.\n\n'
-                'O símbolo aparecerá somente na descrição da carta para testar a '
-                'fonte nativa. NÃO substituirá o ícone de tipo na interface.\n\n'
-                + ('Também autorizaremos gravar o TIPO 24 REAL na tabela do '
-                   'PS1 para este cartão. ATK/DEF e tipo serão conferidos '
-                   'no BIN, mas o motor original PODE NÃO RECONHECER como '
-                   'monstro e o duelo pode falhar. Use somente uma cópia.\n\n'
-                   if int(card['tipo_id'])==24 else '')
-                + 'A imagem só será gerada se o slot gráfico estiver vazio e '
-                'o código for compatível. Continuar?', parent=self):
+                'O símbolo usará uma célula livre na fonte do jogo. Continuar?', parent=self):
             return
         self.project.metadata['ps1_god_icon_test_card_id']=cid
-        if int(card['tipo_id'])==24:
-            self.project.metadata['ps1_god_type_test_card_id']=cid
+        if self.project.metadata.get('ps1_god_type_test_card_id') == cid:
+            self.project.metadata.pop('ps1_god_type_test_card_id')
         self.project.save()
         self._refresh_project()
         self._update_status(
@@ -1473,7 +1377,7 @@ class Studio(tk.Tk):
             'Gere BIN/CUE para validar no ePSXe.')
 
     def choose_playable_monster_type(self):
-        """Permite trocar o tipo de QUALQUER monstro sem reverter o Time Wizard."""
+        """Troca o tipo preservando os atributos e os efeitos da carta."""
         if self._extract_running or not self.project or not self.drafts or not self.selected_id:
             return
         self._stage_current()
@@ -1489,23 +1393,25 @@ class Studio(tk.Tk):
         area=ttk.Frame(dialog,padding=18)
         area.pack(fill='both',expand=True)
         ttk.Label(area,text=f'Carta #{cid:03d} — {card.get("nome") or "Sem nome"}').pack(anchor='w',pady=(0,7))
-        ttk.Label(area,text='Selecione o NOVO tipo jogável. Não será restaurado o tipo original.',
+        ttk.Label(area,text='Selecione o tipo de monstro.',
                   wraplength=440).pack(anchor='w',pady=(0,10))
-        types=[f'{i:02d} — {TYPE_NAMES[i]}' for i in range(20)]
-        selection=ttk.Combobox(area,state='readonly',values=types,width=38)
+        types=list(range(20))
+        if cid<=CARD_COUNT and ps1_supports_god24(self.project):
+            types.append(GOD_TYPE_ID)
+        selection=ttk.Combobox(area,state='readonly',
+                               values=[f'{i:02d} — {TYPE_NAMES[i]}' for i in types],width=38)
         selection.pack(fill='x')
-        selection.current(old_type if 0<=old_type<20 else 0)
-        keep_god=tk.BooleanVar(value=(old_type==24 or old_rarity=='deus'))
-        ttk.Checkbutton(area,text='Manter visual Deus no Studio (não muda o tipo PS1)',
+        original=int(self.project.cards[cid]['tipo_id'])
+        initial=old_type if old_type in types else original
+        selection.current(types.index(initial) if initial in types else 0)
+        keep_god=tk.BooleanVar(value=(old_rarity=='deus'))
+        ttk.Checkbutton(area,text='Usar raridade Deus no Studio',
                         variable=keep_god).pack(anchor='w',pady=(12,7))
-        ttk.Label(area,text='Tipo God 24 exige modificação do motor PS1 ainda não validada; '
-                  'a aparência Deus pode ser mantida com um tipo jogável.',
-                  wraplength=440).pack(anchor='w',pady=(0,9))
         buttons=ttk.Frame(area)
         buttons.pack(anchor='e',pady=(5,0))
         def apply():
             try:
-                chosen=selection.current()
+                chosen=types[selection.current()]
                 self.drafts.choose_playable_monster_type(
                     cid,chosen,god_visual=keep_god.get())
                 self._load_card()
@@ -2073,9 +1979,7 @@ class Studio(tk.Tk):
         content=ttk.Frame(window,padding=12)
         content.pack(fill='both',expand=True)
         for label,command in [('Tipo jogável no PS1',self.choose_playable_monster_type),
-                              ('Glifo God na descrição',self.toggle_god_icon_ps1),
-                              ('Tipo God no baú',self.toggle_god24_chest_preview),
-                              ('God24 em duelo',self.toggle_god24_hand_preview)]:
+                              ('Glifo God na descrição',self.toggle_god_icon_ps1)]:
             ttk.Button(content,text=label,command=command).pack(fill='x',pady=4)
 
     def insert_description_token(self, token: str):
@@ -2237,6 +2141,8 @@ class Studio(tk.Tk):
             effects=sum(map(len,pr.effects.values()))
             source='VINCULADO' if (pr.folder/'base'/'source_SLUS_014.11').is_file() else 'NÃO VINCULADO'
             notes='\n'.join(f' • {x}' for x in pr.imported_notes[:8]) or ' • Nenhum aviso registrado.'
+            god_cards=ps1_god24_card_ids(pr)
+            god_icon=legacy_god_description_icon_card(pr)
             txt=(f'Projeto: {pr.metadata["nome"]}\n'
                 f'Pasta: {pr.folder}\n'
                 f'Base: {pr.metadata.get("base_source") or "Não importada"}\n'
@@ -2252,8 +2158,8 @@ class Studio(tk.Tk):
                 f'Limiar Trap PS1: {len(pr.metadata.get("ps1_trap_thresholds",{}))}\n'
                 f'Bônus terreno PS1: {len(pr.metadata.get("ps1_terrain_boosts",{}))}\n'
                 f'Limite global deck MIPS: {pr.metadata.get("ps1_deck_global_limit",3)} cópias\n'
-                f'Exibição do tipo God no BIN: {"ativada" if pr.metadata.get("ps1_god_chest_preview") else "desativada"}\n'
-                f'Ícone Deus no BIN (teste no texto): {pr.metadata.get("ps1_god_icon_test_card_id","desativado")}\n'
+                f'Cartas originais salvas como God (24): {len(god_cards)}\n'
+                f'Glifo Deus na descrição (teste PS1): {format_id(god_icon) if god_icon else "desativado"}\n'
                 f'Artes PNG vinculadas: {len(pr.arts)} (somente prévia)\n'
                 f'Extração profunda: {pr.metadata.get("deep_extraction", {}).get("completed", "ainda não realizada")}\n'
                 f'Executável SLUS local: {source}\n\n'
@@ -2364,33 +2270,6 @@ class Studio(tk.Tk):
             return
         from .ps1_compat import audit, save_audit, explain_no_writable_changes
         from .core import ps1_unwritable_numeric_edits, ps1_stat_export_errors
-        # O usuário pode aceitar uma única gravação experimental do tipo
-        # real 24, sem alterar a escolha feita no editor e sem substituir
-        # o BIN original. Outros tipos 25–31 continuam bloqueados.
-        from .core import god24_experiment_enabled
-        unapproved=[int(k) for k,fields in self.project.edits.items()
-                    if 1<=int(k)<=722 and
-                    set(fields)&{'ataque','defesa','tipo_id','nivel',
-                                 'atributo_id','guardian_1_id','guardian_2_id'}
-                    and int(self.project.get(int(k))['tipo_id'])==24
-                    and not god24_experiment_enabled(self.project,int(k))]
-        if len(unapproved)==1 and unapproved[0]==self.selected_id:
-            target=unapproved[0]
-            if messagebox.askyesno(
-                'TESTE EXPERIMENTAL — tipo Deus (24)',
-                f'Carta #{target:03d} está definida como God 24.\n\n'
-                'Gravar somente o valor 24 no campo de tipo e '
-                'conferir o ATK/DEF no BIN de teste?\n\n'
-                'O motor original considera 24 NÃO-MONSTRO: ATK e DEF '
-                'ficarão ocultos no baú e a invocação pode falhar. '
-                'Isto NÃO implementa o motor de Deus: o jogo pode não '
-                'reconhecer a carta como monstro ou apresentar falhas. '
-                'A imagem original e seus efeitos salvos não mudarão.\n\n'
-                'Continuar com a experiência?',parent=self):
-                self.project.metadata['ps1_god_type_test_card_id']=target
-                self.project.save()
-            else:
-                return
         unexportable=ps1_unwritable_numeric_edits(self.project)
         oversized=ps1_stat_export_errors(self.project)
         if unexportable or oversized:
@@ -2401,7 +2280,8 @@ class Studio(tk.Tk):
                 +'\n\nNenhum BIN/CUE foi modificado.',parent=self)
             return
         report = audit(self.project)
-        if not report['gravavel_hoje'] and not self.project.metadata.get('ps1_god_icon_test_card_id'):
+        description_icon=legacy_god_description_icon_card(self.project)
+        if not report['gravavel_hoje'] and not description_icon:
             dest = save_audit(self.project)
             messagebox.showwarning(
                 'Nenhuma alteração compatível para gerar o jogo',
@@ -2409,46 +2289,21 @@ class Studio(tk.Tk):
                 + f'\n\nRelatório salvo em: {dest}', parent=self)
             self._update_status('Sem mudanças graváveis no PS1: confira compatibilidade_ps1.json.')
             return
-        god_cid=self.project.metadata.get('ps1_god_type_test_card_id')
-        if (type(god_cid) is int and 1<=god_cid<=722
-                and int(self.project.get(god_cid)['tipo_id'])==24
-                and not self.project.metadata.get('ps1_god_chest_preview',False)):
-            opt=messagebox.askyesnocancel(
-                'God24 — patch do baú desativado',
-                f'Ativar a exibição do tipo God na carta #{god_cid:03d}?\n\n'
-                'Escolha Sim para aplicar ATK/DEF e ícone no baú e o nome God nos detalhes.\n'
-                'Escolha Não para gerar a cópia com a exibição original.\n'
-                'Escolha Cancelar para voltar ao projeto.',
-                parent=self)
-            if opt is None:
-                return
-            if opt:
-                self.project.metadata['ps1_god_chest_preview']=True
-                self.project.save()
         source = filedialog.askopenfilename(
             title='Selecione seu jogo original BIN/CUE',
             filetypes=[('PlayStation BIN/CUE', '*.bin *.cue'), ('Todos arquivos', '*.*')], parent=self)
         if not source:
             return
-        from .ps1_compat import audit
-        report=audit(self.project)
         pending=report['pendente_de_motor']
-        god_chest=self.project.metadata.get('ps1_god_chest_preview')
-        description_icon=self.project.metadata.get('ps1_god_icon_test_card_id')
+        god_cards=ps1_god24_card_ids(self.project) if ps1_supports_god24(self.project) else []
         question = ('Será criada ou atualizada a cópia de teste do disco, sem modificar o original.\n'
                     'Mesmo nome de origem: substitui o teste anterior. Outro nome: cria outro arquivo.\n'
                     'Se o ePSXe estiver usando a imagem anterior, feche o jogo antes de substituí-la.\n\n'
                     'Consulte as alterações compatíveis no relatório do projeto.\n'
                     + ('Ícone Deus na descrição: três caracteres são trocados só na cópia.\n'
-                       if description_icon and not (god_chest and description_icon==god_cid) else '')
-                    + ('GOD24: ATK/DEF e ícone dourado no baú. Tipo God nos detalhes da carta.\n'
-                       if god_chest else '')
-                    + ('GOD24 EM DUELO: teste de mão, fileira de monstros e confirmação. '
-                       'Valide a jogada no ePSXe.\n'
-                       if self.project.metadata.get('ps1_god_hand_preview') else '')
-                    + ('GOD 24: gravação experimental do campo tipo (24) '
-                       'autorizada; jogabilidade NÃO validada no ePSXe.\n'
-                       if self.project.metadata.get('ps1_god_type_test_card_id') else '')
+                       if description_icon else '')
+                    + (f'God (24): {len(god_cards)} carta(s) com nome, ícone e jogabilidade de monstro.\n'
+                       if god_cards else '')
                     + (f'PENDÊNCIAS: {len(pending)}.\n' + '\n'.join(pending[:3]) + '\n\n' if pending else '')
                     + 'Gerar a cópia BIN/CUE de teste?')
         if not messagebox.askyesno('Gerar cópia de teste', question, parent=self):
@@ -2468,9 +2323,6 @@ class Studio(tk.Tk):
             messagebox.showerror('Não foi possível gerar BIN/CUE', str(exc), parent=self)
             return
         action='substituída' if manifest.get('acao_arquivo')=='substituido' else 'criada'
-        duel=manifest.get('teste_god24_roteamento_duelo')
-        duel_status=(f'{duel["pontos_aplicados"]}/{duel["total_pontos"]} pontos conferidos '
-                     '(ePSXe pendente)' if duel else 'DESATIVADO')
         runtime=manifest.get('efeitos_nativos_ps1') or {}
         mod=manifest.get('edicao_do_mod_ps1',{})
         simplified=sum(bool(row.get('acentos_simplificados')) for row in manifest['descricoes_aplicadas'])
@@ -2488,10 +2340,9 @@ class Studio(tk.Tk):
             + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
             + (f'Fonte PS1 simplificou acentos em {simplified} descrição(ões).\n' if simplified else '')
             + f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
-            f'God24 ATK/DEF BAÚ: {"2 máscaras + 3 opcodes da lista" if manifest.get("teste_god24_atk_def_bau") else "DESATIVADO"}.\n'
-            f'God24 EM DUELO: {duel_status}.\n'
-            + ('Tipo God e ícone conferidos no BIN. Abra os detalhes com Triângulo.\n'
-               if manifest.get('exibicao_tipo_god24') else '')
+            + (f'God (24) aplicado a {len(manifest["god24_cartas"])} carta(s). '
+               'Abra os detalhes com Triângulo para ver o ícone.\n'
+               if manifest.get('god24_cartas') else '')
             + f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             f'Método: {manifest.get("estrategia_equip_ps1","não aplicado")}.\n'
             f'Rituais: {len(manifest.get("rituais_ps1_aplicados",[]))}; '
@@ -2500,19 +2351,10 @@ class Studio(tk.Tk):
             f'Regra de deck MIPS: {len(manifest.get("limite_global_copias_ps1_aplicado",[]))} patch(es).\n'
             f'Ícone Deus (teste visual na descrição): '
             f'{manifest.get("teste_visual_icone_deus",{}).get("status") if manifest.get("teste_visual_icone_deus") else "não habilitado"}.\n'
-            + ('AVISO: sem slot gráfico livre neste MOD; ícone e descrição '
-               'não foram alterados. O teste do tipo God 24 é independente.\n'
+            + ('AVISO: o glifo da descrição exige uma célula livre na fonte deste mod.\n'
                if (manifest.get('teste_visual_icone_deus') or {}).get('status')
                   == 'icone_nao_inserido_sem_espaco_livre' else '')
-            + ('God24 baú: duas máscaras aplicadas; teste a exibição no ePSXe.\n'
-               if manifest.get('teste_god24_atk_def_bau') else '')
-            + ('AVISO GOD24: o tipo está no BIN, mas ATK/DEF podem ficar '
-               'em branco no baú e o motor não o reconhece como monstro.\n'
-               if manifest.get('teste_tipo_god24') and
-                   not manifest.get('teste_god24_atk_def_bau') else '')
-            + f'Tipo 24 God (gravação experimental): '
-            f'{manifest.get("teste_tipo_god24",{}).get("status") if manifest.get("teste_tipo_god24") else "não habilitado"}.\n'
-            'Confira o resultado no ePSXe.',parent=self)
+            + 'Confira o resultado no ePSXe.',parent=self)
         self._update_status(f'Imagem de teste {action}: {manifest["bin"]}')
 
     def diagnose_equip(self):
@@ -2571,15 +2413,13 @@ class Studio(tk.Tk):
             destination.write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n',
                                    encoding='utf-8')
             info = describe(report) + f'\n\nRelatório: {destination}'
-            god24_unpatched=bool(report.get('god24_total_cartas_no_bin')) and (
+            god24_unpatched=report['god24_teste_bau_ativado_no_projeto'] and (
                 report['god24_mascaras_bau']['status']!='aplicado_2_de_2'
                 or report['god24_renderizador_lista_bau']['god24_patch_lista']
                 ['status']!='aplicado_3_de_3'
-                or (self.project.metadata.get('ps1_god_chest_preview',False)
-                    and report['god24_exibicao_tipo']['status']!='aplicado')
-                or (self.project.metadata.get('ps1_god_hand_preview',False)
-                    and report['god24_roteamento_duelo']['status']!='aplicado'))
-            if (report['divergentes'] or god24_unpatched
+                or report['god24_exibicao_tipo']['status']!='aplicado'
+                or report['god24_roteamento_duelo']['status']!='aplicado')
+            if (report['divergentes'] or not report['god24_tipos_conferem'] or god24_unpatched
                     or report['efeitos_nativos_ps1']['status']=='divergente'):
                 messagebox.showwarning('BIN/CUE diverge do projeto',info,parent=self)
             else:

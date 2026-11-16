@@ -4,7 +4,10 @@ Dados ficam só na memória até salvar(). Em caso de erro de validação ou IO
 nenhum rascunho é apagado. A imagem de PS1 permanece intocada.
 """
 from __future__ import annotations
-from .core import Project, FIELDS, NUMERIC, check_card_edit, check_effect, DEFAULT_NAME_COLOR, DEFAULT_RARITY
+from .core import (Project, FIELDS, NUMERIC, check_card_edit, check_effect, DEFAULT_NAME_COLOR,
+                   DEFAULT_RARITY, ps1_supports_god24)
+from .expanded import GOD_TYPE_ID
+from .tables import CARD_COUNT
 
 
 def same_card(a: dict, b: dict) -> bool:
@@ -68,16 +71,13 @@ class DraftSession:
 
     def choose_playable_monster_type(self, cid: int, typ: int,
                                      *, god_visual: bool=False) -> None:
-        """Escolha de tipo jogável PS1 independente do tipo retail da carta.
-
-        God visual é raridade de prévia, não tipo 24 no executável.
-        A alteração permanece no rascunho até o usuário salvar o projeto.
-        """
+        """Escolhe um tipo de monstro para a cópia PS1."""
         from .core import ModError
-        if isinstance(typ,bool) or not isinstance(typ,int) or not 0<=typ<20:
-            raise ModError('Escolha um tipo de monstro jogável (00–19).')
         if cid not in self.project.cards:
             raise ModError('Carta não encontrada no projeto.')
+        supports_god = cid <= CARD_COUNT and ps1_supports_god24(self.project)
+        if type(typ) is not int or not (0 <= typ < 20 or (typ == GOD_TYPE_ID and supports_god)):
+            raise ModError('Escolha um tipo de monstro jogável no perfil PS1 do projeto.')
         card=self.get_card(cid)
         card['tipo_id']=typ
         if god_visual:
