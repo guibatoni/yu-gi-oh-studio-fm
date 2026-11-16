@@ -109,13 +109,13 @@ class GodHandTests(unittest.TestCase):
             b=bytearray(src)
             struct.pack_into("<I",b,offset,0xFFFFFFFF)
             self.assertEqual(inspect(b)["status"],"sequencia_divergente")
-            with self.assertRaisesRegex(ModError,"janela MIPS"):
+            with self.assertRaisesRegex(ModError,"sequência MIPS"):
                 apply(src,bytes(b),[24],**self.kwargs(src))
         partial=bytearray(src)
         struct.pack_into("<I",partial,SITES[0][0],
                          (SITES[0][1][2] & 0xFFFF0000) | 0x17)
         self.assertEqual(inspect(partial)["status"],"parcial_1_de_4")
-        with self.assertRaisesRegex(ModError,"janela MIPS"):
+        with self.assertRaisesRegex(ModError,"sequência MIPS"):
             apply(src,bytes(partial),[24],**self.kwargs(src))
 
 
