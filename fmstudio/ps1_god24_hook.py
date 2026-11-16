@@ -5,7 +5,8 @@ Exige SHA da imagem original, janela MIPS coincidente e cave previamente
 auditado pelo desenvolvedor. Opera somente em bytes copiados na memória.
 
 O JAL de func_80037FF4 chama DuelEffect_AppendEntry para tipo e stars.
-Um trampoline filtra pelo opcode do stream: kind=0 e ID=24. Não altera
+Um trampoline filtra pelo opcode do stream: kind=0 e ID=24.
+Valida índice assinado 0..21 antes de ler o cursor do stream. Não altera
 opcodes de Guardian Stars (kind=1 e kind=2). O código-fonte de referência
 é o Forbidden Memories recompilado (func_80037DA4).
 """
@@ -44,29 +45,32 @@ def _jump(op:int,address:int)->int:
 
 
 def god24_hook_words(icon_slot:int)->tuple[int,...]:
-    """19 instruções R3000A, sem alterar $ra e com load-delay explícito."""
+    """22 instruções R3000A, stream index assinado e limites checados."""
     if type(icon_slot) is not int or icon_slot not in ICON_SLOTS:
         raise ModError('God24: slot de ícone 0x27–0x30 não suportado.')
     return (
-        _i(9,0,9,24),              # addiu t1,zero,24
-        _i(5,5,9,15),              # bne a1,t1,retorno
-        0,                         # branch delay
-        _i(36,4,8,0x58),          # lbu t0,0x58(a0): stream_58
-        0,                         # load delay do PS1
-        _r(0,8,8,2,0),            # sll t0,t0,2
-        _r(8,4,8,0,0x21),         # addu t0,t0,a0
-        _i(35,8,8,0),             # lw t0,0(t0): cursor stream
-        0,                         # load delay
-        _i(4,8,0,7),              # beq t0,zero,retorno
-        0,                         # branch delay
-        _i(36,8,8,-1),            # lbu t0,-1(t0): opcode da entrada
-        0,                         # load delay
-        _i(12,8,8,15),            # andi t0,t0,0xF: kind
-        _i(5,8,0,2),              # bne t0,zero,retorno (stars 1,2)
-        0,                         # branch delay
-        _i(9,0,5,icon_slot),      # addiu a1,zero,slot novo
-        _jump(2,ORIGINAL_TARGET),  # j func_80036C14 (tail-call)
-        0,                         # delay do jump
+        _i(9,0,9,24),             # addiu t1,zero,24
+        _i(5,5,9,18),             # bne a1,t1,tail-call
+        0,                        # branch delay slot
+        _i(32,4,8,0x58),         # lb t0,0x58(a0) = índice ASSINADO do stream
+        0,                        # load delay do R3000A
+        _i(11,8,9,22),           # sltiu t1,t0,22: índice deve ser 0..21
+        _i(4,9,0,13),            # beq t1,zero,tail-call
+        0,                        # branch delay
+        _r(0,8,8,2,0),           # sll t0,t0,2
+        _r(8,4,8,0,0x21),        # addu t0,t0,a0
+        _i(35,8,8,0),            # lw t0,0(t0) = cursor stream
+        0,                        # load delay
+        _i(4,8,0,7),             # beq t0,zero,tail-call
+        0,                        # branch delay
+        _i(36,8,8,-1),           # lbu t0,-1(t0) = opcode de tipo/estrela
+        0,                        # load delay
+        _i(12,8,8,15),           # andi t0,t0,0xF (kind)
+        _i(5,8,0,2),             # bne t0,zero,tail-call (stars 1,2 intactas)
+        0,                        # branch delay
+        _i(9,0,5,icon_slot),     # addiu a1,zero,slot de ícone Deus
+        _jump(2,ORIGINAL_TARGET), # j func_80036C14; preserva $ra original
+        0,                        # jump delay
     )
 
 

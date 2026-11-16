@@ -27,15 +27,17 @@ class God24HookTests(unittest.TestCase):
 
     def test_wrapper_only_changes_kind_zero_id_24(self):
         words=god24_hook_words(0x27)
-        self.assertEqual(len(words),19)
-        self.assertEqual(words[17],0x0800DB05)
-        self.assertEqual(words[18],0)
+        self.assertEqual(len(words),22)
+        self.assertEqual(words[20],0x0800DB05)
+        self.assertEqual(words[21],0)
         # Todos os branches convergem para o jump de retorno em i=17.
-        for i in (1,9,14):
+        for i in (1,6,12,17):
             displacement=words[i]&0xffff
-            self.assertEqual(i+1+displacement,17)
-        self.assertEqual(words[16]&0xffff,0x27)
-        self.assertEqual(words[11]&0xffff,0xffff) # stream byte anterior
+            self.assertEqual(i+1+displacement,20)
+        self.assertEqual(words[19]&0xffff,0x27)
+        self.assertEqual(words[14]&0xffff,0xffff)
+        self.assertEqual(words[3]>>26,32) # lb assinado
+        self.assertEqual(words[5]>>26,11) # sltiu 22 # stream byte anterior
         with self.assertRaises(ModError):
             god24_hook_words(0x26)
 
@@ -58,7 +60,7 @@ class God24HookTests(unittest.TestCase):
         self.assertNotEqual(changed,original)
         self.assertEqual(changed[SITE_OFFSET+4:SITE_OFFSET+8],
                          original[SITE_OFFSET+4:SITE_OFFSET+8])
-        allowed=set(range(SITE_OFFSET,SITE_OFFSET+4))|set(range(cave,cave+76))
+        allowed=set(range(SITE_OFFSET,SITE_OFFSET+4))|set(range(cave,cave+4*len(god24_hook_words(0x2A))))
         self.assertTrue(all(a==b for i,(a,b) in enumerate(zip(original,changed))
                             if i not in allowed))
         with self.assertRaises(ModError):

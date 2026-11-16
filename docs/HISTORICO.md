@@ -1,3 +1,4 @@
+- Segurança de memória reforçada: stream_58 é s8 assinado; exige 0–21 antes de acessar streams[22].
 ## v1.4.13 — Engenharia do hook God24 sem escrita automática
 
 - Trampoline MIPS R3000A com filtro tipo 24/kind=0 e preservação das estrelas.

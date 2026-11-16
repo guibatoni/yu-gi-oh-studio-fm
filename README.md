@@ -1,7 +1,7 @@
 # Studio FM v1.4.13 — Protótipo de trampoline God24 (desativado por segurança)
 
 A partir do relatório MIPS v1.4.12 foi preparado um trampoline de
-19 instruções R3000A para o ponto `SLUS+0x287F4`.
+22 instruções R3000A para o ponto `SLUS+0x287F4`.
 A intenção é redirecionar apenas o ícone de tipo 24:
 lê o opcode do stream no canal, verifica **kind=0** e **ID=24**
 e encaminha para um slot gráfico próprio 0x27–0x30.
