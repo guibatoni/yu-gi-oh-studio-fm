@@ -55,6 +55,12 @@ class DraftSession:
         else:
             self.cards[cid] = merged
 
+    def restore_original_type(self, cid: int) -> None:
+        """Restaura apenas o tipo importado da ISO, sem tocar ATK/DEF/efeitos."""
+        card=self.get_card(cid)
+        card['tipo_id']=int(self.project.cards[cid]['tipo_id'])
+        self.stage_card(cid,card)
+
     def reset_card(self, cid: int) -> None:
         baseline = dict(self.project.cards[cid])
         baseline.setdefault('nome', '')

@@ -42,6 +42,24 @@ class StudioCoreTests(unittest.TestCase):
         self.p=Project.create(root/'MeuMod','Meu MOD')
         self.p.import_tables(self.base)
 
+    def test_large_stats_saved_for_simulator_but_ps1_export_blocked(self):
+        from fmstudio.core import simulation_nonnegative_int, check_card_edit
+        from fmstudio.continuous import resolve_field
+        big=123456789012345678901234567890
+        self.assertEqual(simulation_nonnegative_int(str(big),'ATK'),big)
+        self.assertEqual(check_card_edit({'ataque':str(big),'defesa':'100000'})['ataque'],big)
+        self.p.set_card(1,{'ataque':big,'defesa':100000})
+        self.assertEqual(self.p.get(1)['ataque'],big)
+        state,_=resolve_field([{'lado':'jogador','slot':1,'card_id':1,
+                                'tipo_id':0,'ataque':big,'defesa':100000}],{})
+        self.assertEqual(state[0]['ataque'],big)
+        with self.assertRaisesRegex(ModError,'9 bits'):
+            self.p.export()
+        with self.assertRaises(ModError):
+            check_card_edit({'ataque':'1'*65})
+        with self.assertRaises(ModError):
+            check_card_edit({'defesa':'-10'})
+
     def test_import_full_and_fusions_immutable(self):
         self.assertEqual(len(self.p.cards),722)
         self.assertEqual(len(self.p.fusions),2)

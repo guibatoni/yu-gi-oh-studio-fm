@@ -21,7 +21,8 @@ class AdvancedFieldDialog(tk.Toplevel):
         cards={cid:drafts.get_card(cid) for cid in project.cards}
         effects={str(cid):drafts.get_effects(cid) for cid in project.cards
                  if drafts.get_effects(cid)}
-        self.lab=DuelLab(cards,effects,summoning_delay=True)
+        self.lab=DuelLab(cards,effects,summoning_delay=True,
+                          initial_lp=project.metadata.get('studio_initial_lp',8000))
         self.choices={'— VAZIO —':None}
         self.by_id={}
         for cid,c in sorted(cards.items()):
@@ -315,7 +316,7 @@ class AdvancedFieldDialog(tk.Toplevel):
 
     def reset_state(self):
         for side in ('jogador','adversario'):
-            self.lab.lp[side]=8000
+            self.lab.lp[side]=self.lab.starting_lp
             self._last_hand[side]='__RESET__'
         self.lab.damage.clear()
         self.lab.attacks_used.clear()

@@ -18,6 +18,23 @@ class DraftTests(unittest.TestCase):
         self.project.cards = {1: dict(CARD), 2: dict(CARD2)}
         self.drafts=DraftSession(self.project)
 
+    def test_restore_type_preserves_stats_and_effects(self):
+        original_type=self.project.cards[1]['tipo_id']
+        changed=self.drafts.get_card(1)
+        changed.update({'tipo_id':23,'ataque':3000,'nome':'Teste de tipo'})
+        self.drafts.stage_card(1,changed)
+        self.drafts.add_effect(1,{'evento':'invocar','acao':'aumentar_atk',
+                                  'alvo':'proprio','valor':500})
+        self.assertEqual(self.drafts.get_card(1)['tipo_id'],23)
+        self.drafts.restore_original_type(1)
+        recovered=self.drafts.get_card(1)
+        self.assertEqual(recovered['tipo_id'],original_type)
+        self.assertEqual(recovered['ataque'],3000)
+        self.assertEqual(recovered['nome'],'Teste de tipo')
+        self.assertEqual(len(self.drafts.get_effects(1)),1)
+        self.drafts.save()
+        self.assertEqual(self.project.get(1)['tipo_id'],original_type)
+
     def test_navigation_keeps_edits_until_manual_save(self):
         first=self.drafts.get_card(1)
         first.update(nome='Dragão RUBI',cor_nome='#ff2244',ataque='4000')

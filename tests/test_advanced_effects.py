@@ -24,6 +24,16 @@ def effect(action,*,event='invocar',target=None,value=100,typ=FAIRY,defense=0,sc
 
 
 class AdvancedTests(unittest.TestCase):
+    def test_simulator_lp_above_previous_cap(self):
+        from fmstudio.duel_engine import DuelLab
+        big=1234567890123456789012345
+        lab=DuelLab({1:{'tipo_id':0}},{},initial_lp=big)
+        self.assertEqual(lab.lp['jogador'],big)
+        self.assertEqual(lab.starting_lp,big)
+        lab.lp['jogador']+=big
+        self.assertEqual(lab.lp['jogador'],2*big)
+
+
     def setUp(self):
         self.cards={1:{'tipo_id':DRAGON,'ataque':2000,'defesa':1500},
                     2:{'tipo_id':FAIRY,'ataque':1000,'defesa':1200},

@@ -1,3 +1,21 @@
+# Studio FM v1.4.4 — Recuperação de tipo e números grandes no simulador
+
+- Na aba **Cartas**, **Restaurar somente tipo da ISO** reverte a classificação
+  da carta selecionada ao tipo da imagem de origem. ATK/DEF, arte, nome e
+  efeitos são preservados; confirme em **Salvar projeto**.
+- Os comboboxes do editor não mudam mais ao usar a roda do mouse sobre eles.
+- ATK/DEF do Studio e LP inicial do Laboratório aceitam inteiros não negativos
+  com até 64 dígitos (limite de entrada técnica, não de mecânica do duelo).
+- **Efeitos > LP alto (simulador)** define o LP inicial do laboratório;
+  ataques, cura e bônus não são truncados no teto antigo de 99999.
+- **Não significa valores ilimitados no jogo PS1.** A tabela base de cartas
+  contém 9 bits para ATK e 9 bits para DEF: 0–5110 em múltiplos de 10.
+  Exportações que exigem números fora dessa faixa são bloqueadas com
+  aviso explícito, preservando o projeto, BIN original e valores simulados.
+- O teste MIPS de LP inicial do PS1 permanece separado, ainda experimental.
+
+---
+
 # Studio FM v1.4.3 — Análise de instruções do motor PS1
 
 **Efeitos > Diagnosticar motor MIPS** agora inclui no relatório

@@ -466,6 +466,10 @@ class Studio(tk.Tk):
             vals=[f'{i:02d} — {v or "Nenhuma"}' for i,v in enumerate(choices)]
             var=tk.StringVar()
             entry=ttk.Combobox(parent,values=vals,state='readonly',width=width,textvariable=var)
+            # Evita que a roda do mouse altere o tipo enquanto a aba rola.
+            entry.bind('<MouseWheel>',lambda _event:'break')
+            entry.bind('<Button-4>',lambda _event:'break')
+            entry.bind('<Button-5>',lambda _event:'break')
         entry.grid(row=row*2+1,column=0,sticky='ew',padx=(0,12))
         self.vars[key]=var
         return entry
@@ -517,6 +521,8 @@ class Studio(tk.Tk):
         self._form_entry(left,'Ataque (múltiplos de 10)','ataque',1)
         self._form_entry(left,'Defesa (múltiplos de 10)','defesa',2)
         self._form_entry(left,'Tipo','tipo_id',3,kind='type')
+        ttk.Button(left,text='Restaurar somente tipo da ISO',command=self.restore_original_type).grid(row=8,column=0,sticky='w',pady=(5,2))
+        ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
         self._form_entry(right,'Atributo','atributo_id',0,kind='attr')
         self._form_entry(right,'Nível (0 a 15)','nivel',1)
         self._form_entry(right,'Guardian Star 1','guardian_1_id',2,kind='star')
@@ -531,6 +537,7 @@ class Studio(tk.Tk):
         self.rarity_combo=ttk.Combobox(color_line,values=rarity_options(),
                                       textvariable=self.vars['raridade'],state='readonly',width=22)
         self.rarity_combo.pack(side='left',padx=(0,8))
+        self.rarity_combo.bind('<MouseWheel>',lambda _event:'break')
         self.color_sample=tk.Label(color_line,text='  ■  ',bg=BG,fg=RARITIES[DEFAULT_RARITY][1],
                                    font=('Segoe UI',13,'bold'))
         self.color_sample.pack(side='left')
@@ -662,6 +669,7 @@ class Studio(tk.Tk):
         ttk.Button(row_native,text='Diagnosticar motor MIPS',command=self.diagnose_effect_engine).pack(side='left')
         ttk.Button(row_native,text='Limite global de cópias no PS1',command=self.configure_ps1_deck_limit).pack(side='left',padx=8)
         ttk.Button(row_native,text='Teste MIPS: LP inicial',command=self.configure_ps1_initial_lp).pack(side='left',padx=8)
+        ttk.Button(row_native,text='LP alto (simulador)',command=self.configure_simulator_lp).pack(side='left',padx=8)
         tk.Label(native,text='Rituais retirados desta tela por enquanto. O diagnóstico identifica locais de cálculo de bônus, cemitério, proteção, combate e deck; não injeta habilidades não validadas.',
                  bg=SURFACE,fg=MUTED,wraplength=940,justify='left').pack(anchor='w',pady=(5,0))
         sim=tk.Frame(body,bg=SURFACE,padx=15,pady=12)
@@ -1204,6 +1212,32 @@ class Studio(tk.Tk):
         self._update_status(f'Projeto salvo! {count} carta(s) alterada(s), com backup do projeto.json.')
         return True
 
+    def restore_original_type(self):
+        if self._extract_running or not self.project or not self.drafts or not self.selected_id:
+            return
+        self._stage_current()
+        cid=self.selected_id
+        original=int(self.project.cards[cid]['tipo_id'])
+        current=int(self.drafts.get_card(cid)['tipo_id'])
+        if current==original:
+            messagebox.showinfo('Tipo original',
+                f'A carta #{cid:03d} já usa o tipo importado da ISO: '
+                f'{TYPE_NAMES[original] if original<len(TYPE_NAMES) else original}.',
+                parent=self)
+            return
+        if not messagebox.askyesno('Restaurar tipo da ISO',
+            f'Carta #{cid:03d}: {current} → {original} '
+            f'({TYPE_NAMES[original] if original<len(TYPE_NAMES) else "desconhecido"}).\n'
+            'Apenas o tipo será revertido. ATK, DEF, arte e efeitos serão preservados.\n'
+            'Salvar projeto continuará sendo necessário. Continuar?',
+            parent=self):
+            return
+        self.drafts.restore_original_type(cid)
+        self._load_card()
+        self._refresh_cards()
+        self._update_pending_label()
+        self._update_status(f'Tipo original recuperado para #{cid:03d}; salve o projeto.')
+
     def reset_card(self):
         if self._extract_running or not self.project or not self.selected_id:
             return
@@ -1322,6 +1356,26 @@ class Studio(tk.Tk):
             self._update_status(f'Limite global MIPS registrado: {n} cópias por ID.')
         except (OSError,ModError,ValueError) as exc:
             messagebox.showerror('Limite global de deck PS1',str(exc),parent=self)
+
+    def configure_simulator_lp(self):
+        """LP inicial do laboratório, independente dos LP reais do PS1."""
+        if not self._ready_native_effect():
+            return
+        from .core import simulation_nonnegative_int
+        old=self.project.metadata.get('studio_initial_lp',8000)
+        text=simpledialog.askstring('LP alto no simulador',
+            'LP inicial no Laboratório (até 64 dígitos, sem teto de jogo).\n'
+            'Isso NÃO altera o BIN/CUE ou os LP reais do PS1.',
+            initialvalue=str(old),parent=self)
+        if text is None:
+            return
+        try:
+            value=simulation_nonnegative_int(text,'LP inicial')
+            self.project.metadata['studio_initial_lp']=value
+            self.project.save()
+            self._update_status('LP inicial do simulador salvo. Reabra o laboratório para aplicar.')
+        except (ModError,ValueError,OSError) as exc:
+            messagebox.showerror('LP alto no simulador',str(exc),parent=self)
 
     def configure_ps1_initial_lp(self):
         """Teste MIPS controlado, somente para duelos normais do PS1."""

@@ -1,3 +1,12 @@
+## v1.4.4 — Correção de tipo e números de alta precisão no Studio
+
+- Botão para restaurar apenas o tipo original por carta, sem apagar poderes/efeitos.
+- Proteção dos seletores de tipo/atributo/estrela/raridade contra rolagem do mouse.
+- ATK e DEF editáveis como números inteiros grandes no simulador.
+- LP inicial do simulador personalizável e sem antigo teto de 99999.
+- Exportação PS1 recusa estatísticas que sofreriam truncamento de 9 bits.
+- Testes de restauração seletiva, persistência e não exportação de valores grandes.
+
 ## v1.4.3 — Inspeção estática de rotinas MIPS
 
 - Relatório adicional por rotina com até 20 palavras de máquina decodificadas.

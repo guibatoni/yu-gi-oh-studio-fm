@@ -11,7 +11,6 @@ EFFECT_ACTIONS = {'aura_tipo', 'bonus_por_tipo', 'bonus_deck_tipo', 'bonus_por_c
 EQUIPMENT_ACTIONS = {'equip_imune_armadilha', 'equip_imune_magia_armadilha',
                      'equip_indestrutivel', 'equip_atk'}
 MAX_MONSTERS_PER_SIDE = 5
-MAX_STAT = 99999
 SIDES = ('jogador', 'adversario')
 
 
@@ -43,7 +42,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             raise ModError('Campo: slot inválido ou ocupado')
         if not 1 <= cid <= 32766 or not 0 <= typ <= 31:
             raise ModError('Campo: ID/tipo fora do intervalo')
-        if not 0 <= attack <= MAX_STAT or not 0 <= defense <= MAX_STAT:
+        if attack < 0 or defense < 0:
             raise ModError('Campo: ATK/DEF fora do intervalo')
         face = raw.get('face_up', True)
         if not isinstance(face, bool):
@@ -77,8 +76,8 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
     def add_bonus(src, target, effect, n, idx):
         atk = effect['valor'] * n
         defense = effect.get('valor_def',0) * n
-        target['ataque'] = min(MAX_STAT, target['ataque'] + atk)
-        target['defesa'] = min(MAX_STAT, target['defesa'] + defense)
+        target['ataque'] = target['ataque'] + atk
+        target['defesa'] = target['defesa'] + defense
         if atk or defense:
             events.append({'origem':(src['lado'],src['slot']),
                            'destino':(target['lado'],target['slot']),
@@ -175,7 +174,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             elif action == 'equip_indestrutivel':
                 target['indestrutivel'] = True
             else:
-                target['ataque'] = min(MAX_STAT,target['ataque'] + eff['valor'])
+                target['ataque'] = target['ataque'] + eff['valor']
             events.append({'origem':('equip', cid), 'destino':(side,slot),
                            'acao':action, 'tipo_id':None,
                            'quantidade':1,

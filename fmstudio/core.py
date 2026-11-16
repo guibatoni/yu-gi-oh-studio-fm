@@ -111,6 +111,39 @@ def _bounded_int(value, name, low, high, step=1):
     return v
 
 
+# O editor/simulador admite inteiros grandes, mas nunca os converte
+# silenciosamente em campos de 9 bits do PS1.
+STUDIO_MAX_INTEGER_DIGITS = 64
+PS1_CARD_STAT_MAX = 5110
+
+
+def simulation_nonnegative_int(value, name: str) -> int:
+    raw = str(value).strip()
+    if not re.fullmatch(r'[0-9]{1,64}',raw):
+        raise ModError(f'{name}: use inteiro não negativo de até '
+                       f'{STUDIO_MAX_INTEGER_DIGITS} dígitos (somente simulação).')
+    return int(raw)
+
+
+def ps1_stat_compatible(value) -> bool:
+    return isinstance(value,int) and 0 <= value <= PS1_CARD_STAT_MAX and value % 10 == 0
+
+
+def ps1_stat_export_errors(project) -> list[str]:
+    errors = []
+    for key, fields in sorted(getattr(project,'edits',{}).items(),key=lambda x:int(x[0])):
+        cid=int(key)
+        if cid>722 or not (set(fields)&{'ataque','defesa'}):
+            continue
+        current=project.get(cid)
+        for stat in ('ataque','defesa'):
+            value=int(current[stat])
+            if not ps1_stat_compatible(value):
+                errors.append(f'#{cid:03d} {stat.upper()}={value}: '
+                              'o PS1 aceita apenas 0–5110 em múltiplos de 10')
+    return errors
+
+
 def check_card_edit(row: dict):
     cleaned = {}
     for key in FIELDS:
@@ -132,7 +165,7 @@ def check_card_edit(row: dict):
                 raise ModError(f'{key}: texto muito longo')
             cleaned[key] = str(val)
         elif key in ('ataque', 'defesa'):
-            cleaned[key] = _bounded_int(val, key, 0, 5110, 10)
+            cleaned[key] = simulation_nonnegative_int(val, key)
         elif key == 'tipo_id':
             cleaned[key] = _bounded_int(val, key, 0, 31)
         elif key == 'atributo_id':
@@ -701,7 +734,7 @@ class Project:
                 state[key] = max(0, state[key] + delta)
             elif action in ('dano_lp','cura_lp'):
                 key = 'lp_adversario' if enemy else 'lp_jogador'
-                state[key] = max(0,min(99999,state[key] + (value if action=='cura_lp' else -value)))
+                state[key] = max(0,state[key] + (value if action=='cura_lp' else -value))
             applied.append(eff)
         return state, applied
 
@@ -745,6 +778,12 @@ class Project:
         issues = self.validate()
         if issues:
             raise ModError('Exportação bloqueada:\n'+'\n'.join(issues[:12]))
+        # Não exporte dados truncados pelo campo PS1 de nove bits.
+        oversized=ps1_stat_export_errors(self)
+        if oversized:
+            raise ModError('Exportação PS1 bloqueada: ATK/DEF de 9 bits. '
+                           'Os valores altos continuam salvos e funcionam no simulador.\n'
+                           +'\n'.join(oversized[:8]))
         output = self.folder/'exportacao'
         output.mkdir(parents=True,exist_ok=True)
         changes = []

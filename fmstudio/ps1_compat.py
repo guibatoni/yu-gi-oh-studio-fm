@@ -35,6 +35,10 @@ def audit(project) -> dict:
         if numeric:
             if cid>CARD_COUNT or int(current.get('tipo_id',0))==24 or int(current.get('atributo_id',0))>5:
                 blocked.append(f'#{cid}: atributos de carta virtual/God/atributo não original requerem patch de motor')
+            elif ('ataque' in numeric or 'defesa' in numeric) and any(
+                    int(current[stat])>5110 or int(current[stat])%10
+                    for stat in ('ataque','defesa')):
+                blocked.append(f'#{cid}: ATK/DEF acima de 5110 ou não múltiplos de 10; apenas simulador')
             elif not known:
                 blocked.append(f'#{cid}: SLUS original ainda não vinculado/verificado')
             else:

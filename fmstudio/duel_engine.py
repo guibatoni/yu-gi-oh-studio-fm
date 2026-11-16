@@ -11,11 +11,10 @@ from copy import deepcopy
 import re
 
 from .continuous import SIDES, resolve_field
-from .core import ModError, check_effect
+from .core import ModError, check_effect, simulation_nonnegative_int
 
 MAX_DECK = 40
 MAX_HAND = 5
-MAX_LP = 99999
 
 
 def parse_card_ids(text: str, *, maximum: int = MAX_DECK) -> list[int]:
@@ -45,7 +44,7 @@ class DuelLab:
     `cards`: registros {id: {tipo_id, defesa...}}, `effects`: por ID da carta.
     Qualquer evento só é aplicado quando trigger() é explicitamente invocado.
     """
-    def __init__(self, cards: dict, effects: dict, *, summoning_delay: bool = False):
+    def __init__(self, cards: dict, effects: dict, *, summoning_delay: bool = False, initial_lp: int = 8000):
         self.cards = cards
         self.effects = effects
         self.monsters: list[dict] = []
@@ -56,7 +55,8 @@ class DuelLab:
         self.turns = {side: 0 for side in SIDES}
         self.summoned_turn = {}  # (lado, slot, ID) -> turno em que entrou
         self.hands = {side: [] for side in SIDES}
-        self.lp = {side: 8000 for side in SIDES}
+        self.starting_lp = simulation_nonnegative_int(initial_lp,'LP inicial do simulador')
+        self.lp = {side: self.starting_lp for side in SIDES}
         self.damage = {}  # (side,slot,card_id) => dano simulado permanente
         self.attacks_used = {}  # (side,slot,card_id) => ataques neste turno
         self.logs = []
@@ -252,7 +252,7 @@ class DuelLab:
         """
         if kind not in ('monstro','magia','armadilha'):
             raise ModError('Origem de dano inválida')
-        if not 0 <= value <= MAX_LP:
+        if value < 0:
             raise ModError('Dano inválido')
         unit=self.get(side,slot)
         if unit is None:
@@ -314,7 +314,7 @@ class DuelLab:
                 applied=value*n
                 receiver=side if action=='cura_lp_deck_tipo' else opposing
                 old=self.lp[receiver]
-                self.lp[receiver]=min(MAX_LP,old+applied) if action=='cura_lp_deck_tipo' else max(0,old-applied)
+                self.lp[receiver]=old+applied if action=='cura_lp_deck_tipo' else max(0,old-applied)
                 summary.append({'acao':action,'quantidade':n,'valor':abs(self.lp[receiver]-old),
                                 'alvo':receiver})
             elif action=='descartar_alvo':
