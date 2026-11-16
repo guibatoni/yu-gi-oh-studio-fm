@@ -2255,10 +2255,10 @@ class Studio(tk.Tk):
             opt=messagebox.askyesnocancel(
                 'God24 — patch do baú desativado',
                 f'A carta #{god_cid:03d} tem tipo God24, mas o teste '
-                'de ATK/DEF no baú está DESATIVADO.\\n\\n'
-                'SIM: aplicar duas máscaras MIPS experimentais à cópia BIN/CUE.\\n'
-                'NÃO: gerar sem o patch (ATK/DEF podem continuar em branco).\\n'
-                'CANCELAR: não gerar.\\n\\n'
+                'de ATK/DEF no baú está DESATIVADO.\n\n'
+                'SIM: aplicar duas máscaras MIPS experimentais à cópia BIN/CUE.\n'
+                'NÃO: gerar sem o patch (ATK/DEF podem continuar em branco).\n'
+                'CANCELAR: não gerar.\n\n'
                 'O ícone Deus, a invocação e o combate continuam pendentes.',
                 parent=self)
             if opt is None:
