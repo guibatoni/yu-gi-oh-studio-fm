@@ -1,3 +1,30 @@
+# Studio FM v1.4.6 — Tipo personalizado de monstro, sem voltar ao original
+
+O Studio não obriga mais o Time Wizard #016 a ser Spellcaster (tipo 01).
+O botão **Escolher tipo jogável (PS1)** permite selecionar qualquer tipo
+de criatura 00–19, como Dragon (00), Warrior (03), Machine (14), etc.
+A escolha é salva no projeto e exportada para a imagem de teste, com o
+ATK/DEF da carta preservados. Os efeitos planejados do Studio não são
+apagados.
+
+A opção **Manter visual Deus no Studio** define a raridade visual \`deus\`
+de forma independente do tipo jogável (PS1). Assim a carta pode ter
+aparência Deus no editor, mas ser classificada como Dragon ou outro tipo
+de monstro no motor original.
+
+**Limitação nativa:** God (24) não é um tipo de criatura suportado e
+validado no jogo PS1 original. O seu campo na tabela tem 5 bits,
+mas gravar o valor 24 não transforma por si só a carta em um novo tipo
+de monstro jogável; exigiria alterações nas rotinas do motor, gráficos
+e validação com ePSXe. A geração continua protegida contra gravação
+enganosa de God 24; não será feito mapeamento silencioso para Spellcaster.
+
+Para testar: escolha o tipo de criatura desejado, marque visual Deus
+se preferir, salve o projeto, gere o BIN/CUE e execute a cópia nova no ePSXe.
+Confira os atributos com **Verificar imagem**.
+
+---
+
 # Studio FM v1.4.5 — Correção do Time Wizard #016 / ATK do BIN
 
 - Corrigido erro da v1.4.4: tipo God (24) podia ser exibido no Studio,

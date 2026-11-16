@@ -1,3 +1,15 @@
+## v1.4.6 — Escolha de tipo, sem reversão forçada para Spellcaster
+
+- Removido o botão que fazia o usuário voltar a Spellcaster para poder
+  gravar o Time Wizard. Agora pode escolher livremente qualquer tipo
+  jogável PS1 (0–19).
+- Diálogo para escolher o tipo e manter (opcionalmente) o visual Deus no
+  Studio sem injetar tipo God 24 no motor retail.
+- Retirado aviso que exigia Spellcaster no Time Wizard.
+- Tipo escolhido, ATK 3000, DEF, efeitos e raridade visual ficam preservados.
+- Testes de tipo diferente do original, número de ATK gravado e escolhas
+  inválidas sem mutação do rascunho.
+
 ## v1.4.5 — Evita perda silenciosa do ATK (Time Wizard)
 
 - Reprodução: Time Wizard #016 configurado com 3000 ATK e tipo 24 — God

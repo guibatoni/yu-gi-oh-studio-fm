@@ -30,12 +30,6 @@ def same_card(a: dict, b: dict) -> bool:
 
 
 
-# Referência explícita para cartas cujo tipo pode ter sido alterado na ISO:
-# Time Wizard #016 é Spellcaster no Forbidden Memories original.
-# Nenhuma carta é alterada automaticamente na importação ou atualização.
-RETAIL_TYPE_REFERENCES = {16: 1}
-
-
 class DraftSession:
     def __init__(self, project: Project):
         self.project = project
@@ -63,13 +57,31 @@ class DraftSession:
             self.cards[cid] = merged
 
     def original_type_target(self, cid: int) -> int:
-        """Para #016, a referência retail é independente da ISO modificada."""
-        return RETAIL_TYPE_REFERENCES.get(cid,int(self.project.cards[cid]['tipo_id']))
+        """Retorna a classificação da ISO importada (sem forçar carta alguma)."""
+        return int(self.project.cards[cid]['tipo_id'])
 
     def restore_original_type(self, cid: int) -> None:
-        """Restaura apenas o tipo alvo; mantém ATK/DEF e efeitos inalterados."""
+        """Restaura manualmente o tipo importado, nunca na atualização."""
         card=self.get_card(cid)
         card['tipo_id']=self.original_type_target(cid)
+        self.stage_card(cid,card)
+
+    def choose_playable_monster_type(self, cid: int, typ: int,
+                                     *, god_visual: bool=False) -> None:
+        """Escolha de tipo jogável PS1 independente do tipo retail da carta.
+
+        God visual é raridade de prévia, não tipo 24 no executável.
+        A alteração permanece no rascunho até o usuário salvar o projeto.
+        """
+        from .core import ModError
+        if isinstance(typ,bool) or not isinstance(typ,int) or not 0<=typ<20:
+            raise ModError('Escolha um tipo de monstro jogável (00–19).')
+        if cid not in self.project.cards:
+            raise ModError('Carta não encontrada no projeto.')
+        card=self.get_card(cid)
+        card['tipo_id']=typ
+        if god_visual:
+            card['raridade']='deus'
         self.stage_card(cid,card)
 
     def reset_card(self, cid: int) -> None:

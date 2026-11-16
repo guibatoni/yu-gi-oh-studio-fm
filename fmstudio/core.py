@@ -158,12 +158,11 @@ def ps1_unwritable_numeric_edits(project) -> list[str]:
         name=str(current.get('nome') or '')
         if typ >= 24:
             errors.append(
-                f'Carta #{cid:03d} {name}: tipo {typ} não é gravável como criatura '
-                'no motor original (God 24 é somente prévia do Studio). '
-                + ('Para Time Wizard use 01 — Spellcaster; clique em '
-                   '"Restaurar tipo original" e salve o projeto.'
-                   if cid==16 else
-                   'Selecione um tipo suportado pelo PS1 e salve o projeto.')
+                f'Carta #{cid:03d} {name}: tipo {typ} não é jogável como monstro '
+                'no motor original (God 24 é somente visual no Studio). '
+                'Escolha QUALQUER tipo de monstro entre 00 e 19; '
+                'para manter a aparência Deus, selecione a raridade Deus. '
+                'Não é necessário voltar ao tipo original.'
             )
         if attr > 5:
             errors.append(

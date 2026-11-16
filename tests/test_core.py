@@ -47,15 +47,17 @@ class StudioCoreTests(unittest.TestCase):
         source_sha=hashlib.sha256(self.file.read_bytes()).hexdigest()
         # Reproduz captura do usuário: Time Wizard com ATK 3000 e tipo God.
         self.p.set_card(16, {'ataque':3000, 'tipo_id':24})
-        with self.assertRaisesRegex(ModError,'Spellcaster'):
+        with self.assertRaisesRegex(ModError,'QUALQUER tipo de monstro'):
             self.p.export()
         self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),source_sha)
-        self.p.set_card(16, {'ataque':3000,'tipo_id':1})
+        # A escolha do usuário prevalece: NÃO é necessário voltar para Spellcaster.
+        self.p.set_card(16, {'ataque':3000,'tipo_id':3,'raridade':'deus'})
         output,manifest=self.p.export()
         built=(output/'build_local'/'SLUS_014.11').read_bytes()
         cards,_=decode_cards(built)
         self.assertEqual(cards[15]['ataque'],3000)
-        self.assertEqual(cards[15]['tipo_id'],1)
+        self.assertEqual(cards[15]['tipo_id'],3)
+        self.assertEqual(self.p.get(16)['raridade'],'deus')
         self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),source_sha)
 
     def test_large_stats_saved_for_simulator_but_ps1_export_blocked(self):

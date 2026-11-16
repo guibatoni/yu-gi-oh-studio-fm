@@ -521,7 +521,7 @@ class Studio(tk.Tk):
         self._form_entry(left,'Ataque (múltiplos de 10)','ataque',1)
         self._form_entry(left,'Defesa (múltiplos de 10)','defesa',2)
         self._form_entry(left,'Tipo','tipo_id',3,kind='type')
-        ttk.Button(left,text='Restaurar tipo original',command=self.restore_original_type).grid(row=8,column=0,sticky='w',pady=(5,2))
+        ttk.Button(left,text='Escolher tipo jogável (PS1)',command=self.choose_playable_monster_type).grid(row=8,column=0,sticky='w',pady=(5,2))
         ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
         self.card_type_warning=ttk.Label(left,text='',wraplength=330)
         self.card_type_warning.grid(row=10,column=0,sticky='w',pady=(1,6))
@@ -1050,15 +1050,18 @@ class Studio(tk.Tk):
         try:
             typ=int(self.vars['tipo_id'].get().split(' — ',1)[0])
             cid=self.selected_id
-            if cid==16 and typ!=1:
-                msg=('Time Wizard original é Spellcaster (01). '
-                     'O tipo atual pode impedir a aplicação do ATK no PS1. '
-                     'Use "Restaurar tipo original".')
-            elif typ>=24:
-                msg=('Tipo God ou desconhecido: somente simulação. '
-                     'Alterações numéricas serão bloqueadas na exportação PS1.')
+            if typ>=24:
+                msg=('Tipo God 24 é visual no Studio e não tem suporte jogável '
+                     'comprovado no PS1. Clique "Escolher tipo jogável (PS1)" '
+                     'para transformar a carta sem perder ATK/DEF nem visual Deus.')
+            elif 20<=typ<=23:
+                msg=('Este é um tipo de magia, armadilha, ritual ou equipamento, '
+                     'não uma criatura. Escolha um tipo 00–19 para jogar como monstro.')
+            elif 0<=typ<20:
+                msg=('Tipo de monstro escolhido será exportado no PS1. '
+                     'A classe visual Deus é configurada pela raridade.')
             else:
-                msg=''
+                msg='Tipo não reconhecido.'
             self.card_type_warning.configure(text=msg)
         except (ValueError,KeyError):
             self.card_type_warning.configure(text='Verifique o tipo da carta.')
@@ -1235,31 +1238,57 @@ class Studio(tk.Tk):
         self._update_status(f'Projeto salvo! {count} carta(s) alterada(s), com backup do projeto.json.')
         return True
 
-    def restore_original_type(self):
+    def choose_playable_monster_type(self):
+        """Permite trocar o tipo de QUALQUER monstro sem reverter o Time Wizard."""
         if self._extract_running or not self.project or not self.drafts or not self.selected_id:
             return
         self._stage_current()
         cid=self.selected_id
-        original=self.drafts.original_type_target(cid)
-        current=int(self.drafts.get_card(cid)['tipo_id'])
-        if current==original:
-            messagebox.showinfo('Tipo original',
-                f'A carta #{cid:03d} já usa o tipo de referência original: '
-                f'{TYPE_NAMES[original] if original<len(TYPE_NAMES) else original}.',
-                parent=self)
-            return
-        if not messagebox.askyesno('Restaurar tipo original',
-            f'Carta #{cid:03d}: {current} → {original} '
-            f'({TYPE_NAMES[original] if original<len(TYPE_NAMES) else "desconhecido"}).\n'
-            'Apenas o tipo será revertido. ATK, DEF, arte e efeitos serão preservados.\n'
-            'Salvar projeto continuará sendo necessário. Continuar?',
-            parent=self):
-            return
-        self.drafts.restore_original_type(cid)
-        self._load_card()
-        self._refresh_cards()
-        self._update_pending_label()
-        self._update_status(f'Tipo original recuperado para #{cid:03d}; salve o projeto.')
+        card=self.drafts.get_card(cid)
+        old_type=int(card['tipo_id'])
+        old_rarity=card.get('raridade',DEFAULT_RARITY)
+        dialog=tk.Toplevel(self)
+        dialog.title('Escolher tipo de monstro para PS1')
+        dialog.configure(bg=SURFACE)
+        dialog.resizable(False,False)
+        dialog.transient(self)
+        area=ttk.Frame(dialog,padding=18)
+        area.pack(fill='both',expand=True)
+        ttk.Label(area,text=f'Carta #{cid:03d} — {card.get("nome") or "Sem nome"}').pack(anchor='w',pady=(0,7))
+        ttk.Label(area,text='Selecione o NOVO tipo jogável. Não será restaurado o tipo original.',
+                  wraplength=440).pack(anchor='w',pady=(0,10))
+        types=[f'{i:02d} — {TYPE_NAMES[i]}' for i in range(20)]
+        selection=ttk.Combobox(area,state='readonly',values=types,width=38)
+        selection.pack(fill='x')
+        selection.current(old_type if 0<=old_type<20 else 0)
+        keep_god=tk.BooleanVar(value=(old_type==24 or old_rarity=='deus'))
+        ttk.Checkbutton(area,text='Manter visual Deus no Studio (não muda o tipo PS1)',
+                        variable=keep_god).pack(anchor='w',pady=(12,7))
+        ttk.Label(area,text='Tipo God 24 exige modificação do motor PS1 ainda não validada; '
+                  'a aparência Deus pode ser mantida com um tipo jogável.',
+                  wraplength=440).pack(anchor='w',pady=(0,9))
+        buttons=ttk.Frame(area)
+        buttons.pack(anchor='e',pady=(5,0))
+        def apply():
+            try:
+                chosen=selection.current()
+                self.drafts.choose_playable_monster_type(
+                    cid,chosen,god_visual=keep_god.get())
+                self._load_card()
+                self._refresh_cards()
+                self._update_pending_label()
+                self._update_status(
+                    f'Carta #{cid:03d}: tipo escolhido {TYPE_NAMES[chosen]} '
+                    'mantido em rascunho. Clique Salvar projeto.')
+                dialog.destroy()
+            except (ModError,ValueError) as exc:
+                messagebox.showerror('Tipo inválido',str(exc),parent=dialog)
+        ttk.Button(buttons,text='Cancelar',command=dialog.destroy).pack(side='left',padx=5)
+        ttk.Button(buttons,text='Aplicar tipo escolhido',
+                   command=apply,style='Accent.TButton').pack(side='left')
+        dialog.bind('<Escape>',lambda _evt:dialog.destroy())
+        dialog.grab_set()
+        dialog.wait_window()
 
     def reset_card(self):
         if self._extract_running or not self.project or not self.selected_id:
