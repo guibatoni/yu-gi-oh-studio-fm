@@ -1,3 +1,13 @@
+## v1.4.17 — Alvo real de ATK/DEF do baú
+
+- \`func_80031874\` confirmado no decompilador PS1 como renderizador
+  de oito linhas e seus ATK/DEF.
+- \`Verificar BIN/CUE\` inclui hash e análise de SLTI/SLTIU 20,
+  cargas LBU, branches e delay slots nesta função.
+- Mostra explicitamente que as máscaras v1.4.15 não alteram a
+  rotina responsável por ATK/DEF na captura do ePSXe.
+- Nenhuma alteração nova de executável, sprite ou regras de duelo.
+
 ## v1.4.16 — Diagnóstico do BIN que o usuário executou
 
 - Verificação de 0/2, 1/2 ou 2/2 máscaras reais no SLUS do BIN/CUE escolhido.

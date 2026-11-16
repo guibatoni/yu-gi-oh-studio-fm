@@ -24,6 +24,99 @@ SITES=(
 )
 
 
+
+# Renderizador EFETIVO da lista de oito linhas no baú/deck (retail).
+# A v1.4.15 não mexeu neste endereço: os dois patches afetam
+# CardList_RenderDeckBoxStats e func_80060E70, NÃO func_80031874.
+# Mapeamento: functions.csv do projeto decompilado, tamanho 0x460.
+BUILD_DECK_ROW_RENDER_RAM = 0x80031874
+BUILD_DECK_ROW_RENDER_SIZE = 0x460
+
+
+def audit_god24_build_deck_rows(exe: bytes) -> dict:
+    """Desmonta somente candidatos tipo <20 do renderizador real do baú.
+
+    O scanner é read-only e NÃO muda qualquer op/branch/delay slot.
+    O endereço nominal foi recuperado do código recompilado, mas
+    um MOD pode modificar seus bytes.
+    """
+    from .tables import EXE_DELTA
+    report={
+        'status':'nao_examinado',
+        'funcao':'func_80031874',
+        'endereco_ram':f'0x{BUILD_DECK_ROW_RENDER_RAM:08X}',
+        'tamanho_funcao':BUILD_DECK_ROW_RENDER_SIZE,
+        'patch_mips_nesta_funcao_aplicado':False,
+        'v1415_mascaras_nao_cobrem_esta_funcao':True,
+        'potenciais_comparacoes_tipo_20':[],
+        'aviso':'O jogo desenha ATK/DEF da lista com row[2] < 20. '
+                'Esta auditoria não instala um hook e não muda Magia, '
+                'Armadilha, Equip ou Ritual.'
+    }
+    if len(exe)<0x800 or exe[:8]!=b'PS-X EXE':
+        report['status']='arquivo_invalido'
+        return report
+    addr,size=struct.unpack_from('<II',exe,0x18)
+    offset=BUILD_DECK_ROW_RENDER_RAM-EXE_DELTA
+    if (addr!=EXE_DELTA+0x800 or size<=0 or size%4 or
+            size>len(exe)-0x800 or offset<0x800 or
+            offset+BUILD_DECK_ROW_RENDER_SIZE>0x800+size):
+        report['status']='funcao_fora_do_segmento'
+        return report
+    chunk=exe[offset:offset+BUILD_DECK_ROW_RENDER_SIZE]
+    words=struct.unpack('<'+str(BUILD_DECK_ROW_RENDER_SIZE//4)+'I',chunk)
+    report['sha256_regiao']=hashlib.sha256(chunk).hexdigest()
+    report['primeiros_8_opcodes']=[f'0x{word:08X}' for word in words[:8]]
+    count=0
+    for i,word in enumerate(words):
+        op=word>>26
+        imm=word&0xffff
+        if not (op in (10,11) and imm==20):
+            continue
+        count+=1
+        left=max(0,i-8)
+        right=min(len(words),i+9)
+        context=[]
+        for j in range(left,right):
+            x=words[j]
+            operation=x>>26
+            item={'pc':f'0x{BUILD_DECK_ROW_RENDER_RAM+j*4:08X}',
+                  'offset_slus':f'0x{offset+j*4:X}',
+                  'opcode':f'0x{x:08X}',
+                  'compara_20':j==i,
+                  'mips_operacao':'lbu' if operation==36 else
+                                   'sltiu' if operation==11 else
+                                   'slti' if operation==10 else
+                                   'beq' if operation==4 else
+                                   'bne' if operation==5 else 'outra'}
+            if operation in (4,5,6,7):
+                displacement=x&0xffff
+                if displacement>=0x8000: displacement-=0x10000
+                target=(BUILD_DECK_ROW_RENDER_RAM+j*4+4+(displacement<<2))&0xffffffff
+                item['destino_desvio']=f'0x{target:08X}'
+                item['delay_slot_na_proxima_instrucao']=True
+            if operation==36:
+                item['registrador_carregado']=(x>>16)&31
+                d=x&0xffff
+                if d>=0x8000: d-=0x10000
+                item['offset_lbu']=d
+            context.append(item)
+        report['potenciais_comparacoes_tipo_20'].append({
+            'pc':f'0x{BUILD_DECK_ROW_RENDER_RAM+i*4:08X}',
+            'offset_slus':f'0x{offset+i*4:X}',
+            'opcode':f'0x{word:08X}',
+            'registrador_tipo':(word>>21)&31,
+            'registrador_resultado':(word>>16)&31,
+            'contexto':context,
+            'status':'candidato_requer_rastreamento_de_registradores'
+        })
+    report['total_comparacoes_imediato_20']=count
+    report['status']='analisado_sem_hook' if count else 'sem_comparacao_20_localizada'
+    report['proxima_validacao']='Rastrear o LBU row[2] e o branch após '
+    report['proxima_validacao']+='a comparação; instalar condição tipo<20 '
+    report['proxima_validacao']+='OU tipo==24 sem incluir 20–23.'
+    return report
+
 def visible_as_monster(kind:int, *, preview:bool=False)->bool:
     return (kind & (0x17 if preview else 0x1F)) < 20
 

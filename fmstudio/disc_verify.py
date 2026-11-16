@@ -96,8 +96,11 @@ def verify_image_stats(project, source):
     cid=config.get('ps1_god_type_test_card_id')
     tested=cards[cid-1] if type(cid) is int and 1<=cid<=CARD_COUNT else None
     chest=inspect_god24_chest_mips(exe)
+    from .ps1_god24_chest import audit_god24_build_deck_rows
+    row_renderer=audit_god24_build_deck_rows(exe)
     return {'imagem':image_path,'sha256_slus':hashlib.sha256(exe).hexdigest(),
             'god24_mascaras_bau':chest,
+            'god24_renderizador_lista_bau':row_renderer,
             'god24_teste_bau_ativado_no_projeto':bool(config.get('ps1_god_chest_preview')),
             'god24_total_cartas_no_bin':len(card_types_24),
             'god24_cartas_no_bin':card_types_24[:25],
@@ -121,6 +124,14 @@ def describe(result):
         status=result['god24_mascaras_bau']
         text.append('\nGOD24 — MÁSCARAS MIPS NO BIN/CUE SELECIONADO:')
         text.append('  '+status['status']+' ('+str(status['total_aplicados'])+'/2)')
+        rows=result['god24_renderizador_lista_bau']
+        text.append('  RENDERIZADOR REAL DAS LINHAS: func_80031874 — '+rows['status'])
+        text.append('  Comparações tipo<20 nesta rotina: '+
+                    str(rows.get('total_comparacoes_imediato_20','indisponível')))
+        for candidate in rows['potenciais_comparacoes_tipo_20'][:3]:
+            text.append('    Candidato '+candidate['pc']+
+                        ', offset '+candidate['offset_slus']+
+                        ', opcode '+candidate['opcode'])
         for site in status['pontos']:
             text.append('  '+site['rotina']+' em '+site['offset_slus']+
                         ': '+str(site['opcode_lido'])+' — '+site['estado'])
@@ -129,6 +140,8 @@ def describe(result):
             text.append(f"  Carta #{tw['id']:03d}: tipo {tw['tipo_id']}, "
                         f"ATK {tw['ataque']}, DEF {tw['defesa']}")
         if status['status']=='aplicado_2_de_2':
+            text.append('  As duas máscaras NÃO modificam func_80031874, '
+                        'que desenha a lista atual do baú.')
             text.append('  As máscaras estão no BIN. Se ATK/DEF continuam '
                         'ocultos no ePSXe, confirme o BIN aberto e verifique '
                         'outros caminhos de desenho.')

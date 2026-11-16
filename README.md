@@ -1,3 +1,27 @@
+# Studio FM v1.4.17 — Investigar renderizador REAL do baú
+
+Após as capturas de God24 sem ATK/DEF, identificamos a causa da
+falha de cobertura das máscaras anteriores. A tela de lista do baú
+é desenhada pela função PS1 \`func_80031874\`, região de 0x460 bytes
+no SLUS. Ela verifica \`row[2] < 20\` antes de desenhar os atributos.
+A v1.4.15 modificava outras funções de apresentação (0x51500 e
+0x51728), que não corrigem esse renderizador.
+
+O comando **Verificar BIN/CUE** agora acrescenta ao relatório
+\`god24_renderizador_lista_bau\`: SHA da região, candidatos de
+SLTI/SLTIU 20, instruções LBU, branches, delay slots e offsets
+SLUS. Isso diferencia a função real do histórico de dois patches.
+O diagnóstico examina o SLUS extraído da imagem escolhida e não
+grava nenhum código ou textura.
+
+**Nenhum patch de tipo foi instalado em func_80031874 nesta versão.**
+Não é seguro trocar o limiar de 20 para 25: isso converteria Magic,
+Trap, Equip e Ritual em monstros. É necessária a condição específica
+\`tipo<20 OU tipo==24\` com opcodes/cave e compatibilidade validados.
+O ícone God24 e os caminhos de duelo continuam pendentes.
+
+---
+
 # Studio FM v1.4.16 — Auditar o BIN real antes de outro patch God24
 
 Após a captura do baú sem ATK/DEF, não é possível confirmar apenas
