@@ -40,9 +40,16 @@ SUMMON_DAMAGE = 7
 DROP_ENTRY = 0x80021810
 DECK_INIT = (0x800179F4, 0x80017DB4, 0x800245A0)
 TEXT_DRAW = (0x80035E20, 0x80036BCC)
+RETAIL_FUSION = 0x80019A60
+FUSION_CALLERS = (
+    (0x80019D18, 0x8001B0CC),  # Placement and fusion for the player and opponent.
+    (0x80027228, 0x80027508),  # AI turn selection.
+    (0x800727C0, 0x80072A48),  # AI searches for fusions.
+)
 CONFIG_EXTRAS = 2 + 2 * (CARD_COUNT + 1)
 FIXED_DECK_CONFIG = CONFIG_EXTRAS + 8
 NAME_COLOR_CONFIG = FIXED_DECK_CONFIG + 2
+FUSION_CONFIG = NAME_COLOR_CONFIG + 2
 NAME_TIERS = {key: color for key, (_, color) in RARITIES.items()}
 NAME_TIERS.update({key: color for _, color, key in TYPE_OVERRIDES.values()})
 
@@ -57,6 +64,12 @@ class EffectPlan:
     password_prefix: int | None = None
     fixed_decks: tuple[int, ...] = ()
     name_colors: int = 0
+    fusions: tuple[tuple[int, int, int], ...] = ()
+
+    @property
+    def fusion_report(self):
+        return [{'material_1': a, 'material_2': b, 'resultado': result}
+                for a, b, result in self.fusions]
 
     @property
     def deck_features(self):
@@ -106,7 +119,7 @@ def _pack_name_colors(colors):
     return struct.pack(f'<{len(palette)}I', *palette) + bytes(lookup) + b'\0'
 
 
-def compile_effects(project, profile: bool, *, fixed_decks=None) -> EffectPlan:
+def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -> EffectPlan:
     """Keep the same action vocabulary and value checks as the Studio."""
     metadata = getattr(project, 'metadata', {})
     default = metadata.get('ps1_deck_global_limit')
@@ -131,15 +144,22 @@ def compile_effects(project, profile: bool, *, fixed_decks=None) -> EffectPlan:
 
     fixed_decks = (fixed_decks or {}) if profile else {}
     colors = _name_colors(project, profile)
+    edited_fusions = tuple((a, b, result) for (a, b), result in sorted((fusions or {}).items())) if profile else ()
     data = bytearray(CONFIG_EXTRAS)
     data[0] = default
-    if deck_drops or prefix is not None or fixed_decks or colors:
+    if deck_drops or prefix is not None or fixed_decks or colors or edited_fusions:
         flags = sum(1 << opponent for opponent in deck_drops)
         data.extend(struct.pack('<H', int(f'{prefix or 0:05d}', 16)))
         data.extend(flags.to_bytes(DUELIST_COUNT // 8, byteorder='little'))
         data.append(0)
-    if deck_drops or fixed_decks or colors:
+    if deck_drops or fixed_decks or colors or edited_fusions:
         data.extend(b'\0' * 4)
+        if edited_fusions:
+            data.extend(b'\0' * 4)
+            struct.pack_into('<H', data, FUSION_CONFIG, len(data))
+            for a, b, result in edited_fusions:
+                data.extend(struct.pack('<I', a | (b << 10) | (result << 20)))
+            data.extend(b'\0' * 4)
         if fixed_decks:
             directory = len(data)
             struct.pack_into('<H', data, FIXED_DECK_CONFIG, directory)
@@ -232,10 +252,11 @@ def compile_effects(project, profile: bool, *, fixed_decks=None) -> EffectPlan:
             data.extend(payload)
         struct.pack_into('<H', data, 2 + 2 * cid, offsets[payload])
         accepted.extend(entries)
-    plan = EffectPlan(bytes(data) if accepted or deck_drops or prefix is not None or fixed_decks or colors else b'',
-                      tuple(accepted), tuple(pending), default, deck_drops, prefix, tuple(sorted(fixed_decks)), len(colors))
+    configured = accepted or deck_drops or prefix is not None or fixed_decks or colors or edited_fusions
+    plan = EffectPlan(bytes(data) if configured else b'', tuple(accepted), tuple(pending), default,
+                      deck_drops, prefix, tuple(sorted(fixed_decks)), len(colors), edited_fusions)
     if plan.data_end > plan.bank_end:
-        raise ModError('A tabela de efeitos excede a área reservada do perfil Drop x15.')
+        raise ModError('As regras nativas excedem a área reservada do perfil Drop x15.')
     return plan
 
 
@@ -310,6 +331,9 @@ def _option_calls(plan):
     if plan.name_colors:
         yield (*TEXT_DRAW, 0x800849F0, 'SortTierGlyph')
         yield (*TEXT_DRAW, 0x80084320, 'SortTierPolygon')
+    if plan.fusions:
+        for start, end in FUSION_CALLERS:
+            yield start, end, RETAIL_FUSION, 'CheckEditedFusion'
 
 
 def _call_sites(exe, start, end, target):
@@ -393,7 +417,8 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
             'drops_do_deck': list(plan.deck_drops) if applied else [],
             'password_id_prefix': plan.password_prefix if applied else None,
             'decks_fixos': list(plan.fixed_decks) if applied else [],
-            'nomes_tier': plan.name_colors if applied else 0}
+            'nomes_tier': plan.name_colors if applied else 0,
+            'fusoes': plan.fusion_report if applied else []}
 
 
 def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
@@ -473,5 +498,6 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
         'limite_padrao_por_id': plan.global_limit,
         'drops_do_deck': list(plan.deck_drops), 'password_id_prefix': plan.password_prefix,
         'decks_fixos': list(plan.fixed_decks), 'nomes_tier': plan.name_colors,
+        'fusoes': plan.fusion_report,
         'icones_de_descricao': description_icons, 'validado_no_epsxe': False}
     return bytes(out), report

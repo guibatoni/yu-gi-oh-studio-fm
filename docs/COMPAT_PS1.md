@@ -1,3 +1,10 @@
+## v1.7.2 — Fusões personalizadas
+
+As receitas do projeto entre IDs #001–#722 são aplicadas pelo executável
+Drop x15, com os materiais em qualquer ordem. **Verificar BIN/CUE** confere
+os IDs gravados e as chamadas da rotina. As fusões com cartas adicionais
+funcionam no simulador do Studio.
+
 ## v1.7.1 — Decks e tiers no Drop x15
 
 | Configuração | Resultado no BIN/CUE |

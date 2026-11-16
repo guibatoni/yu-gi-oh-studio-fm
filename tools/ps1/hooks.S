@@ -1,4 +1,4 @@
-/* Only these hooks enter in the middle of a retail routine. */
+/* Entry hooks and continuations for the Drop x15 executable. */
 .set noreorder
 .set noat
 .section .text.entry, "ax"
@@ -73,6 +73,44 @@ CollectOriginal:
     j 0x8002C9BC
     nop
 
+
+/* a0/a1 hold the unchanged material IDs for the retail fallback.
+   Each record is 10 bits per ID, with the result in bits 20-29. */
+.globl CheckEditedFusion
+CheckEditedFusion:
+    addiu $t0, $a0, -1
+    sltiu $t0, $t0, 722
+    beq $t0, $zero, .Lretail_fusion
+    addiu $t0, $a1, -1
+    sltiu $t0, $t0, 722
+    beq $t0, $zero, .Lretail_fusion
+    sltu $t0, $a1, $a0
+    addu $t1, $a0, $zero
+    beq $t0, $zero, .Lpack_fusion
+    addu $t2, $a1, $zero
+    addu $t1, $a1, $zero
+    addu $t2, $a0, $zero
+.Lpack_fusion:
+    sll $t2, $t2, 10
+    or $t1, $t1, $t2
+    lui $t0, 0x801C
+    ori $t0, $t0, 0xD7A0
+    lhu $t2, 1460($t0)  /* FUSION_CONFIG in ps1_runtime.py */
+    lui $t3, 0x000F
+    ori $t3, $t3, 0xFFFF
+    addu $t0, $t0, $t2
+.Lnext_fusion:
+    lw $v0, 0($t0)
+    addiu $t0, $t0, 4
+    beq $v0, $zero, .Lretail_fusion
+    and $t2, $v0, $t3
+    bne $t2, $t1, .Lnext_fusion
+    nop
+    jr $ra
+    srl $v0, $v0, 20
+.Lretail_fusion:
+    j 0x80019A60
+    nop
 
 .section .runtime.mod,"ax",@progbits
 .align 2

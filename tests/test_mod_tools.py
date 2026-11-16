@@ -130,6 +130,27 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(drop_weights(config, {}, 1, 'S-POW', dealt_deck=initial), {legacy: 10})
 
 
+    def test_saved_cocoon_fusion_is_playable_after_reopening_the_project(self):
+        with TemporaryDirectory() as path:
+            project = Project.create(Path(path), 'Fusão salva')
+            for cid, name, kind in ((16, 'Time Wizard', 1), (56, 'Larvae Moth', 9),
+                                    (72, 'Cocoon of Evolution', 9)):
+                project.add_card(card_id=cid, name=name, type_id=kind)
+            save_rules(project, {'receitas': {'fusoes': {'56,16': 72}},
+                                 'duelistas': {'1': {'deck': {'cartas': [72]}}},
+                                 'iniciais': {'Teste': {'cartas': [16, 56]}}})
+            reopened = Project.open(project.folder)
+            game = make_match(reopened, None, 1, 'Teste', rng=Random(1))
+            order = game.hands['jogador'].copy()
+            for hand in (order, list(reversed(order))):
+                game.hands['jogador'] = hand
+                self.assertTrue(any(move.kind == 'fusao' and move.card_id == 72
+                                    for move in game.legal_plays('jogador')))
+            move = next(move for move in game.legal_plays('jogador') if move.kind == 'fusao')
+            game.play('jogador', move)
+            self.assertEqual(game.get('jogador', move.slot)['card_id'], 72)
+
+
 class DeckGeneratorTests(unittest.TestCase):
     def setUp(self):
         self.cards = {cid: card(0 if cid <= 10 else 1, 1000 + cid * 10, 1200)

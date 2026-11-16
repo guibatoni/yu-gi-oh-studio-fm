@@ -112,7 +112,8 @@ def verify_image_stats(project, source):
     actual_gods={c['id'] for c in card_types_24}
     verified_gods=[cid for cid in expected_gods if cid in actual_gods]
     god24_enabled=profile and bool(expected_gods)
-    plan=compile_effects(project,profile,fixed_decks=mod_plan.fixed_decks)
+    plan=compile_effects(project,profile,fixed_decks=mod_plan.fixed_decks,
+                         fusions=mod_plan.fusions)
     original = None
     project_folder = getattr(project, 'folder', None)
     if plan.data and project_folder is not None:
@@ -164,6 +165,11 @@ def describe(result):
     runtime=result.get('efeitos_nativos_ps1',{})
     if runtime.get('status')=='aplicado':
         text.append(f'Efeitos nativos conferidos na cópia: {runtime["quantidade"]}.')
+        fusions = runtime.get('fusoes', [])
+        if fusions:
+            text.append(f'Fusões personalizadas conferidas no BIN: {len(fusions)}.')
+            for row in fusions[:5]:
+                text.append(f'  #{row["material_1"]:03d} + #{row["material_2"]:03d} → #{row["resultado"]:03d}')
         if runtime.get('decks_fixos'):
             ids = ', '.join(f'#{opponent:02d}' for opponent in runtime['decks_fixos'])
             text.append(f'Decks fixos de 40 cartas conferidos para os duelistas {ids}.')
@@ -175,7 +181,7 @@ def describe(result):
         if prefix is not None:
             text.append(f'Passwords por ID usam {prefix:05d} + os três dígitos do ID da carta.')
     elif runtime.get('status')=='divergente':
-        text.append('Regras nativas, decks ou cores desta cópia divergem do projeto. Gere outro BIN/CUE.')
+        text.append('As regras nativas desta cópia divergem do projeto. Gere outro BIN/CUE.')
     mod=result.get('edicao_do_mod_ps1',{})
     if mod.get('bloqueio_turno_inicial') is True:
         text.append('Trava de ataque no primeiro turno conferida no executável.')

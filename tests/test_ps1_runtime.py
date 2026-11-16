@@ -9,7 +9,7 @@ from fmstudio.abilities import quick_settings, replace_quick_effects
 from fmstudio.core import ModError
 from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_sprite_words
 from fmstudio.ps1_runtime import (
-    CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, NAME_COLOR_CONFIG, RUNTIME_EXT_BASE,
+    CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, FUSION_CONFIG, NAME_COLOR_CONFIG, RUNTIME_EXT_BASE,
     RUNTIME_MOD_BASE, SUMMON_DAMAGE,
     _jump, _option_calls, _rule_patches, _valid_original_drop_entry, compile_effects, install_runtime, verify_effects,
 )
@@ -173,6 +173,32 @@ class TestNativeRules(unittest.TestCase):
             corrupted = bytearray(output)
             corrupted[where(changed)] ^= 1
             self.assertEqual(verify_effects(corrupted, plan, original=original)['status'], 'divergente')
+
+
+    def test_edited_fusion_is_verified_in_the_native_bin(self):
+        self.project.effects = {}
+        plan = compile_effects(self.project, True, fusions={(16, 56): 72, (500, 722): 721})
+        start = struct.unpack_from('<H', plan.data, FUSION_CONFIG)[0]
+        self.assertEqual(struct.unpack_from('<III', plan.data, start),
+                         (16 | 56 << 10 | 72 << 20, 500 | 722 << 10 | 721 << 20, 0))
+        source = bytearray(sample_exe())
+        for pc, _, target, _ in _option_calls(plan):
+            struct.pack_into('<I', source, where(pc), _jump(target, link=True))
+        original = bytes(source)
+        self.assertEqual(verify_effects(original, plan, original=original)['fusoes'], [])
+        with patch('fmstudio.ps1_runtime.SOURCE_SHA256', hashlib.sha256(original).hexdigest()):
+            output, report = install_runtime(original, original, plan, description_icons=False)
+        expected = [{'material_1': 16, 'material_2': 56, 'resultado': 72},
+                    {'material_1': 500, 'material_2': 722, 'resultado': 721}]
+        self.assertEqual(report['fusoes'], expected)
+        self.assertEqual(verify_effects(output, plan, original=original)['fusoes'], expected)
+        corrupted = bytearray(output)
+        corrupted[where(CONFIG_ADDRESS + start)] ^= 1
+        self.assertEqual(verify_effects(corrupted, plan, original=original)['status'], 'divergente')
+        for pc, _, target, _ in _option_calls(plan):
+            corrupted = bytearray(output)
+            struct.pack_into('<I', corrupted, where(pc), _jump(target, link=True))
+            self.assertEqual(verify_effects(corrupted, plan, original=original)['fusoes'], [])
 
 
 class TestRichDescriptions(unittest.TestCase):

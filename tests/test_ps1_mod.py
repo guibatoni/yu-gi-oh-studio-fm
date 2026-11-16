@@ -43,6 +43,20 @@ class ModProjectionTests(unittest.TestCase):
         self.assertTrue(any('IDs originais #001–#722' in note for note in plan.pending))
         self.assertEqual(compile_mod(project, profile=False, wa_verified=True).fixed_decks, {})
 
+    def test_saved_fusions_export_only_when_ids_belong_to_the_original_catalog(self):
+        cards = {cid: {'tipo_id': 9} for cid in (16, 56, 72, 723)}
+        cards[16]['tipo_id'] = 24
+        cards[723]['virtual'] = True
+        project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={'edicao_mod': {
+            'receitas': {'fusoes': {'56,16': 72, '56,72': 723}}
+        }})
+        plan = compile_mod(project, profile=True, wa_verified=False)
+        self.assertEqual(plan.fusions, {(16, 56): 72})
+        self.assertIn('Fusões personalizadas (1)', plan.applied)
+        self.assertFalse(plan.needs_wa)
+        self.assertTrue(any('#723' in item for item in plan.pending))
+        self.assertFalse(compile_mod(project, profile=False, wa_verified=True).fusions)
+
     def test_pools_lp_and_opening_turn_verify_without_truncating_studio_settings(self):
         cards = {i:{'tipo_id':0} for i in range(1, 30)}
         project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={'edicao_mod':{
