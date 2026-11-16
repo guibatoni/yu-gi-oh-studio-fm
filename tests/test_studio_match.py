@@ -61,16 +61,63 @@ class StudioMatchTests(unittest.TestCase):
             self.assertEqual(game.draw(side), order[5:6])
             self.assertEqual(game.decks[side], order[6:])
 
-    def test_both_sides_can_attack_on_their_first_summon(self):
+    def test_regular_summon_in_the_opening_requires_the_ability(self):
         for side in (PLAYER, CPU):
-            game = DuelMatch(self.cards, {}, self.decks, rng=Random(42), first=side)
+            for allowed in (False, True):
+                with self.subTest(side=side, allowed=allowed):
+                    effects = {1: [effect('ataque_primeiro_turno', 0)]} if allowed else {}
+                    game = DuelMatch(self.cards, effects, self.decks, rng=Random(42), first=side)
+                    action = next(a for a in game.legal_plays(side)
+                                  if a.position == 'ataque' and a.card_id == 1)
+                    game.play(side, action)
+                    if allowed:
+                        self.assertEqual(game.attack(side, action.slot)['dano_lp_oponente'], 1000)
+                    else:
+                        self.assertEqual(game.legal_attacks(side), [])
+                        self.assertIsNone(choose_attack(game, side))
+                        with self.assertRaisesRegex(ModError, 'abertura do duelo'):
+                            game.preview_attack(side, action.slot)
+                        with self.assertRaises(ModError):
+                            game.attack(side, action.slot)
+
+    def test_regular_summon_can_attack_after_the_opening_on_either_side(self):
+        for opener, side in ((PLAYER, CPU), (CPU, PLAYER)):
+            game = DuelMatch(self.cards, {}, self.decks, rng=Random(42), first=opener)
+            game.end_turn(opener)
             action = next(a for a in game.legal_plays(side) if a.position == 'ataque' and a.card_id == 1)
             game.play(side, action)
             self.assertEqual(game.turns[side], 1)
             self.assertEqual(game.attack(side, action.slot)['dano_lp_oponente'], 1000)
 
+    def test_opening_fusions_check_the_result_ability_for_both_fusion_paths(self):
+        haste = effect('ataque_primeiro_turno', 0)
+        for side in (PLAYER, CPU):
+            for from_field in (False, True):
+                for result_has_ability in (False, True):
+                    with self.subTest(side=side, from_field=from_field, allowed=result_has_ability):
+                        effects = {1: [haste]}
+                        if result_has_ability:
+                            effects[90000] = [haste]
+                        game = DuelMatch(self.cards, effects, self.decks, first=side,
+                                         fusions={(1,4):90000}, rng=Random(42))
+                        if from_field:
+                            game.set_field([unit(side,1,1,self.cards[1])])
+                        fusion = next(a for a in game.legal_plays(side)
+                                      if a.kind == 'fusao' and a.position == 'ataque'
+                                      and bool(a.target) == from_field)
+                        game.play(side, fusion)
+                        self.assertEqual(game.get(side, fusion.slot)['card_id'], 90000)
+                        if result_has_ability:
+                            self.assertEqual(game.legal_attacks(side), [Attack(fusion.slot, None)])
+                            self.assertEqual(game.attack(side, fusion.slot)['dano_lp_oponente'], 3000)
+                        else:
+                            self.assertEqual(game.legal_attacks(side), [])
+                            with self.assertRaises(ModError):
+                                game.attack(side, fusion.slot)
+
     def test_team_trades_equal_monster_then_second_attacks_directly(self):
-        game = DuelMatch(self.cards, {}, self.decks, rng=Random(21), first=CPU)
+        game = DuelMatch(self.cards, {}, self.decks, rng=Random(21))
+        game.end_turn(PLAYER)
         game.set_field([unit(PLAYER,1,3,self.cards[3]), unit(CPU,1,1,self.cards[1]),
                         unit(CPU,2,2,self.cards[2])])
         self.assertEqual(choose_attack(game), Attack(1,1))
@@ -79,14 +126,16 @@ class StudioMatchTests(unittest.TestCase):
         self.assertTrue(any(row['origem'] == (CPU,2) and row['alvo'] == ('LP',PLAYER)
                             for row in attacks[1:]))
 
-    def test_advantageous_one_on_one_trade_on_first_turn(self):
-        game = DuelMatch(self.cards, {}, self.decks, rng=Random(21), first=CPU,
+    def test_advantageous_one_on_one_trade_with_the_opening_ability(self):
+        effects = {1: [effect('ataque_primeiro_turno', 0)]}
+        game = DuelMatch(self.cards, effects, self.decks, rng=Random(21), first=CPU,
                          initial_lp={PLAYER:7000, CPU:9500})
         game.set_field([unit(PLAYER,1,3,self.cards[3]), unit(CPU,1,1,self.cards[1])])
         self.assertEqual(choose_attack(game), Attack(1,1))
 
     def test_ai_uses_effective_guardian_power_when_attacking(self):
-        game = DuelMatch(self.cards, {}, self.decks, rng=Random(21), first=CPU)
+        game = DuelMatch(self.cards, {}, self.decks, rng=Random(21))
+        game.end_turn(PLAYER)
         game.set_field([unit(PLAYER,1,3,self.cards[3],star=SUPREME),
                         unit(CPU,1,1,self.cards[1],star=8)])
         self.assertIsNone(choose_attack(game))
@@ -102,7 +151,8 @@ class StudioMatchTests(unittest.TestCase):
             self.assertEqual(guardian_bonuses(SUPREME,star),(700,0))
             self.assertEqual(guardian_bonuses(star,SUPREME),(0,700))
         self.assertEqual(guardian_bonuses(SUPREME,SUPREME),(0,0))
-        game = DuelMatch(self.cards, {}, self.decks)
+        game = DuelMatch(self.cards, {}, self.decks, first=CPU)
+        game.end_turn(CPU)
         game.set_field([unit(PLAYER,1,1,self.cards[1],star=8),
                         unit(CPU,1,3,self.cards[3],star=SUPREME,position='defesa')])
         result = game.attack(PLAYER,1,target_slot=1)
@@ -112,7 +162,8 @@ class StudioMatchTests(unittest.TestCase):
     def test_ai_fuses_and_chooses_supreme_against_visible_rival(self):
         self.cards[90000].update(ataque=3200, defesa=2800)
         game = DuelMatch(self.cards, {}, {PLAYER:[3], CPU:[1,4]},
-                         fusions={(1,4):90000}, first=CPU)
+                         fusions={(1,4):90000})
+        game.end_turn(PLAYER)
         game.set_field([unit(PLAYER,1,3,self.cards[3],star=9)])
         action = choose_play(game)
         self.assertEqual((action.kind,action.card_id,action.star),('fusao',90000,SUPREME))

@@ -19,6 +19,7 @@ with TemporaryDirectory() as temp:
     huge = 10**90
     project.set_card(hero, {'ataque':huge,'defesa':huge+22,'guardian_1_id':SUPREME})
     project.set_card(enemy, {'ataque':1800,'defesa':1100,'guardian_1_id':7})
+    project.add_effect(hero, {'acao':'ataque_primeiro_turno', 'evento':'continuo', 'alvo':'proprio', 'valor':0})
     save_rules(project, {'duelistas':{'1':{'deck':{'cartas':[enemy]*3}}},
                          'iniciais':{'Perfil de teste':{'cartas':[hero]*3}}})
     root = Studio()
@@ -53,4 +54,4 @@ with TemporaryDirectory() as temp:
         assert dialog.game.lp['adversario'] == 100
         assert 'Dano' in dialog.output.get('1.0','end')
     root.destroy()
-print('GUI: Supreme, filtros, drops, LP altos e duelo com ataque no primeiro turno.')
+print('GUI: Supreme, filtros, drops, LP altos e ataque de abertura com habilidade.')

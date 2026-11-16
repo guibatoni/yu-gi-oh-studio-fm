@@ -350,7 +350,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             raise ModError('As tabelas de duelistas exigem o WA_MRG vinculado ao projeto.')
         patched_wa=patch_wa(patched_wa if patched_wa is not None else original_wa,mod_plan)
 
-    if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
+    # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
+    if not native_profile and patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
             from .ps1_compat import save_audit, explain_no_writable_changes
             dest = save_audit(project)
@@ -423,7 +424,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'descricoes_aplicadas':written_descriptions,
                 'icones_de_descricao_ps1':sorted(description_icons),
                 'efeitos_nativos_ps1':native_report,
-                'edicao_do_mod_ps1':{'ataque_primeiro_turno':native_profile,'aplicado':mod_plan.applied,
+                'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending},
                 'artes_aplicadas':written_arts,
                 'equipamentos_ps1_aplicados':native_written,

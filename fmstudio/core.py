@@ -56,7 +56,7 @@ ACTIONS = {
     'limite_copias_deck':'Limite personalizado de cópias no deck',
     'bonus_por_carta_id':'Recebe ATK/DEF por carta específica',
     'bonus_cemiterio_tipo':'Recebe ATK/DEF por tipo no cemitério',
-    'ataque_primeiro_turno':'Ataca no turno de invocação',
+    'ataque_primeiro_turno':'Ataca no 1º turno',
 }
 TARGETS = {
     'proprio':'Próprio / controlador',

@@ -397,10 +397,11 @@ ENTRY void FieldActions(void)
     volatile s8 *swords = (volatile s8 *)(SIDE(side) + 0x19);
     unsigned flags = (cursor[0x10] == 2 && (unsigned)cursor[0xF] < 5)
         ? protection(5 + side * 15 + cursor[0xF]) : 0;
-    u16 lock = flags & FIRST_TURN ? GAME(u16, 0x8009B16C) & 0x1000 : 0;
+    unsigned step = STEP & 15;
+    /* Step 3 checks the selected attacker. The native end-turn step clears the lock. */
+    u16 lock = step == 3 && (flags & FIRST_TURN) ? GAME(u16, 0x8009B16C) & 0x1000 : 0;
     s8 turns = flags & MAGIC ? *swords : 0;
     u32 hidden = 0;
-    unsigned step = STEP & 15;
     if ((flags & DIRECT) && (step == 5 || step == 6)) {
         unsigned i = side ? 5 : 20;
         for (unsigned end = i + 5; i < end; i++)
@@ -410,7 +411,7 @@ ENTRY void FieldActions(void)
     if (turns) *swords = 0;
     if (lock) GAME(u16, 0x8009B16C) &= ~lock;
     FN(void, 0x8001D670, void)();
-    if (lock && phase() != 10) GAME(u16, 0x8009B16C) |= lock;
+    if (lock) GAME(u16, 0x8009B16C) |= lock;
     if (turns) *swords = turns;
     set_occupied(hidden, OCCUPIED);
 }
