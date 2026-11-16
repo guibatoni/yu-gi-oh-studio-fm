@@ -8,6 +8,7 @@ import re
 import shutil
 import struct
 import sys
+from tempfile import NamedTemporaryFile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -99,9 +100,17 @@ def _write_csv(path: Path, rows: list[dict]):
 
 def _write_json_atomic(path: Path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + '.tmp')
-    tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-    os.replace(tmp, path)
+    tmp = None
+    try:
+        with NamedTemporaryFile(mode='w', dir=path.parent, prefix=f'.{path.name}.',
+                                suffix='.tmp', encoding='utf-8', delete=False) as stream:
+            tmp = Path(stream.name)
+            json.dump(value, stream, indent=2, ensure_ascii=False)
+            stream.write('\n')
+        os.replace(tmp, path)
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
 
 
 def _bounded_int(value, name, low, high, step=1):
@@ -147,6 +156,8 @@ def ps1_stat_export_errors(project) -> list[str]:
         if cid>CARD_COUNT or not (set(fields)&set(NUMERIC)):
             continue
         current=project.get(cid)
+        if current.get('virtual'):
+            continue
         for stat in ('ataque','defesa'):
             value=int(current[stat])
             if not ps1_stat_compatible(value):
@@ -166,6 +177,7 @@ def ps1_god24_card_ids(project) -> list[int]:
     """IDs originais com o tipo God salvo no projeto."""
     return sorted(cid for cid in getattr(project, 'cards', {})
                   if 1 <= cid <= CARD_COUNT
+                  and not project.get(cid).get('virtual')
                   and int(project.get(cid)['tipo_id']) == GOD_TYPE_ID)
 
 
@@ -190,6 +202,8 @@ def ps1_unwritable_numeric_edits(project) -> list[str]:
         if cid < 1 or cid > CARD_COUNT or not (set(fields)&set(NUMERIC)):
             continue
         current=project.get(cid)
+        if current.get('virtual'):
+            continue
         typ=int(current['tipo_id'])
         attr=int(current['atributo_id'])
         name=str(current.get('nome') or '')
@@ -409,12 +423,21 @@ class Project:
         fusions = self.folder / 'base' / 'fusoes.csv'
         for key, card in self.new_cards.items():
             cid = positive_int(key, 'ID da nova carta')
-            if cid <= CARD_COUNT or cid in self.cards:
-                raise ModError(f'ID de carta adicional inválido ou duplicado: {cid}')
+            if cid in self.cards:
+                raise ModError(f'ID de carta adicional duplicado: {cid}')
             self.cards[cid] = dict(card)
         self.fusions = _read_csv(fusions) if fusions.exists() else []
         meta = self.folder / 'base' / 'resumo.json'
         self.imported_notes = json.loads(meta.read_text(encoding='utf-8')).get('warnings',[]) if meta.exists() else []
+
+    @property
+    def original_ids(self):
+        return {cid for cid in self.cards if cid <= CARD_COUNT and not self.cards[cid].get('virtual')}
+
+    def _check_retail_ids(self):
+        overlap = set(range(1, CARD_COUNT + 1)).intersection(map(int, self.new_cards))
+        if overlap:
+            raise ModError(f'A imagem já usa o ID #{min(overlap)} de uma carta criada neste projeto.')
 
     def import_tables(self, source: Path):
         source = Path(source)
@@ -427,7 +450,7 @@ class Project:
         overlap = set(ids).intersection(map(int, self.new_cards))
         if overlap:
             raise ModError(f'O CSV contém o ID #{min(overlap)} de uma carta já criada no projeto.')
-        if any(cid <= CARD_COUNT for cid in self.cards) and (self.edits or self.effects):
+        if self.original_ids and (self.edits or self.effects):
             raise ModError('Projeto já editado: crie outro projeto para trocar a base')
         base = self.folder / 'base'
         base.mkdir(parents=True, exist_ok=True)
@@ -451,7 +474,8 @@ class Project:
         self.save()
 
     def import_disc(self, path: Path):
-        if any(cid <= CARD_COUNT for cid in self.cards) and (self.edits or self.effects):
+        self._check_retail_ids()
+        if self.original_ids and (self.edits or self.effects):
             raise ModError('Não substitua uma base editada. Crie um novo projeto')
         with DiscReader(path) as reader:
             names = {x.path.upper():x for x in reader.files() if not x.is_dir}
@@ -485,6 +509,7 @@ class Project:
         """
         from .deep_extract import (extract_texts, export_visuals, write_semicolon_csv,
                                    prepare_full_catalog, build_full_report, ExtractionError)
+        self._check_retail_ids()
         source=Path(source)
         if progress:progress('Lendo os arquivos do jogo (somente leitura)...')
         raw_files=[]
@@ -510,10 +535,10 @@ class Project:
                            for e in entries.values()]
         if not slus.startswith(b'PS-X EXE'):
             raise ModError('A base extraída não possui cabeçalho PS-X EXE válido')
-        if any(cid <= CARD_COUNT for cid in self.cards):
+        if self.original_ids:
             from .tables import decode_cards
             checked,_=decode_cards(slus)
-            if len(checked)!=sum(cid <= CARD_COUNT for cid in self.cards):
+            if {row['id'] for row in checked} != self.original_ids:
                 raise ModError('O SLUS selecionado possui quantidade de cartas diferente do projeto')
             for item in checked:
                 existing=self.cards[item['id']]
@@ -640,6 +665,7 @@ class Project:
             raise
 
     def attach_executable(self, path: Path):
+        self._check_retail_ids()
         path = Path(path)
         raw = path.read_bytes()
         if not raw.startswith(b'PS-X EXE') or len(raw) < (LEVEL_ADDR-EXE_DELTA + CARD_COUNT+1):
@@ -692,8 +718,8 @@ class Project:
         if copy_from is not None and copy_from not in self.cards:
             raise ModError('Escolha uma carta válida para servir como modelo.')
         cid = self.next_card_id() if card_id is None else positive_int(card_id, 'ID da nova carta')
-        if cid <= CARD_COUNT or cid in self.cards:
-            raise ModError(f'Escolha um ID livre acima de {CARD_COUNT}.')
+        if cid in self.cards:
+            raise ModError(f'O ID #{cid} já pertence a outra carta.')
         source = self.get(copy_from) if copy_from is not None else dict.fromkeys(NUMERIC, 0)
         numeric = {key: source[key] for key in NUMERIC}
         if type_id is not None:
@@ -712,24 +738,7 @@ class Project:
         return cid
 
     def set_card(self, cid: int, fields: dict):
-        if cid not in self.cards:
-            raise ModError('ID inexistente')
-        clean = check_card_edit(fields)
-        baseline = dict(self.cards[cid])
-        baseline.setdefault('cor_nome', DEFAULT_NAME_COLOR)
-        baseline.setdefault('raridade', DEFAULT_RARITY)
-        diff = {}
-        for k, v in clean.items():
-            if k in NUMERIC:
-                if v != int(baseline[k]):
-                    diff[k] = v
-            elif v != baseline.get(k, ''):
-                diff[k] = v
-        if diff:
-            self.edits[str(cid)] = diff
-        else:
-            self.edits.pop(str(cid), None)
-        self.save()
+        self.apply_many({cid: fields})
 
     def apply_many(self, card_changes: dict[int, dict], effect_changes: dict[int, list] | None = None):
         """Valida tudo antes e salva uma única vez (com apenas um backup).
@@ -746,8 +755,13 @@ class Project:
             base = dict(self.cards[cid])
             base.setdefault('cor_nome', DEFAULT_NAME_COLOR)
             base.setdefault('raridade', DEFAULT_RARITY)
-            diff = {k: v for k, v in cleaned.items()
-                    if (int(base[k]) != v if k in NUMERIC else base.get(k, '') != v)}
+            diff = staged_edits.get(str(cid), {})
+            for key, value in cleaned.items():
+                baseline = int(base[key]) if key in NUMERIC else base.get(key, '')
+                if baseline == value:
+                    diff.pop(key, None)
+                else:
+                    diff[key] = value
             if diff:
                 staged_edits[str(cid)] = diff
             else:
@@ -860,7 +874,7 @@ class Project:
             except (ModError, KeyError, TypeError, AttributeError) as exc:
                 issues.append(f'Edição do Mod: {exc}')
         orig_fusions = self.folder/'base'/'fusoes.csv'
-        if any(cid <= CARD_COUNT for cid in self.cards) and not orig_fusions.exists():
+        if self.original_ids and not orig_fusions.exists():
             issues.append('Faltam as fusões da base. Importação incompleta!')
         if orig_fusions.exists() and self.metadata.get('base_sha256',{}).get('fusoes') != sha256(orig_fusions):
             issues.append('Arquivo de fusões originais alterado externamente!')
@@ -900,7 +914,8 @@ class Project:
         })
         _write_json_atomic(output/'novas_cartas.json', {
             'status':'EDITOR_APENAS_SEM_SUPORTE_PS1',
-            'cartas':{str(cid):self.get(cid) for cid in self.cards if cid > CARD_COUNT}})
+            'cartas':{str(cid): self.get(cid) for cid, card in self.cards.items()
+                      if cid > CARD_COUNT or card.get('virtual')}})
         from .richtext import native_text_only
         from .expanded import resolve_references
         textual={}

@@ -36,9 +36,14 @@ def audit(project) -> dict:
     blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
     if native_profile:
         supported.append('Bloqueio de ataque na abertura com exceção por carta')
+    supported.extend(f'Drops do deck do duelista #{opponent}' for opponent in native_plan.deck_drops)
+    if native_plan.password_prefix is not None:
+        supported.append(f'Passwords por ID no BIN/CUE com prefixo {native_plan.password_prefix:05d}')
     descriptions={}
     for key,edits in sorted(project.edits.items(),key=lambda item:int(item[0])):
         cid=int(key); current=project.get(cid)
+        if current.get('virtual'):
+            continue
         changed=set(edits)
         numeric=changed & {'ataque','defesa','tipo_id','atributo_id','nivel','guardian_1_id','guardian_2_id'}
         if numeric:
@@ -98,7 +103,7 @@ def audit(project) -> dict:
         blocked.extend(pending)
     for key,rel in project.arts.items():
         cid=int(key)
-        if cid>CARD_COUNT:
+        if cid>CARD_COUNT or project.cards[cid].get('virtual'):
             blocked.append(f'#{cid}: arte exige expansão de cards do console')
         elif not known or not wa_pinned:
             blocked.append(f'#{cid}: arte precisa de SLUS e WA_MRG.MRG de origem verificados')
@@ -180,7 +185,7 @@ def audit(project) -> dict:
     counts['efeitos_nativos_ps1']=len(native_plan.accepted)
     supported.extend(f'#{cid}: {ACTIONS[action]} no PS1' for cid,action in native_plan.accepted)
     if project.new_cards:
-        blocked.append(f'{len(project.new_cards)} carta(s) #723+: expansão de estruturas/reserva de IDs pendente')
+        blocked.append(f'{len(project.new_cards)} carta(s) adicionais usam o catálogo do Studio.')
     return {
       'versao_relatorio':1,'status':'PARCIAL_PS1_NAO_TODOS_OS_EFEITOS',
       'slus_conferido':known,'wa_hash_registrado':wa_pinned,'contagens':counts,'gravavel_hoje':supported,

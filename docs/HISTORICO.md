@@ -1,3 +1,17 @@
+## v1.7.0 — Catálogo, passwords, decks e recompensas
+
+- **Nova carta** salva qualquer ID livre e atualiza a biblioteca e os editores
+  de decks. O próximo ID acima de 722 continua sendo a sugestão.
+- **Passwords e baú** permite resgatar por código original, ID ou código FM
+  durante o duelo do Studio. O baú fica no projeto. O resgate pode incluir
+  a carta em um deck inicial para a próxima partida.
+- **Dropar Cartas do Próprio Deck** premia uma carta do baralho sorteado para
+  o oponente naquele duelo. A configuração é individual por duelista.
+- **Deck do oponente** tem busca por nome ou ID, filtros de tipo, controles
+  de cópias, contagem de vagas, gerador e rascunho preservado ao trocar de rival.
+- O BIN/CUE Drop x15 pode usar os drops do deck e passwords por ID com as
+  cartas de #001 a #722. As cartas adicionais são jogáveis no simulador.
+
 ## v1.6.1 — Ataque de abertura por carta
 
 - O primeiro turno exige **Ataca no 1º turno** no monstro em campo.

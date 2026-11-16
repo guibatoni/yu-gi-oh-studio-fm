@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from random import SystemRandom
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -12,7 +11,8 @@ from .duel_ai import play_ai_turn, posture
 from .expanded import display_name
 from .guardian import guardian_name
 from .gui import ACCENT, BORDER, SURFACE, TEXT, compact_number
-from .mod_data import RANK_GROUPS, drop_weights, weighted_choice
+from .mod_data import RANK_GROUPS, drops_from_deck
+from .passwords import grant_card, original_passwords
 from .tables import DUELIST_NAMES_REFERENCE
 
 
@@ -62,11 +62,14 @@ def show_exact(parent, title, text):
 
 
 class MatchDialog(tk.Toplevel):
-    def __init__(self, parent, game, opponent, rules, pools):
+    def __init__(self, parent, game, opponent, rules, pools, *, project=None, collection_changed=None):
         super().__init__(parent)
         self.title(f'Duelo contra {DUELIST_NAMES_REFERENCE[opponent]}')
         self.geometry('1120x780')
         self.minsize(960, 700)
+        self.studio = parent
+        self.project = project or getattr(parent, 'project', None)
+        self.collection_changed = collection_changed
         self.game = game
         self.opponent = opponent
         self.rules = rules
@@ -77,13 +80,16 @@ class MatchDialog(tk.Toplevel):
         self.log_lines = []
         self.built_plays = []
         self.ai_running = False
-        self.reward_rolled = False
+        self.deck_drops = drops_from_deck(rules, opponent)
+        self._auto_reward_attempted = False
         pane = ttk.Frame(self, padding=12)
         pane.pack(fill='both', expand=True)
         header = ttk.Frame(pane)
         header.pack(fill='x')
         ttk.Label(header, textvariable=self.result, foreground=ACCENT).pack(side='left')
         ttk.Button(header, text='Ver LP completos', command=self._exact_life).pack(side='right')
+        ttk.Button(header, text='Passwords e baú', command=self._open_passwords,
+                   state='normal' if self.project else 'disabled').pack(side='right', padx=6)
 
         battlefield = ttk.Frame(pane)
         battlefield.pack(fill='x', pady=(9, 5))
@@ -133,10 +139,14 @@ class MatchDialog(tk.Toplevel):
         reward = ttk.Frame(pane)
         reward.pack(fill='x', pady=(5, 0))
         self.rank = tk.StringVar(value='S-POW')
-        ttk.Combobox(reward, textvariable=self.rank, state='readonly', values=list(RANK_GROUPS), width=12).pack(side='left')
-        self.drop_button = ttk.Button(reward, text='Sortear recompensa do rank', command=self._roll_drop)
+        if not self.deck_drops:
+            ttk.Combobox(reward, textvariable=self.rank, state='readonly',
+                         values=list(RANK_GROUPS), width=11).pack(side='left')
+        self.drop_button = ttk.Button(reward, text='Receber recompensa',
+                                      style='Accent.TButton', command=self._roll_drop)
         self.drop_button.pack(side='left', padx=5)
-        self.reward = ttk.Label(reward, foreground=ACCENT)
+        self.reward = ttk.Label(reward, foreground=ACCENT,
+                                text='Recompensa do deck do oponente' if self.deck_drops else '')
         self.reward.pack(side='left')
         self.output = tk.Text(pane, height=4, wrap='word', state='disabled', bg=SURFACE, fg=TEXT)
         self.output.pack(fill='x', pady=(5, 0))
@@ -268,7 +278,11 @@ class MatchDialog(tk.Toplevel):
         for button in (self.attack_button, self.direct_button, self.pose_button, self.end_button):
             button.configure(state='normal' if enabled else 'disabled')
         self.play_button.configure(state='normal' if self.built_plays else 'disabled')
-        self.drop_button.configure(state='normal' if self.game.winner == 'jogador' and not self.reward_rolled else 'disabled')
+        can_claim = self.game.winner == 'jogador' and self.game.reward_card is None
+        self.drop_button.configure(state='normal' if can_claim else 'disabled')
+        if can_claim and self.deck_drops and not self._auto_reward_attempted:
+            self._auto_reward_attempted = True
+            self._roll_drop()
 
     def _action(self, callback):
         before = len(self.game.logs)
@@ -314,12 +328,29 @@ class MatchDialog(tk.Toplevel):
         self.ai_running = False
         self.render()
 
-    def _roll_drop(self):
-        weights = drop_weights(self.rules, self.pools, self.opponent, self.rank.get())
+    def _check_project(self):
+        if not self.project or self.project is not self.studio.project or self.studio._extract_running:
+            raise ModError('O baú está vinculado ao projeto que abriu este duelo.')
+
+    def _open_passwords(self):
+        from .mod_tools_gui import PasswordsDialog
         try:
-            cid = weighted_choice(weights, SystemRandom())
-            self.reward.configure(text=display_name(cid, self.game.cards))
-            self.reward_rolled = True
-            self.drop_button.configure(state='disabled')
-        except ModError as exc:
+            self._check_project()
+            cards = {cid: self.project.get(cid) for cid in self.project.cards}
+            PasswordsDialog(self.studio, self.project, cards, original_passwords(self.project),
+                            owner=self, changed=self.collection_changed)
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Passwords e baú', str(exc), parent=self)
+
+    def _roll_drop(self):
+        try:
+            self._check_project()
+            cid = self.game.claim_reward(self.rules, self.pools, self.opponent, self.rank.get(),
+                                         lambda card: grant_card(self.project, card))
+        except (ModError, ValueError, OSError) as exc:
             self.reward.configure(text=str(exc))
+            return
+        self.reward.configure(text=f'{display_name(cid, self.game.cards)} enviada ao baú.')
+        self.drop_button.configure(state='disabled')
+        if self.collection_changed:
+            self.collection_changed()

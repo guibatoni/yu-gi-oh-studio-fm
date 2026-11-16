@@ -9,6 +9,7 @@ from .core import ModError, _read_csv, check_effect, positive_int, simulation_no
 from .tables import CARD_COUNT, DECK_SIZE, DUELIST_NAMES_REFERENCE
 
 CONFIG_KEY = 'edicao_mod'
+DROP_FROM_DECK = 'drops_do_deck'
 STOCK_STARTER = 'Original do disco'
 RANK_GROUPS = {
     **dict.fromkeys(('Z-POW', 'S-POW', 'A-POW'), 'pow'),
@@ -158,6 +159,8 @@ def normalize_rules(data, cards):
             duelist['lp'] = positive_int(duelist['lp'], 'LP do oponente')
         if 'deck' in duelist:
             duelist['deck'] = _normalize_deck(duelist['deck'], cards)
+        if DROP_FROM_DECK in duelist and not isinstance(duelist[DROP_FROM_DECK], bool):
+            raise ModError('Escolha se os drops do duelista vêm do próprio deck.')
         for rank, weights in duelist.get('drops', {}).items():
             if rank not in RANK_GROUPS and rank not in DROP_GROUPS:
                 raise ModError(f'Grupo de rank inválido: {rank}.')
@@ -289,7 +292,13 @@ def duelist_profile(config, pools, opponent):
     return {'pools': [{'compras': DECK_SIZE, 'pesos': weights}]} if weights else {}
 
 
-def drop_weights(config, pools, opponent, rank):
+def drops_from_deck(config, opponent):
+    return config.get('duelistas', {}).get(str(opponent), {}).get(DROP_FROM_DECK, False)
+
+
+def drop_weights(config, pools, opponent, rank, *, dealt_deck=()):
+    if drops_from_deck(config, opponent):
+        return dict(Counter(dealt_deck))
     rank_group = RANK_GROUPS.get(rank, rank)
     custom = config.get('duelistas', {}).get(str(opponent), {}).get('drops', {})
     return custom.get(rank, custom.get(rank_group, pools.get((opponent, rank_group), {})))

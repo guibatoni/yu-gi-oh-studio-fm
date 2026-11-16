@@ -1,3 +1,17 @@
+## v1.7.0 — Passwords por ID e drops do próprio deck
+
+| Recurso | Studio | BIN/CUE Drop x15 |
+| --- | --- | --- |
+| Passwords originais | Resgate no baú e inclusão opcional no deck inicial | Tela de compra e preços originais |
+| Passwords por ID | ID livre ou código FM para qualquer carta do projeto | Prefixo exibido no Studio + ID de três dígitos, #001–#722, 1 Star Chip |
+| Dropar Cartas do Próprio Deck | Uma carta da composição inicial sorteada | Uma carta do baralho inicial carregado para o duelista |
+| Cartas adicionais | Catálogo, receitas e duelo | Estruturas originais de cartas, decks e save com 722 IDs |
+
+A opção de passwords por ID é habilitada em **Passwords e baú** após a leitura
+dos códigos da origem. O exportador confere se o prefixo escolhido está
+livre na tabela do BIN/CUE. As recompensas por rank continuam disponíveis
+para os duelistas que usam pesos por rank.
+
 ## v1.6.1 — Regra de abertura do Drop x15
 
 O primeiro turno permite ataques dos monstros com **Ataca no 1º turno**.

@@ -11,7 +11,7 @@ from .duel_engine import DuelLab, MAX_HAND, POSITIONS
 from .guardian import guardian_options
 from .mod_data import (
     CONFIG_KEY, MONSTER_TYPES, STOCK_STARTER, base_tables, card_effects, deal_deck,
-    duelist_profile, match_recipes, normalize_rules, opposite, starting_life, weighted_choice,
+    drop_weights, duelist_profile, match_recipes, normalize_rules, opposite, starting_life, weighted_choice,
 )
 from .tables import CARD_COUNT
 
@@ -65,6 +65,8 @@ class DuelMatch(DuelLab):
         self.played = False
         self.positions_used = set()
         self.deck_out = None
+        self.reward_card = None
+        self._pending_reward = None
         rng = rng or SystemRandom()
         for side in SIDES:
             self.set_deck(side, decks[side])
@@ -81,6 +83,18 @@ class DuelMatch(DuelLab):
             return opposite(self.deck_out)
         alive = [side for side in SIDES if self.lp[side] > 0]
         return 'empate' if not alive else alive[0] if len(alive) == 1 else None
+
+    def claim_reward(self, config, pools, opponent, rank, grant, *, rng=None):
+        if self.winner != 'jogador':
+            raise ModError('Vença o duelo para receber uma recompensa.')
+        if self.reward_card is not None:
+            return self.reward_card
+        if self._pending_reward is None:
+            weights = drop_weights(config, pools, opponent, rank, dealt_deck=self.initial_decks['adversario'])
+            self._pending_reward = weighted_choice(weights, rng or SystemRandom())
+        grant(self._pending_reward)
+        self.reward_card = self._pending_reward
+        return self.reward_card
 
     def _require_turn(self, side):
         if self.active != side or self.winner:
@@ -433,7 +447,8 @@ def make_match(project, drafts, opponent, starter=STOCK_STARTER, *, rng=None, fi
         terrain[tuple(map(int, key.split(',')))] = int(value)
     return DuelMatch(cards, effects, decks, initial_lp=starting_life(project, opponent),
                      fusions=fusions, equips=equips, rituals=rituals, default_copies=copies,
-                     rng=rng, first=first, stock_rules=any(cid <= CARD_COUNT for cid in cards),
+                     rng=rng, first=first, stock_rules=any(cid <= CARD_COUNT and not card.get('virtual')
+                                                     for cid, card in cards.items()),
                      trap_limits={int(key): int(value) for key, value in
                                   project.metadata.get('ps1_trap_thresholds', {}).items()},
                      terrain_bonuses=terrain, stock_equips=stock_equips)

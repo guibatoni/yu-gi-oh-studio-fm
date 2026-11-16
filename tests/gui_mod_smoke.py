@@ -7,7 +7,9 @@ from fmstudio.core import Project
 from fmstudio.drafts import DraftSession
 from fmstudio.duel_gui import MatchDialog
 from fmstudio.gui import Studio
-from fmstudio.mod_data import CONFIG_KEY, save_rules
+from fmstudio.mod_data import CONFIG_KEY, DROP_FROM_DECK, save_rules
+from fmstudio.mod_tools_gui import PasswordsDialog
+from fmstudio.passwords import chest_cards
 from fmstudio.tables import SUPREME
 
 
@@ -15,7 +17,7 @@ with TemporaryDirectory() as temp:
     project = Project.create(Path(temp)/'teste', 'Teste de partida')
     hero = project.add_card(name='Guardião Supremo')
     enemy = project.add_card(name='Rival')
-    project.add_card(type_id=20, name='Magia')
+    secret = project.add_card(type_id=24, name='God de teste')
     huge = 10**90
     project.set_card(hero, {'ataque':huge,'defesa':huge+22,'guardian_1_id':SUPREME})
     project.set_card(enemy, {'ataque':1800,'defesa':1100,'guardian_1_id':7})
@@ -36,6 +38,10 @@ with TemporaryDirectory() as temp:
         editor.drops.weight.set('37')
         editor.drops._apply()
         assert project.metadata[CONFIG_KEY]['duelistas']['1']['drops']['pow'][hero] == 37
+        editor.use_deck_drops.set(True)
+        editor._toggle_deck_drops()
+        assert project.metadata[CONFIG_KEY]['duelistas']['1'][DROP_FROM_DECK]
+        assert editor.deck_drop_candidates.get_children() == (str(enemy),)
         editor.player_lp.set(str(huge))
         editor.opponent_lp.set(str(huge+100))
         editor.save_lp()
@@ -46,6 +52,13 @@ with TemporaryDirectory() as temp:
         assert dialog.game.lp['jogador'] == huge
         assert '…' in dialog.lp_text['jogador'].get()
         assert dialog.zones['mao'].get_children() == (str(hero),)
+        dialog._open_passwords()
+        passwords = next(child for child in dialog.winfo_children() if isinstance(child, PasswordsDialog))
+        passwords.into_starter.set(True)
+        passwords.ids.query.set(f'#{secret}')
+        passwords.ids.redeem()
+        assert project.metadata[CONFIG_KEY]['iniciais']['Deck do baú']['cartas'] == [secret]
+        passwords.destroy()
         selected = next(i for i,a in enumerate(dialog.built_plays) if a.position == 'ataque')
         dialog.play_select.current(selected)
         dialog._play()
@@ -53,5 +66,9 @@ with TemporaryDirectory() as temp:
         dialog._attack(True)
         assert dialog.game.lp['adversario'] == 100
         assert 'Dano' in dialog.output.get('1.0','end')
+        dialog.game.lp['adversario'] = 0
+        dialog.render()
+        assert 'Rival' in dialog.reward.cget('text')
+        assert chest_cards(Project.open(project.folder)) == {str(enemy): 1, str(secret): 1}
     root.destroy()
 print('GUI: Supreme, filtros, drops, LP altos e ataque de abertura com habilidade.')
