@@ -423,6 +423,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             if checked['divergentes']:
                 raise ModError('BIN de teste diverge dos atributos do projeto. '
                                'A cópia anterior foi preservada.')
+            if (metadata.get('ps1_god_chest_preview',False)
+                    and checked['god24_mascaras_bau']['status']!='aplicado_2_de_2'):
+                raise ModError('God24: as duas máscaras não foram confirmadas '
+                               'na imagem reempacotada. BIN anterior preservado.')
             checked['imagem']=str(bin_file)
             result['verificacao_atributos']=checked
         stage_meta.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
