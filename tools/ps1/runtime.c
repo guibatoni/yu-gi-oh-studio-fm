@@ -514,7 +514,8 @@ typedef struct {
     u32 price, password;
 } PasswordRecord;
 
-__attribute__((used)) EXTENSION void UpdatePasswordShop(void)
+__attribute__((used, noinline, section(".runtime.password")))
+void UpdatePasswordShop(void)
 {
     const volatile u8 *digits = (const volatile u8 *)0x8016D410;
     u32 packed = 0;

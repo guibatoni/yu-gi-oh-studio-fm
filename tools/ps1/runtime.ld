@@ -17,7 +17,14 @@ SECTIONS {
         . = ALIGN(4);
     }
     ASSERT(. <= 0x801CD7A0, "PS1 duel state exceeds reserved memory")
-    .runtime_ext 0x801CFA80 : {
+    .runtime_password 0x801CF9B0 : {
+        __password_start = .;
+        KEEP(*(.runtime.password))
+        . = ALIGN(4);
+        __password_end = .;
+    }
+    ASSERT(__password_end <= 0x801CFB00, "PS1 passwords conflict with the extended effects code")
+    .runtime_ext 0x801CFB00 : {
         __runtime_ext_start = .;
         KEEP(*(.runtime.extension))
         . = ALIGN(4);
