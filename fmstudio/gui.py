@@ -1427,6 +1427,7 @@ class Studio(tk.Tk):
                  f'Efeitos cadastrados: {groups}\n'
                  f'Limite global de cópias: {deck["status"]}\n'
                  f'Chamadas diretas JAL ao cálculo de atributos: {jals}\n'
+                 'Ícone God24 no baú: diagnóstico incluído, SEM hook MIPS instalado.\n'
                  'Amostras de instruções MIPS adicionadas ao relatório.\n\n'
                  'Os endereços são referências do PS1 original; MODs podem usar hooks.\n'
                  'Nenhum efeito inédito foi instalado no BIN somente por gerar este relatório.\n\n'

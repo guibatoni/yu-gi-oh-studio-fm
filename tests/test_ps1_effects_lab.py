@@ -12,6 +12,7 @@ from fmstudio.core import check_effect, ModError
 from fmstudio.duel_engine import DuelLab
 from fmstudio.ps1_effects_lab import (
     SITES, scan_effect_sites, scan_direct_mips_calls, deck_global_patch_probe, patch_deck_global_limit,
+    GOD_ICON_RENDER_SITES, diagnose_god_type_icon,
     analyze_project_effects, save_project_effect_analysis,
     probe_initial_duel_lp, patch_initial_duel_lp,
     inspect_function_instructions,
@@ -114,6 +115,23 @@ class MipsEffectProbeTests(unittest.TestCase):
         for invalid in (0,49,True):
             with self.assertRaises(ModError):
                 inspect_function_instructions(original,'atributos_dinamicos',invalid)
+
+    def test_god_icon_probe_does_not_change_slus(self):
+        exe=bytearray(stock_like_exe())
+        for _,addr,_ in GOD_ICON_RENDER_SITES.values():
+            off=addr-EXE_DELTA
+            for i in range(12):
+                struct.pack_into('<I',exe,off+4*i,0x24020018+i)
+        original=bytes(exe)
+        probe=diagnose_god_type_icon(original)
+        self.assertEqual(probe['primeira_guardian_star_indice'],24)
+        self.assertTrue(probe['mesmo_indice_no_renderizador_original'])
+        self.assertEqual(len(probe['referencias']),3)
+        self.assertTrue(all(len(entry['primeiras_instrucoes'])==12
+                            for entry in probe['referencias'].values()))
+        self.assertEqual(bytes(exe),original)
+        self.assertEqual(diagnose_god_type_icon(b'wrong')['status'],
+                         'executavel_invalido')
 
     def test_lp_patch_retains_original_and_changes_immediate(self):
         exe=bytearray(stock_like_exe())

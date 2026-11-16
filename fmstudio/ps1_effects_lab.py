@@ -365,6 +365,48 @@ def patch_deck_global_limit(exe: bytes, limit: int | None) -> tuple[bytes,list[d
     }]
 
 
+# Endereços de referência US SLUS-01411; MODs podem alterar cada rotina.
+GOD_ICON_RENDER_SITES = {
+    'tipo_na_lista': ('func_80037DA4', 0x80037DA4, 0x280),
+    'sprite_tipo': ('func_80031574', 0x80031574, 0x17C),
+    'renderizador_glifos': ('func_80035E20', 0x80035E20, 0x240),
+}
+
+
+def diagnose_god_type_icon(exe: bytes) -> dict:
+    """Read-only: contexto para futuro patch de God24 sem afetar stars."""
+    result={
+        'status':'diagnostico_sem_hook_de_tipo',
+        'tipo_god':24,
+        'primeira_guardian_star_indice':0x17+1,
+        'mesmo_indice_no_renderizador_original':True,
+        'referencias':{},
+        'aviso':'Um ícone na descrição não muda o ícone de tipo no baú. '
+                'O índice 24 também representa a primeira Guardian Star; '
+                'não sobrescrever a textura original.',
+        'pendencia':'Requer um hook somente no caminho de tipo e um sprite '
+                   'exclusivo; não foi instalado nenhum patch MIPS de ícone.'}
+    if exe[:8]!=b'PS-X EXE':
+        result['status']='executavel_invalido'
+        return result
+    for key,(name,ram,size) in GOD_ICON_RENDER_SITES.items():
+        offset=ram-EXE_DELTA
+        if offset<0 or offset+size>len(exe):
+            result['referencias'][key]={'nome':name,'status':'janela_ausente'}
+            continue
+        region=exe[offset:offset+size]
+        words=[struct.unpack_from('<I',region,4*i)[0] for i in range(12)]
+        result['referencias'][key]={
+            'nome':name,
+            'status':'amostra_sem_validacao' if sum(x!=0 for x in words)>=4
+                      else 'amostra_vazia_ou_alterada',
+            'endereco_retail':f'0x{ram:08X}',
+            'offset_slus':f'0x{offset:X}',
+            'sha256_regiao':hashlib.sha256(region).hexdigest(),
+            'primeiras_instrucoes':[f'0x{x:08X}' for x in words]}
+    return result
+
+
 def analyze_project_effects(project) -> dict:
     """Relatório local sem prometer que o jogo executa habilidades da GUI."""
     base=project.folder/'base'/'source_SLUS_014.11'
@@ -383,12 +425,13 @@ def analyze_project_effects(project) -> dict:
             else:unknown.append(record)
     limit=project.metadata.get('ps1_deck_global_limit')
     return {
-        'versao_perfil':1,'alvo':'SLUS_014.11 (PS1 MIPS)',
+        'versao_perfil':2,'alvo':'SLUS_014.11 (PS1 MIPS)',
         'sha256_executavel_origem':hashlib.sha256(exe).hexdigest(),
         'funcoes_encontradas':scan_effect_sites(exe),
         'amostras_instrucoes_mips':{alias:inspect_function_instructions(exe,alias)
                                     for alias in SITES},
         'referencias_chamadas_mips':scan_direct_mips_calls(exe),
+        'diagnostico_icone_tipo_god':diagnose_god_type_icon(exe),
         'probe_lp_inicial':probe_initial_duel_lp(exe,project.metadata.get('ps1_starting_lp')),
         'perfil_limite_global_deck':deck_global_patch_probe(exe,limit),
         'grupos_programados_no_studio':grouped,

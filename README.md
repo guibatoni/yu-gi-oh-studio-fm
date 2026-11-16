@@ -1,3 +1,9 @@
+# Studio FM v1.4.11 — Diagnóstico de ícone de tipo God
+
+O Time Wizard #016 continua sem ícone Deus no campo de tipo do baú: o teste anterior de glifo modifica apenas a descrição. No motor retail o valor 24 também é o índice da primeira Guardian Star (0x17+1), então sobrescrever essa textura afetaria outros símbolos. A função Efeitos > Diagnosticar motor MIPS agora grava diagnostico_icone_tipo_god no JSON, com regiões e hashes de três rotinas retail. Não injeta hook nem promete que o ícone já está no ePSXe. Para instalar um ícone correto será necessário redirecionar especificamente o tipo God24, com sprite próprio e assinatura validada no SLUS do mod.
+
+---
+
 # Studio FM v1.4.10 — Não substituir ícones existentes no mod
 
 A célula 0x29 pode estar ocupada por gráficos de mods. Agora o Studio

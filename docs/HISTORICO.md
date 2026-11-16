@@ -1,3 +1,10 @@
+## v1.4.11 — Diagnóstico da ausência de ícone God24
+
+- Separadas as rotinas de ícone de tipo do glifo da descrição.
+- Identificada colisão de índice 24 com a primeira Guardian Star, impeditiva de troca simples de bitmap.
+- Relatório MIPS inclui três janelas de referência com hashes e opcodes para orientar um hook seguro.
+- Nenhuma alteração de renderização foi aplicada; BIN e sprites originais preservados.
+
 ## v1.4.10 — Seleção segura de célula para ícone God
 
 - Diagnóstico de células 0x27–0x30 antes de inserir pixels 4bpp.
