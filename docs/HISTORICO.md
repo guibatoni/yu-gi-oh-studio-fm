@@ -1,3 +1,11 @@
+## v1.4.15 — Duas máscaras MIPS para ATK/DEF de God24 no baú
+
+- Opt-in explícito na aba Cartas para apresentação do tipo 24 no baú.
+- 0x51500 e 0x51728: ANDI v0,v0,31 passa para ANDI v0,v0,23.
+- Tipos 0–23 preservados; somente 24 ganha status de monstro nessa comparação.
+- 25–31 proibidos; SHA do SLUS e assinaturas de contexto verificadas.
+- Nenhuma intervenção em combate, invocação ou ícone; ePSXe pendente.
+
 ## v1.4.14 — Correção do diagnóstico de God24 sem atributos
 
 - Evidência em ePSXe: Time Wizard #016 com tipo 24 aparece sem ATK/DEF

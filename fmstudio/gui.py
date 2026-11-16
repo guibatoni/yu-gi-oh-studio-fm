@@ -524,6 +524,7 @@ class Studio(tk.Tk):
         self._form_entry(left,'Tipo','tipo_id',3,kind='type')
         ttk.Button(left,text='Escolher tipo jogável (PS1)',command=self.choose_playable_monster_type).grid(row=8,column=0,sticky='w',pady=(5,2))
         ttk.Button(left,text='Teste glifo na descrição (não no tipo)',command=self.toggle_god_icon_ps1).grid(row=11,column=0,sticky='w',pady=(6,2))
+        ttk.Button(left,text='PS1: ATK/DEF God no baú (teste)',command=self.toggle_god24_chest_preview).grid(row=12,column=0,sticky='w',pady=(6,2))
         ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
         self.card_type_warning=ttk.Label(left,text='',wraplength=330)
         self.card_type_warning.grid(row=10,column=0,sticky='w',pady=(1,6))
@@ -1246,6 +1247,48 @@ class Studio(tk.Tk):
         self._update_pending_label()
         self._update_status(f'Projeto salvo! {count} carta(s) alterada(s), com backup do projeto.json.')
         return True
+
+    def toggle_god24_chest_preview(self):
+        """Ativa explicitamente duas máscaras MIPS de apresentação do baú."""
+        if not self._ready_native_effect() or not self.selected_id:
+            return
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro',
+                'Clique Salvar projeto antes de ativar God24 no baú.',parent=self)
+            return
+        cid=int(self.selected_id)
+        if self.project.metadata.get('ps1_god_chest_preview',False):
+            if messagebox.askyesno('Desativar teste do baú',
+                'Desativar God24 ATK/DEF no próximo BIN/CUE?',parent=self):
+                self.project.metadata.pop('ps1_god_chest_preview',None)
+                self.project.save()
+                self._update_status('Teste God24 no baú desativado.')
+            return
+        if int(self.project.get(cid)['tipo_id'])!=24:
+            messagebox.showwarning('Carta God24',
+                'Selecione uma carta salva com tipo 24 — God.',parent=self)
+            return
+        for other in self.project.cards:
+            if type(other) is int and 1<=other<=722:
+                if int(self.project.get(other)['tipo_id'])>24:
+                    messagebox.showerror('Tipo incompatível',
+                        f'Carta #{other:03d} possui tipo 25–31. '
+                        'Não é seguro ativar a máscara.',parent=self)
+                    return
+        if not messagebox.askyesno('God24 no baú — teste MIPS',
+            'Testar a exibição de ATK/DEF God24 modificando SOMENTE duas '
+            'máscaras da cópia SLUS?\n\n'
+            'Tipos 0–23 preservados; sem alteração nos combates, na '
+            'invocação ou no ícone. O funcionamento no ePSXe ainda precisa '
+            'ser confirmado. Somente o SLUS original do seu mod será aceito. '
+            'A imagem original não será alterada.\n\nAtivar?',parent=self):
+            return
+        self.project.metadata['ps1_god_type_test_card_id']=cid
+        self.project.metadata['ps1_god_chest_preview']=True
+        self.project.save()
+        self._refresh_project()
+        self._update_status('God24 no baú ativado. Gere uma nova cópia BIN/CUE.')
 
     def toggle_god_icon_ps1(self):
         """Opt-in para glifo Deus de texto em uma cópia de BIN, não tipo 24."""
@@ -2221,6 +2264,9 @@ class Studio(tk.Tk):
                        'três caracteres originais são trocados só na cópia. '
                        'Não implementa o tipo God 24.\n'
                        if self.project.metadata.get('ps1_god_icon_test_card_id') else '')
+                    + ('GOD24 NO BAÚ: duas máscaras MIPS de ATK/DEF e layout. '
+                       'NÃO modifica combate nem ícone.\n'
+                       if self.project.metadata.get('ps1_god_chest_preview') else '')
                     + ('GOD 24: gravação experimental do campo tipo (24) '
                        'autorizada; jogabilidade NÃO validada no ePSXe.\n'
                        if self.project.metadata.get('ps1_god_type_test_card_id') else '')
@@ -2264,9 +2310,12 @@ class Studio(tk.Tk):
                'não foram alterados. O teste do tipo God 24 é independente.\n'
                if (manifest.get('teste_visual_icone_deus') or {}).get('status')
                   == 'icone_nao_inserido_sem_espaco_livre' else '')
+            + ('God24 baú: duas máscaras aplicadas; teste a exibição no ePSXe.\n'
+               if manifest.get('teste_god24_atk_def_bau') else '')
             + ('AVISO GOD24: o tipo está no BIN, mas ATK/DEF podem ficar '
                'em branco no baú e o motor não o reconhece como monstro.\n'
-               if manifest.get('teste_tipo_god24') else '')
+               if manifest.get('teste_tipo_god24') and
+                   not manifest.get('teste_god24_atk_def_bau') else '')
             + f'Tipo 24 God (gravação experimental): '
             f'{manifest.get("teste_tipo_god24",{}).get("status") if manifest.get("teste_tipo_god24") else "não habilitado"}.\n'
             'Efeitos de jogo continuam somente no Studio.',parent=self)

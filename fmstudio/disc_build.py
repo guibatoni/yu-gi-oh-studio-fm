@@ -310,6 +310,16 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             patched_wa if patched_wa is not None else original_wa,
             patched_exe,god_test_card,god_icon_asset())
 
+    god_chest_report=None
+    if metadata.get('ps1_god_chest_preview',False):
+        from .ps1_god24_chest import patch_god24_chest_preview
+        if type(god_type_test) is not int or not god24_experiment_enabled(project,god_type_test):
+            raise ModError('God24 baú: tipo 24 não está autorizado para teste.')
+        types=(int(project.get(cid)['tipo_id']) for cid in project.cards
+               if type(cid) is int and 1<=cid<=722)
+        patched_exe,god_chest_report=patch_god24_chest_preview(
+            original_exe,patched_exe,types)
+
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
             from .ps1_compat import save_audit, explain_no_writable_changes
@@ -389,6 +399,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'limite_global_copias_ps1_aplicado':deck_copies_written,
                 'lp_inicial_mips_aplicado':lp_written,
                 'teste_visual_icone_deus':god_icon_report,
+                'teste_god24_atk_def_bau':god_chest_report,
                 'teste_tipo_god24':({'carta_id':god_type_test,
                                       'status':'CAMPO_TIPO_24_GRAVADO_SEM_MOTOR_VALIDADO',
                                       'aviso':'Não é monstro para o motor PS1 '

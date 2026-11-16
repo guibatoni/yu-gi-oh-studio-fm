@@ -1,3 +1,22 @@
+# Studio FM v1.4.15 — God24 ATK/DEF no baú (teste opcional)
+
+Primeiro patch MIPS do God24 aplicado à CÓPIA do SLUS: a opção
+**PS1: ATK/DEF God no baú (teste)**, na aba Cartas, modifica apenas duas
+instruções ANDI: 0x51500 e 0x51728. A máscara muda de 0x1F para 0x17
+antes da comparação SLTI com 20. Assim o tipo 24 passa na verificação
+visual de monstro, mantendo classes 0–23 idênticas. O tipo original
+da tabela continua sendo 24. O patch exige SHA exato do executável
+de origem, assinaturas de cinco opcodes em cada posição e recusa
+qualquer mod com tipos 25–31. A releitura prova que só duas palavras
+MIPS foram alteradas. Não altera branches, delay slots nem cave.
+
+**Não é o patch de jogabilidade**: invocação, ataques, efeitos,
+ícone do tipo e outras telas continuam pendentes. A exibição
+de ATK/DEF no baú precisa de confirmação no ePSXe. A imagem
+BIN original permanece intacta.
+
+---
+
 # Studio FM v1.4.14 — Diagnóstico de God24 como monstro real
 
 Identificamos por que Time Wizard #016, definido como God (24), aparece
