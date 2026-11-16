@@ -2248,6 +2248,24 @@ class Studio(tk.Tk):
                 + f'\n\nRelatório salvo em: {dest}', parent=self)
             self._update_status('Sem mudanças graváveis no PS1: confira compatibilidade_ps1.json.')
             return
+        god_cid=self.project.metadata.get('ps1_god_type_test_card_id')
+        if (type(god_cid) is int and 1<=god_cid<=722
+                and int(self.project.get(god_cid)['tipo_id'])==24
+                and not self.project.metadata.get('ps1_god_chest_preview',False)):
+            opt=messagebox.askyesnocancel(
+                'God24 — patch do baú desativado',
+                f'A carta #{god_cid:03d} tem tipo God24, mas o teste '
+                'de ATK/DEF no baú está DESATIVADO.\\n\\n'
+                'SIM: aplicar duas máscaras MIPS experimentais à cópia BIN/CUE.\\n'
+                'NÃO: gerar sem o patch (ATK/DEF podem continuar em branco).\\n'
+                'CANCELAR: não gerar.\\n\\n'
+                'O ícone Deus, a invocação e o combate continuam pendentes.',
+                parent=self)
+            if opt is None:
+                return
+            if opt:
+                self.project.metadata['ps1_god_chest_preview']=True
+                self.project.save()
         source = filedialog.askopenfilename(
             title='Selecione seu jogo original BIN/CUE',
             filetypes=[('PlayStation BIN/CUE', '*.bin *.cue'), ('Todos arquivos', '*.*')], parent=self)
@@ -2298,6 +2316,7 @@ class Studio(tk.Tk):
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
+            f'God24 ATK/DEF BAÚ: {"2 máscaras aplicadas" if manifest.get("teste_god24_atk_def_bau") else "DESATIVADO"}.\n'
             f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             f'Método: {manifest.get("estrategia_equip_ps1","não aplicado")}.\n'
             f'Rituais: {len(manifest.get("rituais_ps1_aplicados",[]))}; '
@@ -2377,10 +2396,13 @@ class Studio(tk.Tk):
             destination.write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n',
                                    encoding='utf-8')
             info = describe(report) + f'\n\nRelatório: {destination}'
-            if report['divergentes']:
-                messagebox.showwarning('BIN/CUE divergente do Studio', info, parent=self)
+            god24_unpatched=bool(report.get('god24_total_cartas_no_bin')) and (
+                report['god24_mascaras_bau']['status']!='aplicado_2_de_2')
+            if report['divergentes'] or god24_unpatched:
+                messagebox.showwarning('BIN/CUE: God24 não verificado',info,parent=self)
             else:
-                messagebox.showinfo('BIN/CUE conferido', info, parent=self)
+                messagebox.showinfo('BIN/CUE conferido (teste no ePSXe pendente)',
+                                    info,parent=self)
             self._update_status('Verificação salva: ' + str(destination))
         except (OSError, ValueError, ModError, DiscError) as exc:
             messagebox.showerror('Falha na verificação do disco', str(exc), parent=self)
