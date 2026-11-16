@@ -19,7 +19,7 @@ ENTRIES = (
     'AttackTrap', 'Battle', 'Resume', 'BoardDestruction', 'MonsterRemoval',
     'StopDefense', 'Raigeki', 'Reveal', 'StatPenalty', 'Swords',
     'FieldActions', 'Placement', 'ConfirmPlacement', 'DeckCopyGate',
-    'DescriptionIcon', 'SpellUsed', 'CollectTargets',
+    'DescriptionIcon', 'SpellUsed', 'CollectTargets', 'SelectDeckDrop', 'UpdatePasswordShop',
 )
 FLAGS = ('-march=r3000', '-mabi=32', '-msoft-float', '-mno-abicalls', '-fno-pic',
          '-G0', '-ffreestanding', '-fno-builtin', '-fno-stack-protector',

@@ -17,7 +17,7 @@ SECTIONS {
         . = ALIGN(4);
     }
     ASSERT(. <= 0x801CD7A0, "PS1 duel state exceeds reserved memory")
-    .runtime_ext 0x801CFB00 : {
+    .runtime_ext 0x801CFA80 : {
         __runtime_ext_start = .;
         KEEP(*(.runtime.extension))
         . = ALIGN(4);
