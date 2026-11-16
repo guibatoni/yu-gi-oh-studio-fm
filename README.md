@@ -1,3 +1,31 @@
+# Studio FM v1.4.20 — God24 na mão do duelo (TESTE EXPERIMENTAL)
+
+O diagnóstico do usuário identificou quatro máscaras `0x1F` seguidas
+de comparação com 20 em DuelScene_UpdateHandActions, nos offsets
+0xC214, 0xC400, 0xC9FC e 0xCD34 do SLUS original validado.
+
+Foi incluído o botão opcional **PS1: God24 na mão (teste)**. Ative
+primeiro **PS1: ATK/DEF God no baú (teste)**. A gravação exige SHA-256
+exato do SLUS e cinco opcodes de contexto por instrução; converte
+somente o operando imediato das quatro instruções ANDI de `0x1F`
+para `0x17`, sem tocar em saltos, tabelas ou delay slots.
+
+Este filtro deixa todos os tipos 0–23 intactos e normaliza somente
+God24 como tipo local 16 na rotina da mão, preservando o tipo real
+gravado no BIN como 24. Por precaução, tipos 25–31 não são aceitos.
+
+O gerador reabre o BIN/CUE final e exige a presença das quatro
+instruções antes de substituir a cópia anterior. O verificador
+indica `aplicado_4_de_4` e seus opcodes.
+
+**ATENÇÃO**: É apenas um teste de roteamento na mão! Não foi
+validado no ePSXe; DuelScene_UpdateCardPlacement ainda contém
+sete comparações <20 e o motor pode continuar rejeitando God24
+ao invocar/atacar. O símbolo de Deus e o combate continuam
+pendentes, sem regressões intencionais dos tipos originais.
+
+---
+
 # Studio FM v1.4.19 — God24 tratado como magia no duelo
 
 O teste no ePSXe confirmou que o tipo God (24) agora exibe ATK/DEF no

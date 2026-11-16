@@ -1,3 +1,17 @@
+## v1.4.20 — Primeiro patch opt-in do God24 na mão do duelo
+
+- Usa o diagnóstico real da v1.4.19 para corrigir quatro máscaras
+  MIPS, com SHA original e cinco opcodes de contexto obrigatórios.
+- Tipos 0–23 preservados; somente o tipo local 24 é normalizado
+  para 16 antes do teste de monstro da mão.
+- Tipo real no BIN continua 24; nenhum SLUS original é sobrescrito.
+- Novo botão de ativação; sem ativação automática.
+- Readback no BIN exige 4/4 modificações ou mantém imagem anterior.
+- Testes sintéticos para 0–24, falha de assinatura, patch parcial
+  e isolamento exato de 16 bytes modificados.
+- A jogabilidade ainda exige validação emulador e correções adicionais
+  na colocação do monstro. Ícone Deus continua pendente.
+
 ## v1.4.19 — Fluxo de God24 como magia no duelo
 
 - Confirmado o problema depois de v1.4.18: valores ATK/DEF aparecem,

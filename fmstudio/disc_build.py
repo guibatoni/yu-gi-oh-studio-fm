@@ -324,6 +324,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_exe,row_report=patch_real_list(original_exe,patched_exe,kinds)
         god_chest_report['renderizador_lista_bau']=row_report
 
+    god_hand_report=None
+    if metadata.get('ps1_god_hand_preview',False):
+        if not metadata.get('ps1_god_chest_preview',False):
+            raise ModError('God24 mão: primeiro ative o patch de ATK/DEF no baú.')
+        from .ps1_god24_hand import apply as patch_hand
+        patched_exe,god_hand_report=patch_hand(
+            original_exe,patched_exe,kinds)
+
     if patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
             from .ps1_compat import save_audit, explain_no_writable_changes
@@ -404,6 +412,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'lp_inicial_mips_aplicado':lp_written,
                 'teste_visual_icone_deus':god_icon_report,
                 'teste_god24_atk_def_bau':god_chest_report,
+                'teste_god24_roteamento_mao':god_hand_report,
                 'teste_tipo_god24':({'carta_id':god_type_test,
                                       'status':'CAMPO_TIPO_24_GRAVADO_SEM_MOTOR_VALIDADO',
                                       'aviso':'Não é monstro para o motor PS1 '
@@ -434,6 +443,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                     raise ModError('God24: falta confirmação de 2/2 máscaras ou '
                                    '3/3 opcodes do renderizador no BIN final. '
                                    'A cópia anterior foi preservada.')
+            if (metadata.get('ps1_god_hand_preview',False) and
+                    checked['god24_mascara_da_mao']['status']!='aplicado_4_de_4'):
+                raise ModError('God24 mão: quatro máscaras não foram '
+                               'confirmadas no BIN final. Cópia anterior preservada.')
             checked['imagem']=str(bin_file)
             result['verificacao_atributos']=checked
         stage_meta.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')

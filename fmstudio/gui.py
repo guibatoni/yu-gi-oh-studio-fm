@@ -525,6 +525,7 @@ class Studio(tk.Tk):
         ttk.Button(left,text='Escolher tipo jogável (PS1)',command=self.choose_playable_monster_type).grid(row=8,column=0,sticky='w',pady=(5,2))
         ttk.Button(left,text='Teste glifo na descrição (não no tipo)',command=self.toggle_god_icon_ps1).grid(row=11,column=0,sticky='w',pady=(6,2))
         ttk.Button(left,text='PS1: ATK/DEF God no baú (teste)',command=self.toggle_god24_chest_preview).grid(row=12,column=0,sticky='w',pady=(6,2))
+        ttk.Button(left,text='PS1: God24 na mão (teste)',command=self.toggle_god24_hand_preview).grid(row=13,column=0,sticky='w',pady=(6,2))
         ttk.Label(left,text='ATK/DEF livres no simulador; PS1: até 5110.').grid(row=9,column=0,sticky='w',pady=(0,6))
         self.card_type_warning=ttk.Label(left,text='',wraplength=330)
         self.card_type_warning.grid(row=10,column=0,sticky='w',pady=(1,6))
@@ -1262,8 +1263,9 @@ class Studio(tk.Tk):
             if messagebox.askyesno('Desativar teste do baú',
                 'Desativar God24 ATK/DEF no próximo BIN/CUE?',parent=self):
                 self.project.metadata.pop('ps1_god_chest_preview',None)
+                self.project.metadata.pop('ps1_god_hand_preview',None)
                 self.project.save()
-                self._update_status('Teste God24 no baú desativado.')
+                self._update_status('Testes God24 do baú e mão desativados.')
             return
         if int(self.project.get(cid)['tipo_id'])!=24:
             messagebox.showwarning('Carta God24',
@@ -1289,6 +1291,59 @@ class Studio(tk.Tk):
         self.project.save()
         self._refresh_project()
         self._update_status('God24 no baú ativado. Gere uma nova cópia BIN/CUE.')
+
+    def toggle_god24_hand_preview(self):
+        """Teste explícito de quatro máscaras da seleção da mão no duelo."""
+        if not self._ready_native_effect() or not self.selected_id:
+            return
+        self._stage_current()
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo('Salve primeiro',
+                'Salve as alterações antes de testar a mão do God24.',parent=self)
+            return
+        cid=int(self.selected_id)
+        if self.project.metadata.get('ps1_god_hand_preview',False):
+            if messagebox.askyesno('Desativar teste God24 da mão',
+                    'Não aplicar o patch da mão no próximo BIN/CUE?',parent=self):
+                self.project.metadata.pop('ps1_god_hand_preview',None)
+                self.project.save()
+                self._update_status('God24 na mão desativado no próximo BIN.')
+            return
+        if int(self.project.get(cid)['tipo_id'])!=24:
+            messagebox.showwarning('Tipo God24',
+                'Selecione uma carta salva como God (24).',parent=self)
+            return
+        if not self.project.metadata.get('ps1_god_chest_preview',False):
+            messagebox.showwarning('Ative primeiro o baú',
+                'Ative PS1: ATK/DEF God no baú (teste) antes do teste da mão.',
+                parent=self)
+            return
+        if self.project.metadata.get('ps1_god_type_test_card_id')!=cid:
+            messagebox.showerror('Carta de teste divergente',
+                'Selecione a mesma carta God24 autorizada para o BIN.',
+                parent=self)
+            return
+        if any(int(self.project.get(other)['tipo_id'])>24
+               for other in self.project.cards if type(other) is int
+               and 1<=other<=722):
+            messagebox.showerror('Tipo incompatível',
+                'Cartas com tipo 25–31 impedem este experimento.',parent=self)
+            return
+        if not messagebox.askyesno('God24 na mão — MIPS experimental',
+                'Modificar QUATRO instruções de máscara no fluxo '
+                'DuelScene_UpdateHandActions da CÓPIA BIN/CUE?\n\n'
+                'Isso faz apenas o tipo 24 seguir o caminho de monstro '
+                'na seleção da mão. Os tipos 0–23 não mudam.\n\n'
+                'ATENÇÃO: não altera diretamente colocação, fusão ou '
+                'combate. Pode haver comportamento inesperado no ePSXe. '
+                'Não é uma invocação God24 já validada.\n\n'
+                'A imagem original será preservada. Ativar?',
+                parent=self):
+            return
+        self.project.metadata['ps1_god_hand_preview']=True
+        self.project.save()
+        self._refresh_project()
+        self._update_status('Teste God24 da mão ativado: gere novo BIN/CUE.')
 
     def toggle_god_icon_ps1(self):
         """Opt-in para glifo Deus de texto em uma cópia de BIN, não tipo 24."""
@@ -2287,9 +2342,12 @@ class Studio(tk.Tk):
                        'três caracteres originais são trocados só na cópia. '
                        'Não implementa o tipo God 24.\n'
                        if self.project.metadata.get('ps1_god_icon_test_card_id') else '')
-                    + ('GOD24 NO BAÚ: duas máscaras MIPS de ATK/DEF e layout. '
+                    + ('GOD24 NO BAÚ: duas máscaras e três opcodes do renderizador. '
                        'NÃO modifica combate nem ícone.\n'
                        if self.project.metadata.get('ps1_god_chest_preview') else '')
+                    + ('GOD24 NA MÃO: quatro máscaras experimentais de roteamento. '
+                       'NÃO garante invocação ou batalha funcional.\n'
+                       if self.project.metadata.get('ps1_god_hand_preview') else '')
                     + ('GOD 24: gravação experimental do campo tipo (24) '
                        'autorizada; jogabilidade NÃO validada no ePSXe.\n'
                        if self.project.metadata.get('ps1_god_type_test_card_id') else '')
@@ -2322,6 +2380,7 @@ class Studio(tk.Tk):
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             f'God24 ATK/DEF BAÚ: {"2 máscaras + 3 opcodes da lista" if manifest.get("teste_god24_atk_def_bau") else "DESATIVADO"}.\n'
+            f'God24 MÃO: {"4/4 máscaras aplicadas (ePSXe pendente)" if manifest.get("teste_god24_roteamento_mao") else "DESATIVADO"}.\n'
             f'Alterações Equip ({manifest.get("modo_equip_ps1","adicionar")}): {len(manifest.get("equipamentos_ps1_aplicados",[]))}.\n'
             f'Método: {manifest.get("estrategia_equip_ps1","não aplicado")}.\n'
             f'Rituais: {len(manifest.get("rituais_ps1_aplicados",[]))}; '
@@ -2404,7 +2463,9 @@ class Studio(tk.Tk):
             god24_unpatched=bool(report.get('god24_total_cartas_no_bin')) and (
                 report['god24_mascaras_bau']['status']!='aplicado_2_de_2'
                 or report['god24_renderizador_lista_bau']['god24_patch_lista']
-                ['status']!='aplicado_3_de_3')
+                ['status']!='aplicado_3_de_3'
+                or (self.project.metadata.get('ps1_god_hand_preview',False)
+                    and report['god24_mascara_da_mao']['status']!='aplicado_4_de_4'))
             if report['divergentes'] or god24_unpatched:
                 messagebox.showwarning('BIN/CUE: God24 não verificado',info,parent=self)
             else:
