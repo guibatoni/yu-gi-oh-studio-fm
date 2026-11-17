@@ -26,6 +26,11 @@ class LifeIconTests(unittest.TestCase):
                 self.assertTrue(all(len(row) == 8 for row in rows))
                 self.assertEqual(len(palette), 32)
 
+    def test_ps1_explicitly_rejects_icons_without_mips_slots(self):
+        for name in ('vinculo_vida', 'restaurar_lp'):
+            with self.subTest(icon=name), self.assertRaisesRegex(ModError, 'extensão de descrições PS1'):
+                _encode_description('{icon:' + name + '}', {}, {}, icon_codes=ICON_CODES)
+
     def test_tokens_show_named_icons(self):
         segments = tokens("A {icon:vinculo_vida} B {icon:restaurar_lp}")
         self.assertIn(("", "#EFEFEF", "vinculo_vida"), segments)
