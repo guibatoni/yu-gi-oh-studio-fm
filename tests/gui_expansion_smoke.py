@@ -20,6 +20,7 @@ with TemporaryDirectory() as d:
     dialog=next(child for child in root.winfo_children() if isinstance(child,NewCardDialog))
     dialog.create();root.update()
     assert root.selected_id==723,root.selected_id
+    assert root.tree.selection() == ('723',)
     assert len(root.project.cards)==2
     assert root.get_icon_image('perfurar').width()==16
     root.vars['nome'].set('Deus do Milênio')

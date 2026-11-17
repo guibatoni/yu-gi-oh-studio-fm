@@ -2196,12 +2196,14 @@ class Studio(tk.Tk):
     def select_card(self, cid):
         self._stage_current()
         self.selected_id = cid
+        item = str(cid)
         self._refresh_cards()
-        if not self.tree.exists(str(cid)):
+        if not self.tree.exists(item):
             self._clear_card_filters()
             self._refresh_cards()
-        self.tree.focus(str(cid))
-        self.tree.see(str(cid))
+        self.tree.selection_set(item)
+        self.tree.focus(item)
+        self.tree.see(item)
         self._load_card()
         self.tabs.select(self.tab_cards)
 

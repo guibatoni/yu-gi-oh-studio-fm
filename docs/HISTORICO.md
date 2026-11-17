@@ -6,6 +6,8 @@
   originais. A rotina é verificada após reempacotar o BIN.
 - Para jogar com a atualização, gere outra cópia da imagem original
   e inicie um novo duelo contra o computador.
+- Abrir ou criar uma carta volta a selecionar a carta no catálogo,
+  inclusive depois de uma seleção múltipla.
 
 ## v1.8.2 — ATK/DEF nas tabelas de Drops, Deck inicial e Deck oponente
 
