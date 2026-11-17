@@ -204,6 +204,43 @@ class StableDiscOutputTests(DiscBuildTests):
         self.assertTrue(fresh['edicao_do_mod_ps1']['bloqueio_turno_inicial'])
         self.assertEqual(Path(fresh['bin']).read_bytes(), self.src.read_bytes())
 
+    def test_dificil_ai_reaches_bin_and_keeps_original_disc_unmodified(self):
+        import struct
+        from unittest.mock import patch
+        from fmstudio.ps1_ai import HARD_AI_PATCHES
+        from fmstudio.ps1_mod import FIRST_TURN_PC, FIRST_TURN_SOURCE
+        from fmstudio.tables import EXE_DELTA
+
+        end = max(pc - EXE_DELTA + 8 for pc, *_ in HARD_AI_PATCHES)
+        source = bytearray(end + 4)
+        source[:8] = b'PS-X EXE'
+        struct.pack_into('<I', source, FIRST_TURN_PC - EXE_DELTA, FIRST_TURN_SOURCE)
+        for pc, old, _, _ in HARD_AI_PATCHES:
+            struct.pack_into('<I', source, pc - EXE_DELTA, old)
+        self.original = bytes(source)
+        self.patched = self.original
+        self.project.cards = {}
+        self.project.get = self.project.cards.__getitem__
+        self.project.metadata['edicao_mod'] = {'ia_ps1': 'dificil'}
+        digest = hashlib.sha256(self.original).hexdigest()
+        self.project.metadata['base_sha256']['slus'] = digest
+        fake_disc(self.src, self.original)
+        original_disc_hash = hashlib.sha256(self.src.read_bytes()).hexdigest()
+        with patch('fmstudio.ps1_runtime.SOURCE_SHA256', digest), patch(
+                'fmstudio.ps1_ai.SOURCE_SHA256', digest):
+            result = build_test_disc(self.project, self.src)
+        self.assertEqual(result['ia_nativa_ps1']['status'], 'aplicado')
+        self.assertEqual(len(result['ia_nativa_ps1']['rotinas']), 5)
+        with DiscReader(result['bin']) as reader:
+            exe = next(e for e in reader.files() if e.path == 'SLUS_014.11')
+            modified = b''.join(reader.read_entry(exe))
+        for pc, _, expected, _ in HARD_AI_PATCHES:
+            self.assertEqual(struct.unpack_from('<I', modified, pc - EXE_DELTA)[0],
+                             expected)
+        self.assertEqual(hashlib.sha256(self.src.read_bytes()).hexdigest(),
+                         original_disc_hash)
+        self.assertEqual(len(modified), len(self.original))
+
     def test_different_source_filename_creates_distinct_image(self):
         first=build_test_disc(self.project,self.src)
         another=self.path/'outro_mod.bin'
