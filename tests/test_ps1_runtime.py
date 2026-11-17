@@ -9,8 +9,9 @@ from fmstudio.abilities import quick_settings, replace_quick_effects
 from fmstudio.core import ENTRY_GROW, ENTRY_SHRINK, ENTRY_TYPE_EVENT, ModError, check_effect
 from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_sprite_words
 from fmstudio.ps1_runtime import (
-    CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, FUSION_CONFIG, NAME_COLOR_CONFIG, RUNTIME_EXT_BASE,
-    RUNTIME_MARKERS_BASE, RUNTIME_MOD_BASE, RUNTIME_PASSWORD_BASE, SUMMON_DAMAGE, SUMMON_HEAL,
+    CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, FUSION_CONFIG, GRAVE_FILTER_OFFSET, MATCH_EITHER,
+    NAME_COLOR_CONFIG, RUNTIME_EXT_BASE, RUNTIME_GRAVE_FILTERS_BASE, RUNTIME_MARKERS_BASE, RUNTIME_MOD_BASE,
+    RUNTIME_PASSWORD_BASE, SUMMON_DAMAGE, SUMMON_HEAL,
     _jump, _option_calls, _rule_patches, _valid_original_drop_entry, compile_effects, install_runtime, verify_effects,
 )
 from fmstudio.ps1_text import ICON_CODES, patch_descriptions
@@ -98,6 +99,34 @@ class TestNativeRules(unittest.TestCase):
                 install_runtime(source, occupied, plan, description_icons=False)
         damaged = bytearray(result)
         damaged[where(RUNTIME_MARKERS_BASE)] ^= 1
+        self.assertFalse(verify_effects(damaged, plan)['rotina_presente'])
+
+    def test_cemetery_predicates_share_counters_across_scopes(self):
+        union = effect('bonus_cemiterio_tipo', 200, tipo_id=19, atributo_id=1, combinar_filtros='ou')
+        self.project.effects = {'9': [union, dict(union, escopo='inimigos', valor=100),
+                                     dict(union, tipo_id=-1, valor=50)]}
+        plan = compile_effects(self.project, True)
+        self.assertFalse(plan.pending)
+        self.assertTrue(plan.grave_filters)
+        self.assertEqual(plan.bank_end, RUNTIME_GRAVE_FILTERS_BASE)
+        data = plan.data
+        rules, = struct.unpack_from('<H', data, 2 + 2*9)
+        table, = struct.unpack_from('<H', data, GRAVE_FILTER_OFFSET)
+        self.assertEqual(struct.unpack_from('<BBHHH', data, rules+8), (6, MATCH_EITHER | 8, 0, 200, 0))
+        self.assertEqual(struct.unpack_from('<BBHHH', data, rules+16), (6, MATCH_EITHER | 9, 0, 100, 0))
+        self.assertEqual(struct.unpack_from('<BBHHH', data, rules+24), (6, 8, 1, 50, 0))
+        self.assertEqual(struct.unpack_from('<BBHHH', data, table), (0, MATCH_EITHER | 8, 19, 0, 0))
+        self.assertEqual(struct.unpack_from('<BBHHH', data, table+8), (0, 8, 0xFFFF, 0, 0))
+        self.assertEqual(data[table+16:], bytes(8))
+        source = bytearray(sample_exe())
+        for pc, words, _ in _rule_patches(plan):
+            struct.pack_into(f'<{len(words)}I', source, where(pc), *words)
+        source = bytes(source)
+        with patch('fmstudio.ps1_runtime.SOURCE_SHA256', hashlib.sha256(source).hexdigest()):
+            result, _ = install_runtime(source, source, plan, description_icons=False)
+        self.assertEqual(verify_effects(result, plan)['quantidade'], 3)
+        damaged = bytearray(result)
+        damaged[where(RUNTIME_GRAVE_FILTERS_BASE)] ^= 1
         self.assertFalse(verify_effects(damaged, plan)['rotina_presente'])
 
     def test_unknown_profile_has_no_resident_effects(self):

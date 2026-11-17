@@ -26,6 +26,7 @@ ENTRY_TYPE_EVENT = 'entrada_tipo'
 ENTRY_GROW = 'marcador_por_entrada_tipo'
 ENTRY_SHRINK = 'enfraquecer_tipo_entrada'
 ENTRY_EFFECTS = {ENTRY_GROW: ENTRY_TYPE_EVENT, ENTRY_SHRINK: 'invocar'}
+FILTER_COMBINATIONS = {'e': 'Tipo e atributo', 'ou': 'Tipo ou atributo'}
 EVENTS = {
     'invocar': 'Ao entrar em campo', 'atacar': 'Ao atacar',
     'defender': 'Ao defender', 'destruir': 'Ao destruir outro monstro',
@@ -33,16 +34,16 @@ EVENTS = {
     'fim_turno': 'Fim do turno', 'continuo': 'Enquanto no campo',
     'equipado': 'Enquanto equipado (encantamento)',
     'regra_deck': 'Regra de montagem de deck',
-    ENTRY_TYPE_EVENT: 'Quando um monstro do tipo entra',
+    ENTRY_TYPE_EVENT: 'Quando um monstro do filtro entra',
 }
 ACTIONS = {
     'aumentar_atk':'Aumentar ATK', 'reduzir_atk':'Reduzir ATK',
     'aumentar_def':'Aumentar DEF', 'reduzir_def':'Reduzir DEF',
     'dano_lp':'Causar dano aos LP', 'cura_lp':'Recuperar LP',
-    'aura_tipo':'Aura: concede bônus ao tipo (ou todos)',
-    'bonus_por_tipo':'Recebe bônus por cartas do tipo no campo',
-    'bonus_deck_tipo':'Recebe bônus por cartas do tipo no deck',
-    'bonus_mao_tipo':'Recebe bônus por cartas do tipo na mão',
+    'aura_tipo':'Aura por tipo ou atributo',
+    'bonus_por_tipo':'Recebe bônus por cartas no campo',
+    'bonus_deck_tipo':'Recebe bônus por cartas no deck',
+    'bonus_mao_tipo':'Recebe bônus por cartas na mão',
     'cura_lp_deck_tipo':'Recuperar LP por carta do tipo no deck',
     'dano_lp_deck_tipo':'Causar dano aos LP por carta do tipo no deck',
     'descartar_alvo':'Ao entrar: adversário descarta X cartas',
@@ -61,15 +62,15 @@ ACTIONS = {
     'sem_limite_deck':'Sem limite de cópias no deck',
     'limite_copias_deck':'Limite personalizado de cópias no deck',
     'bonus_por_carta_id':'Recebe ATK/DEF por carta específica',
-    'bonus_cemiterio_tipo':'Recebe ATK/DEF por tipo no cemitério',
+    'bonus_cemiterio_tipo':'Recebe bônus por cartas no cemitério',
     'ataque_primeiro_turno':'Ataca no 1º turno',
-    ENTRY_GROW: 'Acumular ATK/DEF quando o tipo entra',
-    ENTRY_SHRINK: 'Ao entrar, reduzir ATK/DEF por tipo',
+    ENTRY_GROW: 'Acumular ATK/DEF por entrada',
+    ENTRY_SHRINK: 'Ao entrar, reduzir ATK/DEF pelo filtro',
 }
 TARGETS = {
     'proprio':'Próprio / controlador',
     'inimigo':'Oponente / LP adversário',
-    'aliados_tipo':'Monstros do tipo escolhido',
+    'aliados_tipo':'Monstros que atendem ao filtro',
     'monstro_alvo':'Monstro alvo',
     'monstro_equipado':'Monstro equipado',
 }
@@ -263,6 +264,22 @@ def check_card_edit(row: dict):
     return cleaned
 
 
+def _effect_filter(entry, *, monsters_only=False):
+    kind = _bounded_int(entry.get('tipo_id', -1), 'Tipo', -1, 24)
+    if monsters_only and 20 <= kind <= 23:
+        raise ModError('Escolha um tipo de monstro ou Todos os tipos.')
+    attribute = _bounded_int(entry.get('atributo_id', -1), 'Atributo', -1, 15)
+    combination = entry.get('combinar_filtros', 'e')
+    if combination not in FILTER_COMBINATIONS:
+        raise ModError('Escolha como combinar tipo e atributo.')
+    result = {'tipo_id': kind}
+    if attribute != -1:
+        result['atributo_id'] = attribute
+        if combination == 'ou' and kind != -1:
+            result['combinar_filtros'] = 'ou'
+    return result
+
+
 def check_effect(entry: dict):
     """Valida efeitos versionados, mantendo compatibilidade com projetos v0.7.x."""
     from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
@@ -299,9 +316,6 @@ def check_effect(entry: dict):
         grows = action == ENTRY_GROW
         if event != ENTRY_EFFECTS[action] or target != ('proprio' if grows else 'aliados_tipo'):
             raise ModError('Gatilho ou destinatário incompatível com o marcador de entrada.')
-        typ = _bounded_int(entry.get('tipo_id', -1), 'Tipo de monstro', -1, 24)
-        if 20 <= typ <= 23:
-            raise ModError('Escolha um tipo de monstro ou Todos os tipos.')
         attack = simulation_nonnegative_int(entry.get('valor', 0), 'ATK do marcador')
         raw_defense = entry.get('valor_def')
         defense = (attack if raw_defense is None or not str(raw_defense).strip()
@@ -311,10 +325,10 @@ def check_effect(entry: dict):
         scope = entry.get('escopo', 'todos' if grows else 'inimigos')
         if scope not in SCOPES:
             raise ModError('Escolha os lados afetados pelo marcador.')
-        return {'evento': event, 'acao': action, 'alvo': target, 'tipo_id': typ,
+        return {'evento': event, 'acao': action, 'alvo': target, **_effect_filter(entry, monsters_only=True),
                 'valor': attack, 'valor_def': defense, 'escopo': scope, 'observacao': note}
     if event == ENTRY_TYPE_EVENT:
-        raise ModError('Use o efeito de marcador por entrada de tipo com este gatilho.')
+        raise ModError('Use o efeito de marcador por entrada com este gatilho.')
     if action == 'bonus_por_carta_id':
         if event != 'continuo' or target != 'proprio':
             raise ModError('Bônus por carta exige gatilho contínuo e alvo próprio')
@@ -342,16 +356,11 @@ def check_effect(entry: dict):
         defense = simulation_nonnegative_int(entry.get('valor_def', 0), 'Bônus DEF')
         if atk == 0 and defense == 0:
             raise ModError('Bônus contínuo precisa aumentar ATK ou DEF')
-        typ = _bounded_int(entry.get('tipo_id', -1), 'Tipo (-1 para todos)', -1, 24)
         scope = str(entry.get('escopo','aliados'))
         if scope not in SCOPES:
             raise ModError('Escopo inválido')
-        result = {'evento':event,'acao':action,'alvo':target,'valor':atk,
-                  'valor_def':defense,'tipo_id':typ,'escopo':scope,'observacao':note}
-        attribute = _bounded_int(entry.get('atributo_id', -1), 'Atributo', -1, 15)
-        if attribute >= 0:
-            result['atributo_id'] = attribute
-        return result
+        return {'evento':event,'acao':action,'alvo':target,'valor':atk,
+                'valor_def':defense,'escopo':scope,'observacao':note, **_effect_filter(entry)}
     if action in EQUIPMENT_ACTIONS:
         if event != 'equipado' or target != 'monstro_equipado':
             raise ModError('Equipamentos exigem gatilho "Enquanto equipado" e alvo equipado')

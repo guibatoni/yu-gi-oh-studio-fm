@@ -150,4 +150,22 @@ assert stats(22) == (0, 250), 'reductions outlive the source'
 run('ResetCardsWithMarkers')
 record(22, 5, terrain=100)
 assert stats(22) == (300, 750) and len(retail_placements) == 8, 'new duel clears marker state'
-print('MIPS: entrada normal, equipamento, fusão, ritual, marcadores e destruição 0/0 conferidos.')
+
+cards[7] = (0, 200, 200)
+write(0x801D4244 + 4 * (7 - 1), '<I', 0)
+for cid in (4, 7):
+    write(0x801D5332 + cid, '<B', 1 << 4)
+project.effects['1'][0].update(atributo_id=1, combinar_filtros='ou')
+project.effects['3'][0].update(tipo_id=-1, atributo_id=1)
+filtered_plan = compile_effects(project, True)
+cpu.mem_write(CONFIG_ADDRESS & 0x1FFFFFFF, filtered_plan.data)
+run('ResetCardsWithMarkers')
+for slot, cid in ((5, 1), (20, 7), (21, 4), (22, 2)):
+    place(slot, cid)
+    field()
+assert stats(5) == (1800, 1600), 'type or attribute, including the intersection once'
+place(6, 3)
+field()
+assert not occupied(20) and stats(21) == (0, 0), 'attribute-only reduction'
+assert stats(22) == (250, 400), 'attribute mismatch is unaffected, even with the same type'
+print('MIPS: marcadores por tipo/atributo, equipamento, fusão, ritual e destruição 0/0 conferidos.')

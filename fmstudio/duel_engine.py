@@ -4,7 +4,7 @@ from collections import Counter
 from copy import copy, deepcopy
 import re
 
-from .continuous import SIDES, _in_scope, project_stats, resolve_field
+from .continuous import SIDES, _in_scope, matches_filter, project_stats, resolve_field
 from .core import ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ModError, check_effect, simulation_nonnegative_int
 from .guardian import guardian_bonuses
 from .mod_data import MONSTER_TYPES, card_effects, opposite, validate_deck
@@ -375,8 +375,8 @@ class DuelLab:
                       if effect['acao'] == ENTRY_SHRINK]
 
         def applies(effect, source, other):
-            return (effect['tipo_id'] in (-1, int(other['tipo_id']))
-                    and _in_scope(source['lado'], other['lado'], effect['escopo']))
+            return (_in_scope(source['lado'], other['lado'], effect['escopo'])
+                    and matches_filter(other, effect))
 
         for unit in self.monsters:
             if int(unit['tipo_id']) not in MONSTER_TYPES:

@@ -99,6 +99,25 @@ class StudioMatchTests(unittest.TestCase):
         game.remove(PLAYER, fusion.slot)
         self.assertEqual(game.stat_markers[(CPU, 2, 6)], (-500, -500))
 
+    def test_entry_markers_accept_type_or_attribute_and_attribute_only(self):
+        cards = {1: card(1000, 800), 2: card(250, 250, kind=19),
+                 3: card(250, 250, attribute=1), 4: card(250, 250, kind=19, attribute=1),
+                 5: card(400, 400)}
+        effects = {
+            1: [effect(ENTRY_GROW, 200, event=ENTRY_TYPE_EVENT, tipo_id=19, atributo_id=1, combinar_filtros='ou')],
+            5: [effect(ENTRY_SHRINK, 300, event='invocar', target='aliados_tipo', atributo_id=1)],
+        }
+        lab = DuelLab(cards, effects)
+        lab.set_field([unit(PLAYER, 1, 1, cards[1]), unit(PLAYER, 2, 5, cards[5]),
+                       *(dict(unit(CPU, cid-1, cid, cards[cid]), face_up=False) for cid in (2, 3, 4))])
+        for slot in range(1, 4):
+            lab.trigger(CPU, slot)
+            self.assertEqual(lab.stat_markers[(PLAYER, 1, 1)], (200 * slot, 200 * slot))
+        lab.trigger(PLAYER, 2)
+        self.assertEqual(lab.graveyards[CPU], [3, 4])
+        self.assertIsNotNone(lab.get(CPU, 1))
+        self.assertEqual(lab.stat_markers[(PLAYER, 1, 1)], (600, 600))
+
     def test_fair_draws_follow_each_shuffled_deck(self):
         decks = {PLAYER:[1,2,3,4,90000,90001,90002], CPU:[1,2,3,4,90004,90003,90000]}
         class Capture(Random):

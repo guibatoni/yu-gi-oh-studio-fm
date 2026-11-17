@@ -1,3 +1,16 @@
+# Studio FM v1.8.6 — Bônus por tipo ou atributo
+
+Em **Cartas → Efeitos e bônus**, configure **Tipo**, **Atributo** e **Combinar
+filtros** para as auras, os bônus por contagem e os marcadores de entrada.
+Para usar só o atributo, deixe **Tipo** em **Todos os tipos**. Com os dois
+selecionados, **Tipo ou atributo** aceita qualquer um dos filtros e conta
+cada carta uma vez. **Tipo e atributo** exige os dois.
+
+Para jogar com os novos filtros no **Drop x15**, salve o projeto e gere um
+novo **BIN/CUE**. Os bônus por cartas na mão funcionam no simulador do Studio.
+
+---
+
 # Studio FM v1.8.5 — Marcadores de entrada
 
 Em **Cartas → Efeitos e bônus → Adicionar efeito**, escolha uma das ações.

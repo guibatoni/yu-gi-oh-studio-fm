@@ -1,7 +1,7 @@
 """Smoke UI v0.7.0, necessita monitor (xvfb no Linux)."""
 from tempfile import TemporaryDirectory
 from pathlib import Path
-from fmstudio.gui import Studio, EffectDialog, FieldDialog
+from fmstudio.gui import Studio, EffectDialog, FieldDialog, effect_filter_label
 from fmstudio.core import ENTRY_GROW, ENTRY_SHRINK, ENTRY_TYPE_EVENT, Project
 from fmstudio.drafts import DraftSession
 
@@ -19,7 +19,7 @@ with TemporaryDirectory() as td:
     dialog.type_combo.current(dialog.type_ids.index(8))
     dialog.type_combo.event_generate('<<ComboboxSelected>>')
     root.update()
-    assert dialog.recipient.cget('text') == 'Monstros do tipo escolhido'
+    assert dialog.recipient.cget('text') == 'Monstros que atendem ao filtro'
     assert not dialog.combos['alvo'].grid_info()
     dialog.vars['valor'].set('500');dialog.vars['valor_def'].set('300')
     dialog._submit();root.update()
@@ -66,23 +66,41 @@ with TemporaryDirectory() as td:
     assert dialog.recipient.cget('text') == 'Esta carta'
     assert 24 in dialog.type_ids and 23 not in dialog.type_ids
     assert dialog.def_entry.instate(('!disabled',))
+    dialog.attribute_combo.current(2)  # Dark
+    dialog.attribute_combo.event_generate('<<ComboboxSelected>>')
+    root.update()
+    assert dialog.filter_combo.instate(('disabled',))
+    dialog.type_combo.current(dialog.type_ids.index(19))
+    dialog.type_combo.event_generate('<<ComboboxSelected>>')
+    root.update()
+    assert dialog.filter_combo.instate(('readonly',))
+    dialog.filter_combo.current(1)
+    dialog.filter_combo.event_generate('<<ComboboxSelected>>')
+    root.update()
     dialog.vars['valor'].set('200')
     dialog._submit()
     growth = root.drafts.get_effects(1)[-1]
     assert growth['valor'] == growth['valor_def'] == 200
+    assert effect_filter_label(growth) == 'Plant ou Dark'
+    root.drafts.save()
+    assert Project.open(p.folder).effects['1'][2]['combinar_filtros'] == 'ou'
 
     dialog = EffectDialog(root, lambda e: root.drafts.replace_effect(1, 2, e), initial_effect=growth)
+    assert dialog.filter_combo.get() == 'Tipo ou atributo'
     dialog.combos['acao'].current(list(dialog.sources['acao']).index(ENTRY_SHRINK))
     dialog.combos['acao'].event_generate('<<ComboboxSelected>>')
     root.update()
     assert dialog.vars['evento'].get() == 'invocar' and dialog.vars['escopo'].get() == 'inimigos'
-    assert dialog.recipient.cget('text') == 'Monstros do tipo escolhido'
-    dialog.type_combo.current(dialog.type_ids.index(19))
+    assert dialog.recipient.cget('text') == 'Monstros que atendem ao filtro'
+    dialog.type_combo.current(0)
     dialog.type_combo.event_generate('<<ComboboxSelected>>')
     root.update()
+    assert dialog.filter_combo.instate(('disabled',))
     dialog.vars['valor_def'].set('350')
     dialog._submit()
     debuff = root.drafts.get_effects(1)[2]
-    assert (debuff['acao'], debuff['tipo_id'], debuff['valor'], debuff['valor_def']) == (ENTRY_SHRINK, 19, 200, 350)
+    assert (debuff['acao'], debuff['tipo_id'], debuff['atributo_id']) == (ENTRY_SHRINK, -1, 1)
+    assert (debuff['valor'], debuff['valor_def']) == (200, 350)
+    assert 'combinar_filtros' not in debuff
     root.destroy()
-print('GUI: auras, bônus contínuo e criação/edição de marcadores de entrada conferidos.')
+print('GUI: auras, bônus contínuo e marcadores por tipo ou atributo conferidos.')

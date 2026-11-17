@@ -38,6 +38,13 @@ SECTIONS {
         __runtime_ext_end = .;
     }
     ASSERT(__runtime_ext_end <= 0x801CFF00, "PS1 extension conflicts with the LP bank")
+    .runtime_grave_filters 0x801CEA00 : {
+        __grave_filters_start = .;
+        KEEP(*(.runtime.grave_filters))
+        . = ALIGN(4);
+        __grave_filters_end = .;
+    }
+    ASSERT(__grave_filters_end <= 0x801CEB00, "PS1 grave filters conflict with entry markers")
     .runtime_markers 0x801CEB00 : {
         __markers_start = .;
         KEEP(*(.runtime.markers .runtime.markers.data))
