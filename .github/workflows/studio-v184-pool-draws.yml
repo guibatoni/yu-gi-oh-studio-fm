@@ -1,0 +1,32 @@
+name: Studio FM 1.8.4 - Compras da pool
+on:
+  push:
+    branches: [feature/studio-v1.8.4-pool-draws-ux]
+permissions:
+  contents: read
+jobs:
+  pool-draws:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Tkinter + dependencias
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb python3-tk
+          python -m pip install pillow
+      - name: Compilar e testar
+        run: |
+          python -m compileall -q fmstudio tools tests app.py
+          python -m unittest discover -s tests -v
+      - name: Validar pool e editores reais com Xvfb
+        run: |
+          PYTHONPATH=. xvfb-run -a python tests/gui_pool_draws_smoke.py
+          PYTHONPATH=. xvfb-run -a python tests/gui_mod_smoke.py
+          PYTHONPATH=. xvfb-run -a python tests/gui_weighted_deck_drops_smoke.py
+          PYTHONPATH=. xvfb-run -a python tests/gui_multiselect_smoke.py
+      - name: Empacotar atualizador
+        run: python tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip
