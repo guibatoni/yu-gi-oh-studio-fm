@@ -19,6 +19,27 @@ from .core import ModError, legacy_god_description_icon_card, ps1_god24_card_ids
 from .disc import DiscReader, DiscError, SYNC
 from .tables import CARD_COUNT, EXE_DELTA
 
+class DescriptionCompatibilityError(ModError):
+    """Edited descriptions cannot all be written to the supplied PS1 image.
+
+    Failures remain attached for a deliberate GUI choice; no prior BIN is changed.
+    """
+
+    def __init__(self, failures):
+        self.failures = tuple(failures)
+        details = '\n'.join('• ' + item for item in self.failures[:12])
+        if len(self.failures) > 12:
+            details += f'\n• ... e mais {len(self.failures) - 12} descrição(ões)'
+        super().__init__(
+            'As descrições abaixo NÃO foram gravadas no jogo:\n'
+            + details
+            + '\n\nO BIN/CUE anterior foi preservado. '
+              'Corrija os textos ou use uma imagem Drop x15 compatível para '
+              'descrições maiores. Ícones novos sem suporte MIPS ficam '
+              'disponíveis somente na prévia do Studio.'
+        )
+
+
 RAW_SECTOR = 2352
 PAYLOAD = 2048
 _EDC_POLY = 0xD8018001
@@ -110,14 +131,18 @@ def _write_file_patches(out, entry, original: bytes, patched: bytes) -> list[int
 
 
 def _apply_card_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
-                             *, native_profile: bool, start: int, end: int):
-    """Grava descrições ou informa todas as falhas antes de tocar no BIN existente.
+                             *, native_profile: bool, start: int, end: int,
+                             policy: str = 'strict'):
+    """Grava textos compatíveis e informa os demais sem ocultar perda de dados.
 
-    O perfil Drop x15 pode realocar strings; outros executáveis só permitem
-    substituir o texto dentro do slot original. Não tratar omissões como êxito.
+    'strict': bloqueia se qualquer descrição editada não couber.
+    'preserve_incompatible': mantém os textos originais do PS1 apenas onde
+    falhou, reportando ID e motivo. O projeto Studio nunca é reescrito.
     """
+    if policy not in ('strict', 'preserve_incompatible'):
+        raise ModError('Política de exportação de descrições desconhecida.')
     if not changes:
-        return exe, [], set()
+        return exe, [], set(), []
     failures = []
     written = []
     icons = set()
@@ -135,27 +160,20 @@ def _apply_card_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
                 written.extend(entries)
             except ModError as exc:
                 failures.append(f'#{cid}: descrição: {exc}')
-    if failures:
-        details = '\n'.join('• ' + item for item in failures[:12])
-        if len(failures) > 12:
-            details += f'\n• ... e mais {len(failures) - 12} descrição(ões)'
-        raise ModError(
-            'As descrições abaixo NÃO foram gravadas no jogo:\n'
-            + details
-            + '\n\nO BIN/CUE anterior foi preservado. '
-              'Corrija os textos ou use uma imagem Drop x15 compatível para '
-              'descrições maiores. Ícones novos sem suporte MIPS ficam '
-              'disponíveis somente na prévia do Studio.'
-        )
-    return patched, written, icons
+    if failures and policy == 'strict':
+        raise DescriptionCompatibilityError(failures)
+    return patched, written, icons, failures
 
 
-def build_test_disc(project, source_image: Path, *, require_complete: bool=False) -> dict:
+def build_test_disc(project, source_image: Path, *, require_complete: bool=False,
+                    description_policy: str = 'strict') -> dict:
     """Cópia segura de BIN com atributos e, quando compatíveis, nomes e imagens.
 
     Para exigir todos os efeitos e cartas extras, use require_complete=True. Isso
     bloqueará construções parciais ao invés de publicar uma imagem enganosa.
     """
+    if description_policy not in ('strict', 'preserve_incompatible'):
+        raise ModError('Política de exportação de descrições desconhecida.')
     source_image=Path(source_image).resolve()
     from .ps1_runtime import SOURCE_SHA256, compile_effects, install_runtime
     from .ps1_mod import (
@@ -259,11 +277,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 continue
 
     description_icons=set()
+    descriptions_not_written=[]
     if texts:
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
-        patched_exe,written_descriptions,description_icons=_apply_card_descriptions(
-            patched_exe,texts,catalog,native_profile=native_profile,
-            start=native_plan.data_end,end=desc_bank_end)
+        (patched_exe, written_descriptions, description_icons,
+         descriptions_not_written) = _apply_card_descriptions(
+            patched_exe, texts, catalog, native_profile=native_profile,
+            start=native_plan.data_end, end=desc_bank_end, policy=description_policy)
 
     from .ps1_native import patch_trap_thresholds, patch_terrain_boosts, patch_rituals
     patched_exe, traps_written = patch_trap_thresholds(patched_exe, native_traps)
@@ -527,6 +547,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'setores_modificados':len(changed),'lbas':sorted(changed),
                 'nomes_aplicados':written_names,
                 'descricoes_aplicadas':written_descriptions,
+                'descricoes_nao_gravadas':descriptions_not_written,
+                'politica_descricoes_ps1':description_policy,
                 'descricoes_somente_studio':descriptions_studio_only,
                 'icones_de_descricao_ps1':sorted(description_icons),
                 'efeitos_nativos_ps1':native_report,
