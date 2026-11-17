@@ -14,7 +14,7 @@ from .core import (Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, 
 from .drafts import DraftSession
 from .disc import DiscError
 from .tables import CARD_COUNT, TYPE_NAMES, ATTR_NAMES, STAR_NAMES, SUPREME
-from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
+from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS, SCALING_ACTIONS
 from .abilities import QUICK_ACTIONS, BOOLEAN_ACTIONS, quick_settings
 from . import __version__
 from .rarities import RARITIES, DEFAULT_RARITY, name_style, rarity_options
@@ -42,6 +42,10 @@ def caption_key(mapping, key):
     return mapping.get(key, key)
 
 
+def effect_target_label(action, target):
+    return 'Esta carta' if action in SCALING_ACTIONS else caption_key(TARGETS, target)
+
+
 def compact_number(value, width=13):
     text = str(value)
     return text if len(text) <= width else f'{text[:width-4]}…{text[-3:]}'
@@ -59,6 +63,16 @@ def card_row_tags(tree, card, index):
 
 class EffectDialog(tk.Toplevel):
     """Editor guiado de gatilhos, auras, efeitos por deck e equipamentos."""
+
+    fixed_targets = {
+        'aura_tipo': 'aliados_tipo',
+        **dict.fromkeys(SCALING_ACTIONS, 'proprio'),
+        **dict.fromkeys(EQUIPMENT_ACTIONS, 'monstro_equipado'),
+        'cura_lp_deck_tipo': 'proprio',
+        'dano_lp_deck_tipo': 'inimigo',
+        'descartar_alvo': 'inimigo',
+        'dano_monstro_alvo': 'monstro_alvo',
+    }
     def __init__(self, master, on_save):
         super().__init__(master)
         self.on_save=on_save
@@ -72,12 +86,14 @@ class EffectDialog(tk.Toplevel):
         form.pack(fill='both',expand=True)
         self.vars={}
         self.combos={}
+        self.labels={}
         self.sources={'evento':{k:v for k,v in EVENTS.items() if k != 'regra_deck'},
                       'acao':{k:v for k,v in ACTIONS.items() if k not in QUICK_ACTIONS and k != 'bonus_por_carta_id'},
-                      'alvo':TARGETS,'escopo':SCOPES}
+                      'alvo':{k:TARGETS[k] for k in ('proprio', 'inimigo')},'escopo':SCOPES}
         row=0
         for key,label in [('evento','Quando ativa'),('acao','O que acontece'),('alvo','Alvo do efeito')]:
-            ttk.Label(form,text=label).grid(row=row,column=0,sticky='w',pady=(0,3));row+=1
+            self.labels[key]=ttk.Label(form,text=label)
+            self.labels[key].grid(row=row,column=0,sticky='w',pady=(0,3));row+=1
             source=self.sources[key]
             v=tk.StringVar(value=next(iter(source)))
             self.vars[key]=v
@@ -86,15 +102,22 @@ class EffectDialog(tk.Toplevel):
             combo.grid(row=row,column=0,sticky='ew',pady=(0,9));row+=1
             combo.bind('<<ComboboxSelected>>',lambda e,k=key,c=combo:self._choice(k,list(self.sources[k])[c.current()]))
             self.combos[key]=combo
-        ttk.Label(form,text='X pontos (ATK, LP, dano ou cartas descartadas)').grid(row=row,column=0,sticky='w');row+=1
+            if key == 'alvo':
+                self.recipient = ttk.Label(form, background=SURFACE, padding=(8, 8))
+                self.recipient.grid(row=row-1,column=0,sticky='ew',pady=(0,9))
+                self.recipient.grid_remove()
+        self.labels['valor']=ttk.Label(form)
+        self.labels['valor'].grid(row=row,column=0,sticky='w');row+=1
         self.vars['valor']=tk.StringVar(value='500')
         self.value_entry=ttk.Entry(form,textvariable=self.vars['valor'],width=60)
         self.value_entry.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
-        ttk.Label(form,text='X pontos de DEF (auras e bônus contínuos)').grid(row=row,column=0,sticky='w');row+=1
+        self.labels['valor_def']=ttk.Label(form)
+        self.labels['valor_def'].grid(row=row,column=0,sticky='w');row+=1
         self.vars['valor_def']=tk.StringVar(value='0')
         self.def_entry=ttk.Entry(form,textvariable=self.vars['valor_def'],width=60,state='disabled')
         self.def_entry.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
-        ttk.Label(form,text='Tipo afetado / contado').grid(row=row,column=0,sticky='w');row+=1
+        self.labels['tipo_id']=ttk.Label(form)
+        self.labels['tipo_id'].grid(row=row,column=0,sticky='w');row+=1
         self.vars['tipo_id']=tk.IntVar(value=-1)
         options=[(-1,'Todos os tipos')]+[(i,name) for i,name in enumerate(TYPE_NAMES[:25])]
         self.type_ids=[i for i,_ in options]
@@ -108,7 +131,8 @@ class EffectDialog(tk.Toplevel):
         self.attribute_combo.current(0)
         self.attribute_combo.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
         self.attribute_combo.bind('<<ComboboxSelected>>',lambda _e:self.vars['atributo_id'].set(self.attribute_combo.current()-1))
-        ttk.Label(form,text='Quem participa da aura / contagem').grid(row=row,column=0,sticky='w');row+=1
+        self.labels['escopo']=ttk.Label(form)
+        self.labels['escopo'].grid(row=row,column=0,sticky='w');row+=1
         self.vars['escopo']=tk.StringVar(value='aliados')
         self.scope_combo=ttk.Combobox(form,state='disabled',width=60,values=[f'{k} — {label}' for k,label in SCOPES.items()])
         self.scope_combo.current(0)
@@ -155,25 +179,37 @@ class EffectDialog(tk.Toplevel):
         action=self.vars['acao'].get()
         if key=='acao' and action=='descartar_alvo':
             self.vars['valor'].set('1')
-        required={
-            'aura_tipo':'aliados_tipo', 'bonus_por_tipo':'proprio', 'bonus_deck_tipo':'proprio',
-            'bonus_mao_tipo':'proprio', 'bonus_cemiterio_tipo':'proprio',
-            'cura_lp_deck_tipo':'proprio', 'dano_lp_deck_tipo':'inimigo',
-            'descartar_alvo':'inimigo','dano_monstro_alvo':'monstro_alvo',
-            'equip_imune_armadilha':'monstro_equipado',
-            'equip_imune_magia_armadilha':'monstro_equipado',
-            'equip_indestrutivel':'monstro_equipado','equip_atk':'monstro_equipado'}
-        if action in required:
-            self._set('alvo',required[action])
-        elif key == 'acao' and action == 'dano_lp':
+        if key == 'acao' and action == 'dano_lp':
             self._set('alvo', 'inimigo')
-        elif self.vars['alvo'].get() in ('aliados_tipo','monstro_alvo','monstro_equipado'):
-            self._set('alvo','proprio')
         self._refresh_controls()
+
+    def _refresh_recipient(self, action):
+        self.labels['alvo'].configure(text='Quem recebe o bônus' if action in EFFECT_ACTIONS else 'Alvo do efeito')
+        target = self.fixed_targets.get(action)
+        if target is not None:
+            self.vars['alvo'].set(target)
+            self.combos['alvo'].grid_remove()
+            self.recipient.configure(text=effect_target_label(action, target))
+            self.recipient.grid()
+        else:
+            current = self.vars['alvo'].get()
+            self._set('alvo', current if current in self.sources['alvo'] else 'proprio')
+            self.recipient.grid_remove()
+            self.combos['alvo'].grid()
 
     def _refresh_controls(self):
         action=self.vars['acao'].get()
         continuous=action in EFFECT_ACTIONS
+        self._refresh_recipient(action)
+        counted = action in SCALING_ACTIONS
+        self.labels['valor'].configure(
+            text='Bônus de ATK por carta contada' if counted else
+                 'Bônus de ATK' if continuous else 'X pontos (ATK, LP, dano ou cartas descartadas)')
+        self.labels['valor_def'].configure(text='Bônus de DEF por carta contada' if counted else 'Bônus de DEF')
+        type_label = {'aura_tipo': 'Tipo de monstro que recebe o bônus',
+                      'bonus_por_tipo': 'Tipo contado no campo'}.get(action, 'Tipo contado')
+        self.labels['tipo_id'].configure(text=type_label)
+        self.labels['escopo'].configure(text='Lados afetados pela aura' if action == 'aura_tipo' else 'Lados que entram na contagem')
         typ=continuous or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo')
         protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'})
         self.def_entry.configure(state='normal' if continuous else 'disabled')
@@ -191,8 +227,11 @@ class EffectDialog(tk.Toplevel):
             help_text='Bônus fixo por carta na composição inicial do deck.'
         elif action=='bonus_mao_tipo':
             help_text='Bônus contínuo por carta na mão. Recalcula após compras, invocações e descartes.'
-        elif action in EFFECT_ACTIONS:
-            help_text='O bônus acompanha as cartas no campo, inclusive as viradas para baixo.'
+        elif action=='bonus_por_tipo':
+            help_text=('Esta carta recebe o bônus por cada monstro do tipo escolhido no campo. '
+                       'Monstros virados para baixo também contam.')
+        elif action=='aura_tipo':
+            help_text='Cada monstro do tipo escolhido nos lados afetados recebe o bônus, inclusive virado para baixo.'
         elif action in ('cura_lp_deck_tipo','dano_lp_deck_tipo'):
             help_text='X vezes o número de cartas do tipo no deck configurado. Ativado UMA vez ao entrar em campo.'
         elif action=='dano_monstro_alvo':
@@ -235,7 +274,7 @@ class SpecificCardEffectDialog(tk.Toplevel):
         if self.labels:self.combo.current(0)
         ttk.Label(pane,text='Contar cartas em:').pack(anchor='w')
         self.origin=tk.StringVar(value='campo')
-        for label,val in [('Campo (cartas abertas)','campo'),('Monte de compra','deck'),
+        for label,val in [('Campo (inclusive cartas viradas para baixo)','campo'),('Monte de compra','deck'),
                           ('Mão','mao'),('Cemitério','cemiterio')]:
             ttk.Radiobutton(pane,text=label,value=val,variable=self.origin).pack(anchor='w',pady=3)
         ttk.Label(pane,text='Escopo:').pack(anchor='w',pady=(7,3))
@@ -1564,7 +1603,7 @@ class Studio(tk.Tk):
             label=(f"Bônus por {display_name(eff['carta_referencia_id'],{c:self.drafts.get_card(c) for c in self.project.cards})}"
                    if eff.get('acao')=='bonus_por_carta_id' else caption_key(ACTIONS,eff['acao']))
             self.effect_tree.insert('','end',iid=str(i),values=(caption_key(EVENTS,eff['evento']),
-                label,caption_key(TARGETS,eff['alvo']),
+                label,effect_target_label(eff['acao'], eff['alvo']),
                 ('Todos' if eff.get('tipo_id') == -1 else TYPE_NAMES[eff['tipo_id']] if 'tipo_id' in eff and 0 <= eff['tipo_id'] < len(TYPE_NAMES) else '—'),
                 eff['valor'],eff.get('valor_def','—')))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
