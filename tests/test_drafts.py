@@ -95,6 +95,69 @@ class DraftTests(unittest.TestCase):
         self.drafts.save()
         self.assertEqual(Project.open(self.project.folder).effects,{})
 
+    def test_edit_selected_effect_replaces_only_that_rule_and_saves_on_command(self):
+        first = {'evento': 'invocar', 'acao': 'cura_lp', 'alvo': 'proprio',
+                 'valor': 2000, 'observacao': 'Antes'}
+        second = {'evento': 'continuo', 'acao': 'bonus_por_tipo', 'alvo': 'proprio',
+                  'tipo_id': 19, 'escopo': 'aliados', 'valor': 500, 'valor_def': 0}
+        self.drafts.add_effect(1, first)
+        self.drafts.add_effect(1, second)
+        existing = self.drafts.get_effects(1)
+        self.drafts.replace_effect(1, 0, {**first, 'valor': 3000, 'observacao': 'Depois'})
+        edited = self.drafts.get_effects(1)
+        self.assertEqual(len(edited), 2)
+        self.assertEqual(edited[0]['valor'], 3000)
+        self.assertEqual(edited[0]['observacao'], 'Depois')
+        self.assertEqual(edited[1], existing[1])
+        self.assertEqual(self.project.effects, {})
+        self.assertEqual(Project.open(self.project.folder).effects, {})
+        self.assertEqual(self.drafts.save(), 1)
+        saved = Project.open(self.project.folder).effects['1']
+        self.assertEqual(len(saved), 2)
+        self.assertEqual(saved[0]['valor'], 3000)
+        self.assertEqual(saved[1]['tipo_id'], 19)
+        self.drafts.replace_effect(1, 0, {**saved[0], 'valor': 2000})
+        self.assertEqual(self.project.effects['1'][0]['valor'], 3000)
+        self.assertTrue(self.drafts.is_dirty)
+
+    def test_edit_effect_invalid_or_wrong_index_keeps_original(self):
+        self.drafts.add_effect(1, {'evento': 'invocar', 'acao': 'cura_lp',
+                                   'alvo': 'proprio', 'valor': 2000})
+        original = self.drafts.get_effects(1)
+        for index in (-1, 1, 99, True, '0'):
+            with self.subTest(index=index), self.assertRaises(ModError):
+                self.drafts.replace_effect(1, index, {**original[0], 'valor': 500})
+        with self.assertRaises(ModError):
+            self.drafts.replace_effect(2, 0, {**original[0], 'valor': 500})
+        with self.assertRaises(ModError):
+            self.drafts.replace_effect(1, 0, {**original[0], 'valor': -100})
+        self.assertEqual(self.drafts.get_effects(1), original)
+        self.assertEqual(self.project.effects, {})
+
+    def test_edit_specific_card_and_quick_ability_keep_no_duplicate(self):
+        bonus = {'evento': 'continuo', 'acao': 'bonus_por_carta_id',
+                 'alvo': 'proprio', 'carta_referencia_id': 2,
+                 'origem_contagem': 'campo', 'escopo': 'aliados',
+                 'valor': 200, 'valor_def': 100, 'observacao': 'Original'}
+        self.drafts.add_effect(1, bonus)
+        self.drafts.add_effect(1, {'evento': 'continuo',
+                                   'acao': 'ataque_primeiro_turno',
+                                   'alvo': 'proprio', 'valor': 0})
+        self.drafts.replace_effect(1, 0, {**bonus, 'origem_contagem': 'deck',
+                                          'valor': 400, 'observacao': 'Editado'})
+        self.drafts.replace_effect(1, 1, {'evento': 'continuo',
+                                           'acao': 'ataques_multiplos',
+                                           'alvo': 'proprio', 'valor': 2})
+        edited = self.drafts.get_effects(1)
+        self.assertEqual(len(edited), 2)
+        self.assertEqual((edited[0]['carta_referencia_id'],
+                          edited[0]['origem_contagem'], edited[0]['valor']),
+                         (2, 'deck', 400))
+        self.assertEqual((edited[1]['acao'], edited[1]['valor']),
+                         ('ataques_multiplos', 2))
+        self.drafts.save()
+        self.assertEqual(len(Project.open(self.project.folder).effects['1']), 2)
+
     def test_incomplete_value_not_lost_on_navigation_failed_save(self):
         value=self.drafts.get_card(1)
         value['ataque']=''

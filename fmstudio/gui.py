@@ -68,15 +68,17 @@ class EffectDialog(tk.Toplevel):
         'aura_tipo': 'aliados_tipo',
         **dict.fromkeys(SCALING_ACTIONS, 'proprio'),
         **dict.fromkeys(EQUIPMENT_ACTIONS, 'monstro_equipado'),
+        **dict.fromkeys(QUICK_ACTIONS, 'proprio'),
         'cura_lp_deck_tipo': 'proprio',
         'dano_lp_deck_tipo': 'inimigo',
         'descartar_alvo': 'inimigo',
         'dano_monstro_alvo': 'monstro_alvo',
     }
-    def __init__(self, master, on_save):
+    def __init__(self, master, on_save, *, initial_effect=None):
         super().__init__(master)
         self.on_save=on_save
-        self.title('Criar efeito — Studio FM')
+        self.initial_effect = dict(initial_effect) if initial_effect is not None else None
+        self.title('Editar efeito — Studio FM' if self.initial_effect else 'Criar efeito — Studio FM')
         self.configure(bg=BG)
         self.geometry('610x755')
         self.minsize(565,650)
@@ -90,6 +92,12 @@ class EffectDialog(tk.Toplevel):
         self.sources={'evento':{k:v for k,v in EVENTS.items() if k != 'regra_deck'},
                       'acao':{k:v for k,v in ACTIONS.items() if k not in QUICK_ACTIONS and k != 'bonus_por_carta_id'},
                       'alvo':{k:TARGETS[k] for k in ('proprio', 'inimigo')},'escopo':SCOPES}
+        # Os atalhos já cadastrados também podem ser editados pela tabela,
+        # sem habilitar novos atalhos duplicados no formulário de criação.
+        if self.initial_effect:
+            self.sources['acao'].update((action, ACTIONS[action])
+                                       for action in QUICK_ACTIONS)
+            self.sources['evento']['regra_deck'] = EVENTS['regra_deck']
         row=0
         for key,label in [('evento','Quando ativa'),('acao','O que acontece'),('alvo','Alvo do efeito')]:
             self.labels[key]=ttk.Label(form,text=label)
@@ -146,9 +154,13 @@ class EffectDialog(tk.Toplevel):
         buttons=ttk.Frame(form)
         buttons.grid(row=row,column=0,sticky='e')
         ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left',padx=6)
-        ttk.Button(buttons,text='Adicionar efeito',style='Accent.TButton',command=self._submit).pack(side='left')
+        ttk.Button(buttons,text='Salvar alterações' if self.initial_effect else 'Adicionar efeito',
+                   style='Accent.TButton',command=self._submit).pack(side='left')
         form.columnconfigure(0,weight=1)
-        self._refresh_controls()
+        if self.initial_effect:
+            self._load_effect(self.initial_effect)
+        else:
+            self._refresh_controls()
         self.bind('<Escape>',lambda e:self.destroy())
         self.wait_visibility()
         self.focus_force()
@@ -157,24 +169,53 @@ class EffectDialog(tk.Toplevel):
         self.vars[key].set(value)
         self.combos[key].current(list(self.sources[key]).index(value))
 
+    def _load_effect(self, entry):
+        """Preenche os campos existentes sem transformar a regra em outra ação."""
+        for key in ('evento', 'acao'):
+            self._set(key, entry[key])
+        self.vars['alvo'].set(entry['alvo'])
+        if entry['alvo'] in self.sources['alvo']:
+            self.combos['alvo'].current(list(self.sources['alvo']).index(entry['alvo']))
+        for key in ('valor', 'valor_def', 'observacao'):
+            self.vars[key].set(str(entry.get(key, '' if key == 'observacao' else 0)))
+        typ = int(entry.get('tipo_id', -1))
+        self.vars['tipo_id'].set(typ)
+        self.type_combo.current(self.type_ids.index(typ) if typ in self.type_ids else 0)
+        attr = int(entry.get('atributo_id', -1))
+        self.vars['atributo_id'].set(attr)
+        self.attribute_combo.current(attr + 1 if 0 <= attr < len(ATTR_NAMES) else 0)
+        scope = entry.get('escopo', 'aliados')
+        self.vars['escopo'].set(scope)
+        self.scope_combo.current(list(SCOPES).index(scope) if scope in SCOPES else 0)
+        self._refresh_controls()
+
     def _choice(self,key,value):
         self.vars[key].set(value)
         action=self.vars['acao'].get()
         if key=='evento':
-            if value=='continuo' and action not in EFFECT_ACTIONS:
+            if value=='continuo' and action not in EFFECT_ACTIONS and action not in (
+                    QUICK_ACTIONS - {'sem_limite_deck', 'limite_copias_deck', 'perder_lp_por_ataque'}):
                 self._set('acao','aura_tipo')
             elif value=='equipado' and action not in EQUIPMENT_ACTIONS:
                 self._set('acao','equip_atk')
-            elif value not in ('continuo','equipado') and action in EFFECT_ACTIONS|EQUIPMENT_ACTIONS:
+            elif value=='regra_deck' and action not in ('sem_limite_deck','limite_copias_deck'):
+                self._set('acao','limite_copias_deck')
+            elif value not in ('continuo','equipado','regra_deck') and (
+                    action in EFFECT_ACTIONS|EQUIPMENT_ACTIONS or
+                    action in QUICK_ACTIONS and not (value=='atacar' and action=='perder_lp_por_ataque')):
                 self._set('acao','aumentar_atk')
         if key=='acao':
-            if value in EFFECT_ACTIONS:
+            if value in EFFECT_ACTIONS or value in QUICK_ACTIONS - {'sem_limite_deck', 'limite_copias_deck', 'perder_lp_por_ataque'}:
                 self._set('evento','continuo')
             elif value in EQUIPMENT_ACTIONS:
                 self._set('evento','equipado')
+            elif value in ('sem_limite_deck','limite_copias_deck'):
+                self._set('evento','regra_deck')
+            elif value == 'perder_lp_por_ataque':
+                self._set('evento','atacar')
             elif value in ONCE_ACTIONS:
                 self._set('evento','invocar')
-            elif self.vars['evento'].get() in ('continuo','equipado'):
+            elif self.vars['evento'].get() in ('continuo','equipado','regra_deck'):
                 self._set('evento','invocar')
         action=self.vars['acao'].get()
         if key=='acao' and action=='descartar_alvo':
@@ -211,7 +252,7 @@ class EffectDialog(tk.Toplevel):
         self.labels['tipo_id'].configure(text=type_label)
         self.labels['escopo'].configure(text='Lados afetados pela aura' if action == 'aura_tipo' else 'Lados que entram na contagem')
         typ=continuous or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo')
-        protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'})
+        protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'}) or action in BOOLEAN_ACTIONS
         self.def_entry.configure(state='normal' if continuous else 'disabled')
         self.type_combo.configure(state='readonly' if typ else 'disabled')
         self.attribute_combo.configure(state='readonly' if continuous else 'disabled')
@@ -256,10 +297,12 @@ class EffectDialog(tk.Toplevel):
 
 class SpecificCardEffectDialog(tk.Toplevel):
     """Adicionar bônus por carta selecionada sem digitar IDs na descrição."""
-    def __init__(self, master, cards, on_save):
+    def __init__(self, master, cards, on_save, *, initial_effect=None):
         super().__init__(master)
-        self.title('Efeito por carta específica')
-        self.geometry('590x520')
+        self.initial_effect = dict(initial_effect) if initial_effect else None
+        self.title('Editar bônus por carta específica' if self.initial_effect
+                   else 'Efeito por carta específica')
+        self.geometry('590x560')
         self.configure(bg=BG)
         self.transient(master)
         self.grab_set()
@@ -272,25 +315,43 @@ class SpecificCardEffectDialog(tk.Toplevel):
         self.combo=ttk.Combobox(pane,textvariable=self.selected,values=list(self.labels),width=62)
         self.combo.pack(fill='x',pady=(0,12))
         if self.labels:self.combo.current(0)
+        if self.initial_effect:
+            old_ref = int(self.initial_effect.get('carta_referencia_id', 0))
+            old_label = next((name for name, cid in self.labels.items() if cid == old_ref), None)
+            if old_label is not None:
+                self.selected.set(old_label)
         ttk.Label(pane,text='Contar cartas em:').pack(anchor='w')
-        self.origin=tk.StringVar(value='campo')
+        self.origin=tk.StringVar(value=self.initial_effect.get('origem_contagem', 'campo')
+                                 if self.initial_effect else 'campo')
         for label,val in [('Campo (inclusive cartas viradas para baixo)','campo'),('Monte de compra','deck'),
                           ('Mão','mao'),('Cemitério','cemiterio')]:
             ttk.Radiobutton(pane,text=label,value=val,variable=self.origin).pack(anchor='w',pady=3)
         ttk.Label(pane,text='Escopo:').pack(anchor='w',pady=(7,3))
-        self.scope=tk.StringVar(value='aliados')
+        self.scope=tk.StringVar(value=self.initial_effect.get('escopo', 'aliados')
+                                if self.initial_effect else 'aliados')
         scope=ttk.Combobox(pane,textvariable=self.scope,values=['aliados','inimigos','todos'],state='readonly')
         scope.pack(fill='x',pady=(0,12))
         row=ttk.Frame(pane);row.pack(fill='x')
-        self.attack=tk.StringVar(value='200');self.defense=tk.StringVar(value='0')
+        self.attack=tk.StringVar(value=str(self.initial_effect.get('valor', 200))
+                                 if self.initial_effect else '200')
+        self.defense=tk.StringVar(value=str(self.initial_effect.get('valor_def', 0))
+                                  if self.initial_effect else '0')
         for key,v in [('ATK por cópia',self.attack),('DEF por cópia',self.defense)]:
             block=ttk.Frame(row);block.pack(side='left',padx=(0,16))
             ttk.Label(block,text=key).pack(anchor='w');ttk.Entry(block,width=15,textvariable=v).pack()
-        ttk.Label(pane,text='O nome da carta é inserido na descrição do efeito.',
-                  foreground='#edc47e').pack(anchor='w',pady=14)
+        ttk.Label(pane,text='Observação (opcional)').pack(anchor='w',pady=(10,3))
+        self.note=tk.StringVar(value=self.initial_effect.get('observacao', '')
+                               if self.initial_effect else '')
+        ttk.Entry(pane,textvariable=self.note).pack(fill='x')
+        ttk.Label(pane,text=('A edição mantém o texto da descrição intacto.'
+                             if self.initial_effect else
+                             'Ao adicionar, o nome da carta será inserido na descrição.'),
+                  foreground='#edc47e').pack(anchor='w',pady=12)
         buttons=ttk.Frame(pane);buttons.pack(fill='x')
         ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left')
-        ttk.Button(buttons,text='Adicionar efeito + texto',style='Accent.TButton',command=self.submit).pack(side='right')
+        ttk.Button(buttons,text='Salvar alterações' if self.initial_effect
+                   else 'Adicionar efeito + texto',style='Accent.TButton',
+                   command=self.submit).pack(side='right')
     def submit(self):
         value=self.selected.get().strip()
         ref=self.labels.get(value)
@@ -303,7 +364,7 @@ class SpecificCardEffectDialog(tk.Toplevel):
             entry={'evento':'continuo','acao':'bonus_por_carta_id','alvo':'proprio',
                    'carta_referencia_id':ref,'origem_contagem':self.origin.get(),
                    'escopo':self.scope.get(),'valor':int(self.attack.get()),
-                   'valor_def':int(self.defense.get())}
+                   'valor_def':int(self.defense.get()), 'observacao':self.note.get()}
             self.on_save(entry)
         except (ValueError,ModError) as exc:
             messagebox.showerror('Efeito inválido',str(exc),parent=self);return
@@ -815,14 +876,27 @@ class Studio(tk.Tk):
         self.effect_tree.configure(yscrollcommand=effects_scroll.set)
         effects_scroll.pack(side='right',fill='y')
         self.effect_tree.pack(side='left',fill='x',expand=True,padx=1,pady=1)
+        self.effect_tree.bind('<Double-1>',lambda _event:self.edit_effect())
         buttons=ttk.Frame(body)
         buttons.pack(fill='x',pady=12)
-        ttk.Button(buttons,text='+ Adicionar efeito',style='Accent.TButton',command=self.add_effect).pack(side='left')
-        ttk.Button(buttons,text='+ Bônus por carta',command=self.add_specific_effect).pack(side='left',padx=8)
-        ttk.Button(buttons,text='Remover efeito selecionado',command=self.remove_effect).pack(side='left',padx=8)
-        ttk.Button(buttons,text='PS1: permitir Equip em criatura',command=self.allow_native_equip).pack(side='left',padx=8)
-        ttk.Button(buttons,text='PS1: trocar alvo Equip',command=self.replace_native_equip).pack(side='left',padx=8)
-        ttk.Button(buttons,text='PS1: usar adições automáticas',command=self.activate_equip_additions).pack(side='left',padx=8)
+        effect_actions=ttk.Frame(buttons)
+        effect_actions.pack(fill='x')
+        ttk.Button(effect_actions,text='+ Adicionar efeito',style='Accent.TButton',
+                   command=self.add_effect).pack(side='left')
+        ttk.Button(effect_actions,text='+ Bônus por carta',
+                   command=self.add_specific_effect).pack(side='left',padx=8)
+        ttk.Button(effect_actions,text='Editar efeito selecionado',
+                   command=self.edit_effect).pack(side='left',padx=8)
+        ttk.Button(effect_actions,text='Remover efeito selecionado',
+                   command=self.remove_effect).pack(side='left',padx=8)
+        ps1_actions=ttk.Frame(buttons)
+        ps1_actions.pack(fill='x',pady=(6,0))
+        ttk.Button(ps1_actions,text='PS1: permitir Equip em criatura',
+                   command=self.allow_native_equip).pack(side='left')
+        ttk.Button(ps1_actions,text='PS1: trocar alvo Equip',
+                   command=self.replace_native_equip).pack(side='left',padx=8)
+        ttk.Button(ps1_actions,text='PS1: usar adições automáticas',
+                   command=self.activate_equip_additions).pack(side='left',padx=8)
         native=tk.Frame(body,bg=SURFACE,padx=12,pady=8)
         native.pack(fill='x',pady=(2,8))
         tk.Label(native,text='LABORATÓRIO DE EFEITOS INÉDITOS — PLAYSTATION 1',
@@ -1589,7 +1663,7 @@ class Studio(tk.Tk):
         finally:
             self._loading_quick=False
 
-    def _refresh_effects(self, *, skip_quick=False):
+    def _refresh_effects(self, *, skip_quick=False, select_index=None):
         for iid in self.effect_tree.get_children():
             self.effect_tree.delete(iid)
         if not self.project or not self.selected_id:
@@ -1606,6 +1680,10 @@ class Studio(tk.Tk):
                 label,effect_target_label(eff['acao'], eff['alvo']),
                 ('Todos' if eff.get('tipo_id') == -1 else TYPE_NAMES[eff['tipo_id']] if 'tipo_id' in eff and 0 <= eff['tipo_id'] < len(TYPE_NAMES) else '—'),
                 eff['valor'],eff.get('valor_def','—')))
+        if select_index is not None and 0 <= select_index < len(effects):
+            self.effect_tree.selection_set(str(select_index))
+            self.effect_tree.focus(str(select_index))
+            self.effect_tree.see(str(select_index))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
 
     def diagnose_effect_engine(self):
@@ -2043,6 +2121,44 @@ class Studio(tk.Tk):
             self._update_pending_label()
             self._update_status(f'Efeito pendente para a carta {format_id(self.selected_id)}. Clique Salvar projeto.')
         EffectDialog(self,submit)
+
+    def edit_effect(self):
+        """Abre o formulário correto e substitui a regra selecionada no rascunho."""
+        if self._extract_running:
+            messagebox.showinfo('Extração em andamento',
+                'Conclua a extração antes de editar efeitos.',parent=self)
+            return
+        if not self.project or not self.drafts or not self.selected_id:
+            messagebox.showinfo('Selecione uma carta',
+                'Escolha uma carta e um efeito para editar.',parent=self)
+            return
+        selected=self.effect_tree.selection()
+        if not selected:
+            messagebox.showinfo('Selecione um efeito',
+                'Selecione uma linha da tabela Efeitos das cartas.',parent=self)
+            return
+        self._stage_current()
+        cid=self.selected_id
+        idx=int(selected[0])
+        effects=self.drafts.get_effects(cid)
+        if not 0 <= idx < len(effects):
+            self._refresh_effects()
+            return
+        previous=effects[idx]
+
+        def submit(entry):
+            self.drafts.replace_effect(cid,idx,entry)
+            self._refresh_project()
+            self._refresh_effects(select_index=idx)
+            self._update_pending_label()
+            self._update_status(
+                f'Efeito {idx+1} da carta {format_id(cid)} atualizado no rascunho. '
+                'Clique Salvar projeto ou pressione Ctrl+S.')
+
+        if previous['acao']=='bonus_por_carta_id':
+            cards={card_id:self.drafts.get_card(card_id) for card_id in self.project.cards}
+            return SpecificCardEffectDialog(self,cards,submit,initial_effect=previous)
+        return EffectDialog(self,submit,initial_effect=previous)
 
     def add_specific_effect(self):
         if self._extract_running or not self.project or not self.selected_id:

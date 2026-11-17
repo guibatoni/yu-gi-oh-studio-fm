@@ -112,6 +112,18 @@ class DraftSession:
         items = replace_quick_effects(self.get_effects(cid), settings, default_copies=default_copies)
         self._stage_effects(cid, items)
 
+    def replace_effect(self, cid: int, index: int, entry: dict) -> None:
+        """Atualiza exatamente uma regra, sem salvar o projeto ou duplicar efeitos."""
+        from .core import ModError
+        if cid not in self.project.cards:
+            raise ModError('Carta não carregada')
+        items = self.get_effects(cid)
+        if type(index) is not int or not 0 <= index < len(items):
+            raise ModError('Selecione um efeito existente para editar.')
+        validated = check_effect(entry)  # inválido não altera nenhum rascunho
+        items[index] = validated
+        self._stage_effects(cid, items)
+
     def remove_effect(self, cid: int, index: int) -> None:
         items = self.get_effects(cid)
         items.pop(index)
