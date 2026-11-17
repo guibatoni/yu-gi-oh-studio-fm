@@ -816,11 +816,11 @@ class Project:
         if event not in EVENTS or event == 'continuo':
             raise ModError('Para efeitos contínuos, utilize o simulador de campo')
         stats = card_override if card_override is not None else self.get(cid)
-        lp = simulation_nonnegative_int(self.metadata.get('edicao_mod', {}).get(
-            'lp_jogador', self.metadata.get('studio_initial_lp', 8000)), 'LP inicial')
+        from .mod_data import global_starting_lp
+        lp = global_starting_lp(self)
         state = {'ataque':int(stats['ataque']), 'defesa':int(stats['defesa']),
                  'ataque_adversario':1800, 'defesa_adversario':1500,
-                 'lp_jogador':lp,'lp_adversario':8000}
+                 'lp_jogador':lp,'lp_adversario':lp}
         applied = []
         for eff in (effects_override if effects_override is not None else self.effects.get(str(cid), [])):
             if eff['evento'] != event:
