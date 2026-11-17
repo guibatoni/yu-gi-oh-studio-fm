@@ -36,6 +36,7 @@ ENTRY_POINTS = {
     'SortTierPolygon': 0x801CF8B0,
     'CheckEditedFusion': 0x800FF910,
     'summon_damage': 0x801CFD78,
+    'protection': 0x800FFBA8,
 }
 RUNTIME = bytes.fromhex("""
 c8 ff bd 27 25 40 80 00 18 00 b2 af 14 00 b1 af 10 00 b0 af 34 00 bf af 30 00 be af 2c 00 b7 af
