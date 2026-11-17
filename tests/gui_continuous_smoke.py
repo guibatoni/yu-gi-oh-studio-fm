@@ -15,6 +15,10 @@ with TemporaryDirectory() as td:
     root.project=p; root.drafts=DraftSession(p); root._refresh_all(); root.update()
     dialog=EffectDialog(root,lambda e:root.drafts.add_effect(1,e))
     dialog._choice('acao','aura_tipo')
+    # Fixe Fairy na primeira aura; o cenário Plant posterior deve medir só o bônus por contagem.
+    dialog.type_combo.current(dialog.type_ids.index(8))
+    dialog.type_combo.event_generate('<<ComboboxSelected>>')
+    root.update()
     assert dialog.recipient.cget('text') == 'Monstros do tipo escolhido'
     assert not dialog.combos['alvo'].grid_info()
     dialog.vars['valor'].set('500');dialog.vars['valor_def'].set('300')
