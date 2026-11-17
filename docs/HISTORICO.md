@@ -1,3 +1,15 @@
+## v1.7.9 — Contador de LP do PS1 em cinco dígitos (20.000)
+
+- **Config. MOD → LP inicial** continua sendo a única origem de LP. Configurando **20.000**, jogador e oponente iniciam com o mesmo total; a rotina de inicialização de LP da v1.7.7 é preservada.
+- O BIN/CUE do perfil **Drop x15 conhecido** agora altera as chamadas nativas de desenho de LP do rival e do jogador: largura de **4 → 5 dígitos**, deslocando o início **8 px para a esquerda** para conservar a posição do dígito final.
+- **Os contadores do deck continuam com 2 dígitos.** O patch muda apenas quatro instruções validadas do renderizador (PC 0x80016F14, 0x80016F18, 0x80016F98 e 0x80016F9C); verifica a assinatura do SLUS e protege os dados desconhecidos.
+- O patch é ativado automaticamente ao construir BIN/CUE para o perfil compatível quando o LP global for **maior que 9.999**. Valores menores conservam o contador original.
+- A imagem final é relida para conferir as instruções e a exportação registra `contador_lp_ps1` no manifesto JSON; erros não substituem o último BIN de teste.
+- **Limitação visual:** o fundo original do HUD ainda tem 64 px e não foi alargado. O quinto dígito pode ocupar parte da área do rótulo, exigindo inspeção no ePSXe. Não significa que todas as variantes de HUD dos mods sejam compatíveis.
+- **Limite do campo assinado:** a atualização solicitada de **20.000** cabe na representação assinada de 16 bits do contador; valores acima de 32.767 ainda exigem outra análise do renderizador e atualização da animação de LP.
+- Depois de atualizar o Studio, salve 20.000 LP na Config. MOD e **gere BIN/CUE novo**. Executar BIN anterior não altera seu HUD.
+- Backups: `backup/studio-v1.7.8-before-lp-hud`.
+
 ## v1.7.8 — IA PS1 Difícil (motor nativo Drop x15)
 
 - Nova opção **Edição do Mod → Config. MOD → Inteligência artificial dos oponentes — PlayStation 1**: Normal (IA original) e Difícil (IA aprimorada). Projetos existentes permanecem em Normal até a seleção explícita de Difícil.
