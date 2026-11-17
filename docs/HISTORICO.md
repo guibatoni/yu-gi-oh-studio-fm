@@ -1,3 +1,12 @@
+## v1.8.2 — ATK/DEF nas tabelas de Drops, Deck inicial e Deck oponente
+
+- Novas colunas **ATK** e **DEF** nos dois modos da aba **Drops do oponente** (normal e ponderado do próprio deck), nos **pools ponderados** e nas listas **Catálogo** e **Deck atual** de **Deck do oponente** e **Decks iniciais**.
+- Somente cartas cujo `tipo_id` é de monstro (0–19 ou **Deus, 24**) mostram os valores reais base do projeto, inclusive 0 e valores customizados altos. Magias, armadilhas, rituais e equipamentos exibem **—** no lugar de ATK/DEF.
+- Ordenação numérica de ATK/DEF e rolagem horizontal nas tabelas amplas, mantendo filtros, seleção múltipla, pesos e probabilidades.
+- Duplo clique na coluna de Peso/Chance continua abrindo edição inline, agora identificando a coluna pelo nome em vez da posição antiga.
+- Valores atualizados nas cartas são refletidos ao atualizar catálogo sem mudar regras, probabilidades, dados do BIN/CUE ou formato de projetos.
+- Backup: `backup/studio-v1.8.1-before-atk-def-lists`.
+
 ## v1.8.1 — Seleção múltipla de cartas em drops, decks e catálogo
 
 - **Drops normais, drops ponderados do deck e pools**: use Ctrl+clique ou Shift+clique para selecionar várias cartas e aplicar um mesmo peso; **Remover selecionadas** zera os pesos de todas em uma operação e **Selecionar visíveis** facilita filtros e lotes.
