@@ -423,7 +423,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             reread_exe=b''.join(verify.read_entry(files['SLUS_014.11']))
             if reread_exe!=patched_exe:
                 raise ModError('SLUS não corresponde após reempacotamento.')
-            if native_profile and not verify_hard_ai(original_exe,reread_exe,mode=ai_mode):
+            if native_profile and ai_mode=='dificil' and not verify_hard_ai(original_exe,reread_exe,mode=ai_mode):
                 raise ModError('IA PS1: patch incompleto após reempacotamento; BIN antigo preservado.')
             if patched_wa is not None and b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))!=patched_wa:
                 raise ModError('WA_MRG não corresponde após reempacotamento.')
