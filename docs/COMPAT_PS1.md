@@ -1,3 +1,22 @@
+## HUD PS1 e contador de LP — v1.7.9
+
+No SLUS Drop x15 verificado, `Duel_DrawLifePointsAndDeckCounts` desenha
+os LP com quatro dígitos para cada duelista e os contadores de deck com
+dois. A Config. MOD já aplica 20.000 LP à RAM de ambos, mas a interface
+retail não mostrava a quinta coluna. O Studio corrige as duas chamadas
+do desenhador para cinco dígitos e ajusta a origem em -8 px.
+
+A tabela `Text_EncodeDecimalDigits` existente contém a potência 10.000
+necessária ao quinto dígito. Nenhuma imagem/textura de números é alterada.
+A verificação usa SHA-256 da origem e assinatura de cada instrução; não
+escreve diretamente no arquivo fonte.
+
+**Limite de validação:** a mudança amplia a largura dos números, mas não
+redesenha o fundo de 64 px. A sobreposição com rótulos e a apresentação
+final no ePSXe continuam pendentes de teste visual. O valor 20.000 é
+compatível com a leitura assinada atual dos LP; não extrapolar esse
+resultado para valores acima de 32.767.
+
 ## IA dos oponentes no PS1 — v1.7.8
 
 O modo Difícil aplica cinco patches guardados ao SLUS Drop x15 verificado,

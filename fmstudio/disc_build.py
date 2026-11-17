@@ -357,6 +357,16 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     patched_exe,native_report=install_runtime(
         original_exe,patched_exe,native_plan,description_icons=bool(description_icons))
     patched_exe=patch_executable(patched_exe,mod_plan,profile=native_profile)
+    from .ps1_lp_hud import patch_lp_hud, verify_lp_hud
+    # O HUD é um patch separado da RAM: 20000 LP na memória requer também
+    # cinco dígitos no painel para os dois lados.
+    lp_hud_initial=mod_plan.player_lp if mod_plan.has_lp else 8000
+    if native_profile:
+        patched_exe,lp_hud_report=patch_lp_hud(
+            original_exe,patched_exe,initial_lp=lp_hud_initial)
+    else:
+        lp_hud_report={'status':'perfil_incompativel' if lp_hud_initial>9999 else 'original',
+                       'digitos':4,'lp_inicial':lp_hud_initial,'validado_epsxe':False}
     from .ps1_ai import mode_for, patch_hard_ai, verify_hard_ai
     ai_mode=mode_for(project)
     if native_profile:
@@ -425,6 +435,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 raise ModError('SLUS não corresponde após reempacotamento.')
             if native_profile and ai_mode=='dificil' and not verify_hard_ai(original_exe,reread_exe,mode=ai_mode):
                 raise ModError('IA PS1: patch incompleto após reempacotamento; BIN antigo preservado.')
+            if native_profile and lp_hud_initial>9999 and not verify_lp_hud(
+                    original_exe,reread_exe,initial_lp=lp_hud_initial):
+                raise ModError('Contador de LP: cinco dígitos divergentes no BIN final. '
+                               'A imagem anterior foi preservada.')
             if patched_wa is not None and b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))!=patched_wa:
                 raise ModError('WA_MRG não corresponde após reempacotamento.')
 
@@ -447,6 +461,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'icones_de_descricao_ps1':sorted(description_icons),
                 'efeitos_nativos_ps1':native_report,
                 'ia_nativa_ps1':ai_report,
+                'contador_lp_ps1':lp_hud_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
                                     'decks_fixos':list(native_plan.fixed_decks)},

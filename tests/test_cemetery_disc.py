@@ -241,6 +241,53 @@ class StableDiscOutputTests(DiscBuildTests):
                          original_disc_hash)
         self.assertEqual(len(modified), len(self.original))
 
+    def test_20000_lp_five_digit_hud_in_rebuilt_bin_cue(self):
+        import struct
+        from unittest.mock import patch
+        from fmstudio.ps1_lp_hud import LP_HUD_PATCHES, DECK_COUNT_WORDS
+        from fmstudio.ps1_mod import (FIRST_TURN_PC, FIRST_TURN_SOURCE,
+                                       LP_BANK_END, INIT_CALL, _LP_INIT)
+        from fmstudio.tables import EXE_DELTA
+
+        # A imagem fake reserva todo o banco nativo de LP, não contém ROM real.
+        source = bytearray(LP_BANK_END-EXE_DELTA+0x800)
+        source[:8] = b'PS-X EXE'
+        struct.pack_into('<I', source, INIT_CALL-EXE_DELTA, _LP_INIT)
+        struct.pack_into('<I', source, FIRST_TURN_PC-EXE_DELTA, FIRST_TURN_SOURCE)
+        for pc, original, _, _ in LP_HUD_PATCHES:
+            struct.pack_into('<I', source, pc-EXE_DELTA, original)
+        for pc, original in DECK_COUNT_WORDS:
+            struct.pack_into('<I', source, pc-EXE_DELTA, original)
+        self.original = bytes(source)
+        self.patched = self.original
+        fake_disc(self.src, self.original)
+        original_disc_hash = hashlib.sha256(self.src.read_bytes()).hexdigest()
+        digest = hashlib.sha256(self.original).hexdigest()
+        self.project.metadata['base_sha256']['slus'] = digest
+        self.project.metadata['edicao_mod'] = {'lp_inicial': 20000}
+        self.project.cards = {}
+        self.project.get = self.project.cards.__getitem__
+        with patch('fmstudio.ps1_runtime.SOURCE_SHA256', digest), patch(
+                'fmstudio.ps1_lp_hud.SOURCE_SHA256', digest):
+            result = build_test_disc(self.project, self.src)
+        self.assertEqual(result['contador_lp_ps1']['status'], 'aplicado')
+        self.assertEqual(result['contador_lp_ps1']['lp_inicial'], 20000)
+        self.assertEqual(result['contador_lp_ps1']['digitos'], 5)
+        with DiscReader(result['bin']) as reader:
+            entry = next(entry for entry in reader.files() if entry.path == 'SLUS_014.11')
+            rebuilt = b''.join(reader.read_entry(entry))
+        self.assertEqual(len(rebuilt), len(self.original))
+        for pc, old, wide, _ in LP_HUD_PATCHES:
+            self.assertEqual(struct.unpack_from('<I', rebuilt, pc-EXE_DELTA)[0], wide)
+        for pc, deck_count in DECK_COUNT_WORDS:
+            self.assertEqual(struct.unpack_from('<I', rebuilt, pc-EXE_DELTA)[0], deck_count)
+        # O código inicializa LP de ambos os lados com o mesmo 20000.
+        from fmstudio.ps1_mod import LP_TABLE
+        self.assertEqual(struct.unpack_from('<4H', rebuilt, LP_TABLE-EXE_DELTA),
+                         (20000, 20000, 20000, 20000))
+        self.assertEqual(hashlib.sha256(self.src.read_bytes()).hexdigest(), original_disc_hash)
+        self.assertEqual(hashlib.sha256(self.original).hexdigest(), digest)
+
     def test_different_source_filename_creates_distinct_image(self):
         first=build_test_disc(self.project,self.src)
         another=self.path/'outro_mod.bin'

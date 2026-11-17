@@ -1,0 +1,32 @@
+name: Validar Studio FM 1.7.9 — contador PS1 com cinco dígitos
+on:
+  push:
+    branches: [feature/studio-v1.7.9-ps1-five-digit-lp]
+permissions:
+  contents: read
+jobs:
+  lp-hud:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependências de teste
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb python3-tk
+          python -m pip install pillow unicorn==2.1.4
+      - name: Verificar sintaxe e toda a suite
+        run: |
+          python -m compileall -q fmstudio tools tests app.py
+          python -m unittest discover -s tests -v
+      - name: Confirmar os dois LP via instrucoes MIPS
+        run: |
+          PYTHONPATH=. python tests/verify_global_lp_init_mips.py
+          PYTHONPATH=. python tests/verify_five_digit_hud_mips.py
+      - name: Testar interface LP e pacote de atualizacao
+        run: |
+          PYTHONPATH=. xvfb-run -a python tests/gui_mod_smoke.py
+          python tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip
