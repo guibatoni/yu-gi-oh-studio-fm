@@ -935,7 +935,7 @@ class Studio(tk.Tk):
         ttk.Button(links,text='Efeitos e bônus',command=lambda:self.tabs.select(self.tab_effects)).pack(side='left',padx=(0,5))
         ttk.Button(links,text='Fusões, ritual e equipamentos',command=self.edit_card_rules).pack(side='left',padx=5)
         ttk.Button(links,text='Opções PS1',command=self.open_card_ps1_options).pack(side='right')
-        tk.Label(body,text='Descrição com ícones, cores e referências a outras cartas (prévia no Studio)',bg=BG,fg=TEXT,font=('Segoe UI',10)).pack(anchor='w',pady=(12,3))
+        tk.Label(body,text='Descrição da carta — salve o projeto e use Gerar jogo BIN/CUE para gravar no PS1',bg=BG,fg=TEXT,font=('Segoe UI',10)).pack(anchor='w',pady=(12,3))
         desc_tools=ttk.Frame(body)
         desc_tools.pack(fill='x',pady=(0,5))
         ttk.Button(desc_tools,text='Inserir ícone',command=self.choose_description_icon).pack(side='left',padx=(0,6))
@@ -2800,6 +2800,9 @@ class Studio(tk.Tk):
             + (f'Passwords por ID: {runtime["password_id_prefix"]:05d} + os três dígitos do ID.\n'
                if runtime.get('password_id_prefix') is not None else '')
             + (f'Fonte PS1 simplificou acentos em {simplified} descrição(ões).\n' if simplified else '')
+            + (f'ATENÇÃO: descrições dos IDs {", ".join(map(str, manifest["descricoes_somente_studio"][:8]))} '
+               'ficam apenas no Studio (cartas acima de 722).\n'
+               if manifest.get('descricoes_somente_studio') else '')
             + f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             + (f'God (24) aplicado a {len(manifest["god24_cartas"])} carta(s). '
                'Abra os detalhes com Triângulo para ver o ícone.\n'

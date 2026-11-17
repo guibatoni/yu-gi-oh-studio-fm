@@ -1,3 +1,18 @@
+# Studio FM v1.8.11 — Conferência de descrições no jogo
+
+As descrições salvas no projeto somente são gravadas no PlayStation ao usar
+**Gerar jogo BIN/CUE**. O novo processo não ignora silenciosamente descrições
+que não cabem no mod: lista as cartas e o motivo da incompatibilidade,
+preservando a última cópia BIN/CUE. Descrições escritas são conferidas pelos
+ponteiros de texto na imagem gerada. Cartas com IDs acima de 722 permanecem
+apenas no Studio enquanto não houver suporte nativo no motor PS1.
+
+Se o jogo continuar com texto antigo, carregue no ePSXe a cópia BIN/CUE
+gerada na pasta do projeto (não o arquivo original). Alguns mods somente
+aceitam textos curtos porque não têm o banco de realocação do Drop x15.
+
+---
+
 # Studio FM v1.8.10 — Efeitos de vida e editor de descrições
 
 Esta atualização reúne o Vínculo com Vida (no simulador), a seleção de carta

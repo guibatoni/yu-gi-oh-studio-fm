@@ -109,6 +109,47 @@ def _write_file_patches(out, entry, original: bytes, patched: bytes) -> list[int
     return changed
 
 
+def _apply_card_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
+                             *, native_profile: bool, start: int, end: int):
+    """Grava descrições ou informa todas as falhas antes de tocar no BIN existente.
+
+    O perfil Drop x15 pode realocar strings; outros executáveis só permitem
+    substituir o texto dentro do slot original. Não tratar omissões como êxito.
+    """
+    if not changes:
+        return exe, [], set()
+    failures = []
+    written = []
+    icons = set()
+    patched = exe
+    if native_profile:
+        from .ps1_text import patch_descriptions
+        patched, written, icons, failures = patch_descriptions(
+            exe, changes, cards, start=start, end=end)
+    else:
+        from .ps1_content import patch_descriptions
+        for cid, description in sorted(changes.items()):
+            try:
+                patched, entries = patch_descriptions(
+                    patched, {cid: description}, cards)
+                written.extend(entries)
+            except ModError as exc:
+                failures.append(f'#{cid}: descrição: {exc}')
+    if failures:
+        details = '\n'.join('• ' + item for item in failures[:12])
+        if len(failures) > 12:
+            details += f'\n• ... e mais {len(failures) - 12} descrição(ões)'
+        raise ModError(
+            'As descrições abaixo NÃO foram gravadas no jogo:\n'
+            + details
+            + '\n\nO BIN/CUE anterior foi preservado. '
+              'Corrija os textos ou use uma imagem Drop x15 compatível para '
+              'descrições maiores. Ícones novos sem suporte MIPS ficam '
+              'disponíveis somente na prévia do Studio.'
+        )
+    return patched, written, icons
+
+
 def build_test_disc(project, source_image: Path, *, require_complete: bool=False) -> dict:
     """Cópia segura de BIN com atributos e, quando compatíveis, nomes e imagens.
 
@@ -125,6 +166,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     texts={int(cid):project.get(int(cid)).get('descricao','')
            for cid,rows in getattr(project,'edits',{}).items()
            if 'descricao' in rows and 1<=int(cid)<=722}
+    descriptions_studio_only=sorted(
+        {int(cid) for cid,rows in getattr(project,'edits',{}).items()
+         if 'descricao' in rows and int(cid)>722}
+        | {int(cid) for cid in getattr(project,'new_cards',{})
+           if int(cid)>722 and project.get(int(cid)).get('descricao')})
     god_cards=ps1_god24_card_ids(project)
     god_icon_card=legacy_god_description_icon_card(project)
     try:
@@ -215,18 +261,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     description_icons=set()
     if texts:
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
-        if native_profile:
-            from .ps1_text import patch_descriptions
-            patched_exe,written_descriptions,description_icons,_=patch_descriptions(
-                patched_exe,texts,catalog,start=native_plan.data_end,end=desc_bank_end)
-        else:
-            from .ps1_content import patch_descriptions
-            for cid,desc in sorted(texts.items()):
-                try:
-                    patched_exe,items=patch_descriptions(patched_exe,{cid:desc},catalog)
-                    written_descriptions.extend(items)
-                except ModError:
-                    continue
+        patched_exe,written_descriptions,description_icons=_apply_card_descriptions(
+            patched_exe,texts,catalog,native_profile=native_profile,
+            start=native_plan.data_end,end=desc_bank_end)
 
     from .ps1_native import patch_trap_thresholds, patch_terrain_boosts, patch_rituals
     patched_exe, traps_written = patch_trap_thresholds(patched_exe, native_traps)
@@ -449,6 +486,20 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             reread_exe=b''.join(verify.read_entry(files['SLUS_014.11']))
             if reread_exe!=patched_exe:
                 raise ModError('SLUS não corresponde após reempacotamento.')
+            if written_descriptions:
+                from .ps1_content import description_slot
+                for row in written_descriptions:
+                    try:
+                        offset, _ = description_slot(reread_exe, row['id'])
+                    except ModError as exc:
+                        raise ModError(
+                            f'Carta #{row["id"]}: a descrição não pode ser lida no BIN final: {exc}. '
+                            'A cópia anterior foi preservada.') from exc
+                    if (offset != row['offset_exe'] or
+                            reread_exe[offset + row['bytes'] - 1] != 0xFF):
+                        raise ModError(
+                            f'Carta #{row["id"]}: a descrição gravada diverge do ponteiro PS1. '
+                            'A cópia anterior foi preservada.')
             if native_profile and ai_mode=='dificil' and not verify_hard_ai(original_exe,reread_exe,mode=ai_mode):
                 raise ModError('IA PS1: patch incompleto após reempacotamento; BIN antigo preservado.')
             if native_profile and lp_hud_initial>9999 and not verify_lp_hud(
@@ -476,6 +527,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'setores_modificados':len(changed),'lbas':sorted(changed),
                 'nomes_aplicados':written_names,
                 'descricoes_aplicadas':written_descriptions,
+                'descricoes_somente_studio':descriptions_studio_only,
                 'icones_de_descricao_ps1':sorted(description_icons),
                 'efeitos_nativos_ps1':native_report,
                 'ia_nativa_ps1':ai_report,
