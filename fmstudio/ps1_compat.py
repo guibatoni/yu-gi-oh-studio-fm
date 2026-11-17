@@ -38,6 +38,13 @@ def audit(project) -> dict:
     counts['decks_fixos_ps1'] = len(native_plan.fixed_decks)
     counts['fusoes_personalizadas_ps1'] = len(native_plan.fusions)
     blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
+    from .ps1_ai import mode_for
+    ai_mode=mode_for(project)
+    if ai_mode=='dificil':
+        if native_profile:
+            supported.append('IA PS1 Difícil: fusões, equipamentos, magias e traps sem portas aleatórias de desistência')
+        else:
+            blocked.append('IA PS1 Difícil requer imagem Drop x15 com SLUS original confirmado')
     if native_profile:
         supported.append('Bloqueio de ataque na abertura com exceção por carta')
     supported.extend(f'Drops do deck do duelista #{opponent}' for opponent in native_plan.deck_drops)
