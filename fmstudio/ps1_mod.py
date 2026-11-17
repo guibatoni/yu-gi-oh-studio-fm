@@ -8,7 +8,10 @@ from dataclasses import dataclass, field
 
 from .core import ModError, _write_csv
 from .disc import DiscError, DiscReader
-from .mod_data import CONFIG_KEY, DROP_GROUPS, normalize_rules, validate_deck
+from .mod_data import (
+    CONFIG_KEY, DROP_GROUPS, base_tables, deck_drop_weights, drops_from_deck,
+    normalize_rules, validate_deck,
+)
 from .tables import (
     CARD_COUNT, DECK_SIZE, DUELIST_BASE, DUELIST_COUNT, DUELIST_STRIDE, EXE_DELTA,
     POOL_OFFSETS, POOL_TOTAL, STARTER_OFFSETS, STARTER_POOLS, STARTER_SIZE,
@@ -115,6 +118,7 @@ def compile_mod(project, *, profile, wa_verified):
     cards = {cid: project.get(cid) for cid in project.cards}
     config = normalize_rules(raw, cards)
     tables_ok = profile and wa_verified
+    legacy_pools = base_tables(project)[0] if hasattr(project, 'folder') else {}
 
     def lp(value, label):
         if value is None:
@@ -174,12 +178,22 @@ def compile_mod(project, *, profile, wa_verified):
                     plan.pending.append(f'{name}: use um pool de 40 compras ou 40 cartas fixas para o BIN/CUE.')
                 else:
                     group(opponent, 'deck', pools[0]['pesos'], name, LEGACY_SCAN_COUNT)
-        for kind, weights in changes.get('drops', {}).items():
-            name = f'Drop #{opponent} {kind}'
-            if kind not in DROP_GROUPS:
-                plan.pending.append(f'{name}: este rank tem pesos individuais no Studio. O PS1 usa os grupos POW, TEC e B/C/D.')
-            else:
-                group(opponent,kind,weights,name,CARD_COUNT)
+        if drops_from_deck(config, opponent):
+            # Em vez do antigo hook que dava uma carta do deck efetivamente
+            # sorteado com probabilidade fixa por cópia, escrever as tabelas
+            # de drop de cada rank com os pesos escolhidos no editor.
+            for kind in DROP_GROUPS:
+                weights = deck_drop_weights(config, legacy_pools, opponent, kind)
+                group(opponent, kind, weights,
+                      f'Drops ponderados do próprio deck #{opponent} ({kind})',
+                      CARD_COUNT)
+        else:
+            for kind, weights in changes.get('drops', {}).items():
+                name = f'Drop #{opponent} {kind}'
+                if kind not in DROP_GROUPS:
+                    plan.pending.append(f'{name}: este rank tem pesos individuais no Studio. O PS1 usa os grupos POW, TEC e B/C/D.')
+                else:
+                    group(opponent,kind,weights,name,CARD_COUNT)
 
     if 'pools_iniciais_ps1' in config:
         rows = config['pools_iniciais_ps1']

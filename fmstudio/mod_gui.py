@@ -12,8 +12,9 @@ from .duel_engine import MAX_DECK, parse_card_ids
 from .expanded import display_name
 from .gui import ACCENT, MUTED, ROW_ALT, card_row_tags, compact_number
 from .mod_data import (
-    CONFIG_KEY, DROP_FROM_DECK, DROP_GROUPS, MONSTER_TYPES, RANK_GROUPS, STOCK_STARTER,
-    base_tables, deal_deck, drop_weights, drops_from_deck, duelist_profile, match_recipes,
+    CONFIG_KEY, DROP_FROM_DECK, DECK_DROP_WEIGHTS, DROP_GROUPS, MONSTER_TYPES,
+    RANK_GROUPS, STOCK_STARTER, base_tables, deal_deck, deck_drop_candidates,
+    deck_drop_weights, drop_weights, drops_from_deck, duelist_profile, match_recipes,
     normalize_rules, save_rules, starting_life, validate_deck,
 )
 from .tables import DUELIST_NAMES_REFERENCE, TYPE_NAMES
@@ -28,8 +29,9 @@ def _probability(weight, total):
 
 class WeightTable(ttk.Frame):
     """Pick cards by name or ID and inspect normalized odds for a weight table."""
-    def __init__(self, parent):
+    def __init__(self, parent, *, show_zero=False):
         super().__init__(parent)
+        self.show_zero = show_zero
         self.cards = {}
         self.labels = {}
         self.weights = {}
@@ -78,7 +80,8 @@ class WeightTable(ttk.Frame):
         self.tree.delete(*self.tree.get_children())
         total = sum(self.weights.values())
         self.tree.tag_configure('stripe', background=ROW_ALT)
-        for index, (cid, weight) in enumerate(sorted(self.weights.items())):
+        rows = ((cid, self.weights.get(cid, 0)) for cid in sorted(self.cards)) if self.show_zero else sorted(self.weights.items())
+        for index, (cid, weight) in enumerate(rows):
             self.tree.insert('', 'end', iid=str(cid), values=(
                 compact_number(cid), display_name(cid, self.cards), compact_number(weight),
                 _probability(weight, total)), tags=card_row_tags(self.tree, self.cards.get(cid), index))
@@ -93,10 +96,10 @@ class WeightTable(ttk.Frame):
 
     def _select(self, _event):
         selection = self.tree.selection()
-        if selection and int(selection[0]) in self.weights:
+        if selection and int(selection[0]) in self.cards:
             cid = int(selection[0])
             self.selected.set(f'#{cid} — {display_name(cid, self.cards)}')
-            self.weight.set(str(self.weights[cid]))
+            self.weight.set(str(self.weights.get(cid, 0)))
 
     def _apply(self):
         try:
@@ -475,7 +478,7 @@ class ModEditor(ttk.Frame):
         for pane, name in zip((deck_pane, drop_pane, start_pane, lp_pane),
                               ('Deck do oponente', 'Drops do oponente', 'Decks iniciais', 'Config. MOD')):
             self.tabs.add(pane, text=name)
-        self.drop_toggle = ttk.Checkbutton(drop_pane, text='Dropar Cartas do Próprio Deck',
+        self.drop_toggle = ttk.Checkbutton(drop_pane, text='Drops ponderados do próprio deck',
                                            variable=self.use_deck_drops, command=self._toggle_deck_drops)
         self.drop_toggle.pack(anchor='w', pady=(0, 6))
         self.rank_editor = ttk.Frame(drop_pane)
@@ -490,12 +493,21 @@ class ModEditor(ttk.Frame):
         self.drops.changed = self._save_drop
         self.drops.pack(fill='both', expand=True)
         self.deck_drop_panel = ttk.Frame(drop_pane)
-        self.deck_drop_detail = ttk.Label(self.deck_drop_panel, wraplength=480, foreground=MUTED)
-        self.deck_drop_detail.pack(anchor='w')
-        from .mod_tools_gui import _tree
-        self.deck_drop_candidates = _tree(self.deck_drop_panel, [('id', 'ID', 63), ('nome', 'Carta', 220),
-                                                                ('origem', 'Origem no deck', 140)])
-        self.deck_drop_candidates.bind('<Double-1>', self._open_drop_candidate)
+        deck_rank = ttk.Frame(self.deck_drop_panel)
+        deck_rank.pack(fill='x', pady=(0, 6))
+        ttk.Label(deck_rank, text='Grupo de rank:').pack(side='left', padx=(0, 6))
+        self.deck_rank_selector = ttk.Combobox(
+            deck_rank, textvariable=self.rank, state='readonly', width=28,
+            values=[key for key, code in self.rank_ids.items() if code in DROP_GROUPS])
+        self.deck_rank_selector.pack(side='left')
+        self.deck_rank_selector.bind('<<ComboboxSelected>>', lambda _event: self._load_drop())
+        ttk.Button(deck_rank, text='Restaurar pesos iguais',
+                   command=self._reset_deck_drop).pack(side='right')
+        self.deck_drop_detail = ttk.Label(self.deck_drop_panel, wraplength=630, foreground=MUTED)
+        self.deck_drop_detail.pack(anchor='w', pady=(0, 6))
+        self.deck_drop_table = WeightTable(self.deck_drop_panel, show_zero=True)
+        self.deck_drop_table.changed = self._save_deck_drop
+        self.deck_drop_table.pack(fill='both', expand=True)
 
         self.opponent_deck = DeckProfileEditor(deck_pane)
         opponent_actions = ttk.Frame(deck_pane)
@@ -643,28 +655,66 @@ class ModEditor(ttk.Frame):
             self.drops.load(self.cards, weights)
 
     def _render_deck_drops(self):
-        profile = duelist_profile(self.rules, self.pools, self._duel_id())
-        fixed = set(profile.get('cartas', ()))
-        pool = {cid for row in profile.get('pools', ()) for cid in row['pesos']}
-        ids = sorted(fixed | pool)
-        self.deck_drop_candidates.delete(*self.deck_drop_candidates.get_children())
-        for index, cid in enumerate(ids):
-            source = 'Fixa e pool' if cid in fixed and cid in pool else 'Fixa' if cid in fixed else 'Pool'
-            self.deck_drop_candidates.insert('', 'end', iid=str(cid), values=(
-                compact_number(cid), display_name(cid, self.cards), source),
-                tags=card_row_tags(self.deck_drop_candidates, self.cards.get(cid), index))
-        self.deck_drop_detail.configure(text=f'{len(ids)} candidatas na configuração salva. A vitória premia uma carta do deck efetivamente sorteado, em qualquer rank.')
+        opponent = self._duel_id()
+        candidates = deck_drop_candidates(self.rules, self.pools, opponent)
+        # Exibir também os candidatos com peso zero para poder reativá-los.
+        cards = {cid: self.cards[cid] for cid in sorted(candidates) if cid in self.cards}
+        rank = self.rank_ids[self.rank.get()]
+        weights = deck_drop_weights(self.rules, self.pools, opponent, rank)
+        self.deck_drop_table.load(cards, weights)
+        label = DROP_GROUPS.get(RANK_GROUPS.get(rank, rank), rank)
+        self.deck_drop_detail.configure(text=(
+            f'{len(cards)} cartas candidatas do deck salvo · {label}. '
+            'Selecione uma carta e edite o peso; peso 0 impede o drop. '
+            'A probabilidade muda automaticamente. '
+            'Decks com pools usam seus candidatos configurados, mesmo se '
+            'a carta não saiu no sorteio deste duelo.'
+        ))
 
-    def _open_drop_candidate(self, _event):
-        selection = self.deck_drop_candidates.selection()
-        if selection:
-            self.studio.select_card(int(selection[0]))
+    def _save_deck_drop(self, weights):
+        opponent = self._duel_id()
+        group = RANK_GROUPS.get(self.rank_ids[self.rank.get()],
+                               self.rank_ids[self.rank.get()])
+        candidates = deck_drop_candidates(self.rules, self.pools, opponent)
+        if not candidates:
+            raise ModError('Salve primeiro o deck do oponente para editar seus drops.')
+        if not weights:
+            raise ModError('Mantenha pelo menos uma carta com peso positivo em cada grupo.')
+        if not set(weights).issubset(candidates):
+            raise ModError('Drops do próprio deck só aceitam cartas do deck do oponente.')
+        rules = self._edit()
+        duel = self._selected_duelist(rules)
+        if not duel.get(DROP_FROM_DECK):
+            raise ModError('Ative drops ponderados do próprio deck antes de editar.')
+        duel.setdefault(DECK_DROP_WEIGHTS, {})[group] = weights
+        self._commit(rules, f'Pesos de drop do deck salvos em {DROP_GROUPS[group]}.')
+
+    def _reset_deck_drop(self):
+        try:
+            opponent = self._duel_id()
+            candidates = deck_drop_candidates(self.rules, self.pools, opponent)
+            weights = {cid: 1 for cid in sorted(candidates)}
+            self._save_deck_drop(weights)
+            self._render_deck_drops()
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Drops ponderados', str(exc), parent=self)
 
     def _toggle_deck_drops(self):
         try:
             rules = self._edit()
-            self._selected_duelist(rules)[DROP_FROM_DECK] = self.use_deck_drops.get()
-            caption = 'Drops do próprio deck ativados.' if self.use_deck_drops.get() else 'Pesos por rank restaurados.'
+            opponent = self._duel_id()
+            active = self.use_deck_drops.get()
+            duel = self._selected_duelist(rules)
+            if active:
+                ids = deck_drop_candidates(rules, self.pools, opponent)
+                if not ids:
+                    raise ModError('Salve primeiro um deck de oponente com cartas para ativar os drops.')
+                custom = duel.setdefault(DECK_DROP_WEIGHTS, {})
+                for group in DROP_GROUPS:
+                    custom.setdefault(group, {cid: 1 for cid in sorted(ids)})
+            duel[DROP_FROM_DECK] = active
+            caption = ('Drops ponderados do próprio deck ativados.'
+                       if active else 'Pesos por rank do modo original restaurados.')
             self._commit(rules, caption)
         except (ModError, ValueError, OSError) as exc:
             self.status.set(str(exc))
@@ -784,7 +834,25 @@ class ModEditor(ttk.Frame):
     def save_opponent(self):
         try:
             rules = self._edit()
-            self._selected_duelist(rules)['deck'] = self.opponent_deck.profile()
+            opponent = self._duel_id()
+            old_candidates = deck_drop_candidates(rules, self.pools, opponent)
+            duel = self._selected_duelist(rules)
+            duel['deck'] = self.opponent_deck.profile()
+            if duel.get(DROP_FROM_DECK):
+                new_candidates = deck_drop_candidates(rules, self.pools, opponent)
+                if not new_candidates:
+                    raise ModError('O deck deve conter cartas para manter drops ponderados.')
+                store = duel.setdefault(DECK_DROP_WEIGHTS, {})
+                for group in DROP_GROUPS:
+                    previous = store.get(group, {cid: 1 for cid in old_candidates})
+                    # Preservar pesos dos IDs mantidos e exclusões anteriores.
+                    # Cartas recém-incluídas recebem peso inicial 1.
+                    updated = {cid: weight for cid, weight in previous.items()
+                               if cid in new_candidates}
+                    updated.update({cid: 1 for cid in new_candidates - old_candidates})
+                    if not updated:
+                        updated = {cid: 1 for cid in new_candidates}
+                    store[group] = updated
             rules = normalize_rules(rules, self.cards)
             profile = self._selected_duelist(rules)['deck']
             if profile['cartas'] or profile['pools']:

@@ -41,7 +41,8 @@ with TemporaryDirectory() as temp:
         editor.use_deck_drops.set(True)
         editor._toggle_deck_drops()
         assert project.metadata[CONFIG_KEY]['duelistas']['1'][DROP_FROM_DECK]
-        assert editor.deck_drop_candidates.get_children() == (str(enemy),)
+        assert editor.deck_drop_table.tree.get_children() == (str(enemy),)
+        assert editor.deck_drop_table.weights == {enemy: 1}
         editor.mod_lp.set(str(huge))
         editor.save_lp()
         editor.ps1_ai_choice.set('Normal — IA original')
@@ -74,6 +75,8 @@ with TemporaryDirectory() as temp:
         assert 'Dano' in dialog.output.get('1.0','end')
         dialog.game.lp['adversario'] = 0
         dialog.render()
+        dialog.rank.set('S-POW')
+        dialog._roll_drop()
         assert 'Rival' in dialog.reward.cget('text')
         assert chest_cards(Project.open(project.folder)) == {str(enemy): 1, str(secret): 1}
     root.destroy()

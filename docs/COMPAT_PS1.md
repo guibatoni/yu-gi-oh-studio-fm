@@ -1,3 +1,23 @@
+## Drops ponderados do próprio deck — v1.7.10
+
+No modo `drops_do_deck`, a versão anterior sorteava uniformemente uma
+posição das 40 cartas efetivamente distribuídas, sem pesos, através do hook
+nativo `SelectDeckDrop`. Isso foi substituído pelas três tabelas originais
+de drop (POW, TEC, B/C/D) para o duelista, gravadas no `DATA/WA_MRG.MRG`.
+
+O usuário define pesos por ID, somente para IDs candidatos do deck
+configurado. Cada tabela normaliza os pesos positivos à soma esperada do
+jogo; peso zero remove o ID do sorteio. Por exemplo, pesos 90 e 10
+correspondem a chances relativas de 90% e 10% dentro daquele grupo.
+Os três grupos têm pesos independentes.
+
+A mudança exige **WA_MRG da mesma imagem Drop x15 vinculada ao projeto**.
+Perfis não validados são reportados como pendentes, sem gravar endereços
+de outros mods. Um deck com pools variáveis usa as cartas candidatas
+de sua configuração; não há filtro dinâmico pelo deck sorteado no momento
+do duelo, portanto pode sair carta de um pool que não estava na partida.
+O antigo hook de escolha uniforme não é instalado em novas exportações.
+
 ## HUD PS1 e contador de LP — v1.7.9
 
 No SLUS Drop x15 verificado, `Duel_DrawLifePointsAndDeckCounts` desenha

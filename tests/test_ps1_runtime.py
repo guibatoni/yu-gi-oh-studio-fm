@@ -10,7 +10,7 @@ from fmstudio.core import ModError
 from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_sprite_words
 from fmstudio.ps1_runtime import (
     CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, FUSION_CONFIG, NAME_COLOR_CONFIG, RUNTIME_EXT_BASE,
-    RUNTIME_MOD_BASE, SUMMON_DAMAGE, SUMMON_HEAL,
+    RUNTIME_MOD_BASE, RUNTIME_PASSWORD_BASE, SUMMON_DAMAGE, SUMMON_HEAL,
     _jump, _option_calls, _rule_patches, _valid_original_drop_entry, compile_effects, install_runtime, verify_effects,
 )
 from fmstudio.ps1_text import ICON_CODES, patch_descriptions
@@ -111,7 +111,8 @@ class TestNativeRules(unittest.TestCase):
             'ps1_password_id_prefix': 10,
         })
         plan = compile_effects(self.project, True)
-        self.assertEqual(plan.bank_end, RUNTIME_MOD_BASE)
+        self.assertEqual(plan.bank_end, RUNTIME_PASSWORD_BASE)
+        self.assertEqual(plan.deck_drops, ())
         self.assertFalse(plan.gameplay)
         source = bytearray(sample_exe())
         for pc, old, _ in _rule_patches(plan):
@@ -121,17 +122,17 @@ class TestNativeRules(unittest.TestCase):
         original = bytes(source)
         with patch('fmstudio.ps1_runtime.SOURCE_SHA256', hashlib.sha256(original).hexdigest()):
             output, report = install_runtime(original, original, plan, description_icons=False)
-        self.assertEqual(report['drops_do_deck'], [1, 39])
+        self.assertEqual(report['drops_do_deck'], [])
         check = verify_effects(output, plan)
         self.assertEqual(check['password_id_prefix'], 10)
-        self.assertEqual(check['drops_do_deck'], [1, 39])
+        self.assertEqual(check['drops_do_deck'], [])
         for pc, _, target, _ in _option_calls(plan):
             divergent = bytearray(output)
             struct.pack_into('<I', divergent, where(pc), _jump(target, link=True))
             self.assertEqual(verify_effects(divergent, plan)['status'], 'divergente')
         unsupported = compile_effects(self.project, False)
         self.assertEqual(unsupported.data, b'')
-        self.assertEqual(len(unsupported.pending), 3)
+        self.assertEqual(len(unsupported.pending), 1)
 
 
     def test_drop_gateway_accepts_an_absolute_jump_and_rejects_relative_branch(self):
@@ -170,9 +171,11 @@ class TestNativeRules(unittest.TestCase):
             output, _ = install_runtime(original, original, plan, description_icons=False)
         report = verify_effects(output, plan, original=original)
         self.assertEqual(report['decks_fixos'], [1])
-        self.assertEqual(report['drops_do_deck'], [1])
+        self.assertEqual(report['drops_do_deck'], [])
         self.assertEqual(report['nomes_tier'], 3)
-        for changed in (DROP_ENTRY, CONFIG_ADDRESS + offset, CONFIG_ADDRESS + colors, RUNTIME_MOD_BASE):
+        self.assertEqual(output[where(DROP_ENTRY):where(DROP_ENTRY)+8],
+                         original[where(DROP_ENTRY):where(DROP_ENTRY)+8])
+        for changed in (CONFIG_ADDRESS + offset, CONFIG_ADDRESS + colors, RUNTIME_MOD_BASE):
             corrupted = bytearray(output)
             corrupted[where(changed)] ^= 1
             self.assertEqual(verify_effects(corrupted, plan, original=original)['status'], 'divergente')

@@ -98,7 +98,7 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(chest_cards(project), {str(cid): 3})
             self.assertEqual(project.metadata['edicao_mod']['iniciais']['Deck do baú']['cartas'], [cid]*3)
 
-    def test_deck_victory_reward_is_drawn_from_dealt_cards_and_granted_once(self):
+    def test_weighted_deck_victory_reward_is_drawn_from_deck_candidates_once(self):
         with TemporaryDirectory() as path:
             project = Project.create(Path(path), 'Drops')
             hero, fixed, rare, spare, legacy = [project.add_card() for _ in range(5)]
@@ -122,10 +122,10 @@ class CatalogTests(unittest.TestCase):
                 with patch.object(project, 'save', side_effect=OSError('volume cheio')):
                     game.claim_reward(config, {}, 1, 'A-TEC', grant, rng=rng)
             card = game.claim_reward(config, {}, 1, 'A-TEC', grant, rng=rng)
-            self.assertIn(card, initial)
+            self.assertIn(card, (fixed, rare, spare))
             self.assertEqual(game.claim_reward(config, {}, 1, 'S-POW', grant), card)
             self.assertEqual(chest_cards(Project.open(project.folder)), {str(card): 1})
-            self.assertEqual(drop_weights(config, {}, 1, 'S-POW', dealt_deck=initial), Counter(initial))
+            self.assertEqual(drop_weights(config, {}, 1, 'S-POW', dealt_deck=initial), {fixed:1,rare:1,spare:1})
             config['duelistas']['1'][DROP_FROM_DECK] = False
             self.assertEqual(drop_weights(config, {}, 1, 'S-POW', dealt_deck=initial), {legacy: 10})
 
