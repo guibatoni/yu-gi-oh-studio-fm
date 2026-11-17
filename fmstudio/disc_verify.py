@@ -53,6 +53,7 @@ def verify_image_stats(project, source):
     from .ps1_god24_display import inspect as inspect_god_display
     from .ps1_runtime import compile_effects, verify_effects
     from .ps1_mod import compile_mod, verify_executable, verify_wa, wa_sha
+    from .ps1_rank_hud import inspect_rank_hud
     config=getattr(project,'metadata',{}) or {}
     profile=ps1_supports_god24(project)
     mod_plan=compile_mod(project,profile=profile,
@@ -141,6 +142,7 @@ def verify_image_stats(project, source):
             'god24_roteamento_duelo':duel_patch,
             'god24_exibicao_tipo':god_display,
             'efeitos_nativos_ps1':runtime,
+            'rank_hud_ps1':inspect_rank_hud(exe),
             'edicao_do_mod_ps1':{'bloqueio_turno_inicial':opening_lock if profile else None,
                                 'lp':life,'tabelas':verify_wa(wa,mod_plan)},
             'god24_teste_mao_ativado_no_projeto':god24_enabled,
@@ -163,6 +165,13 @@ def describe(result):
             f'Cartas numéricas conferidas: {result["total"]}',
             f'Corretas: {result["corretas"]} | Divergentes: {result["divergentes"]}']
     runtime=result.get('efeitos_nativos_ps1',{})
+    rank = result.get('rank_hud_ps1', {}).get('status')
+    if rank == 'aplicado':
+        text.append('Rank ao vivo no HUD do PS1 confirmado na cópia.')
+    elif rank == 'ausente':
+        text.append('Rank ao vivo ausente. Gere outro BIN/CUE a partir da imagem de origem.')
+    elif rank == 'divergente':
+        text.append('Rank ao vivo incompleto na cópia. Gere outro BIN/CUE.')
     if runtime.get('status')=='aplicado':
         text.append(f'Efeitos nativos conferidos na cópia: {runtime["quantidade"]}.')
         fusions = runtime.get('fusoes', [])

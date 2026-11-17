@@ -38,7 +38,7 @@ with TemporaryDirectory() as tmp:
             editor.deck_drop_table._select(None)
             editor.deck_drop_table.weight.set('0')
             editor.deck_drop_table._apply()
-            assert editor.deck_drop_table.tree.item(str(c), 'values')[2] == '0'
+            assert editor.deck_drop_table.tree.set(str(c), 'peso') == '0'
             assert editor.deck_drop_table.weights == {a:9, b:1}
             assert project.metadata[CONFIG_KEY]['duelistas']['1'][DECK_DROP_WEIGHTS]['pow'] == {a:9, b:1}
             editor.rank.set('S/A-TEC (grupo PS1)')
@@ -52,7 +52,7 @@ with TemporaryDirectory() as tmp:
             editor.rank.set('S/A/Z-POW (grupo PS1)')
             editor._load_drop()
             assert editor.deck_drop_table.weights == {a:9, b:1}
-            assert editor.deck_drop_table.tree.item(str(c), 'values')[2] == '0'
+            assert editor.deck_drop_table.tree.set(str(c), 'peso') == '0'
             editor.opponent_deck.load(editor.cards, {'cartas':[a,b,d], 'pools':[]})
             editor.save_opponent()
             settings = project.metadata[CONFIG_KEY]

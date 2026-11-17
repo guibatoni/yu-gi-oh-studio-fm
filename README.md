@@ -1,3 +1,15 @@
+# Studio FM v1.8.3 — Rank no HUD do PlayStation
+
+Em duelos contra o computador no **Drop x15**, a projeção aparece abaixo
+dos LP do jogador no formato **S-POW 99**. O contador usa as ações e a
+tabela de pontuação do próprio jogo.
+
+Atualize o Studio e gere outro **BIN/CUE** a partir da imagem original.
+Abra a nova cópia no ePSXe e inicie um duelo novo. **Verificar BIN/CUE**
+confirma que a rotina foi gravada na imagem selecionada.
+
+---
+
 # Studio FM v1.8.0 — Rank, banlist e decks temáticos
 
 - Em **Cartas → Habilidades rápidas**, defina o **Limite de cópias no deck**.

@@ -2196,12 +2196,14 @@ class Studio(tk.Tk):
     def select_card(self, cid):
         self._stage_current()
         self.selected_id = cid
+        item = str(cid)
         self._refresh_cards()
-        if not self.tree.exists(str(cid)):
+        if not self.tree.exists(item):
             self._clear_card_filters()
             self._refresh_cards()
-        self.tree.focus(str(cid))
-        self.tree.see(str(cid))
+        self.tree.selection_set(item)
+        self.tree.focus(item)
+        self.tree.see(item)
         self._load_card()
         self.tabs.select(self.tab_cards)
 
@@ -2592,6 +2594,12 @@ class Studio(tk.Tk):
         action='substituída' if manifest.get('acao_arquivo')=='substituido' else 'criada'
         runtime=manifest.get('efeitos_nativos_ps1') or {}
         mod=manifest.get('edicao_do_mod_ps1',{})
+        rank_hud = {
+            'aplicado': 'Rank ao vivo gravado no HUD do PS1. Inicie um duelo novo na cópia.\n',
+            'sem_espaco': 'Rank no HUD pendente. Efeitos e descrições já ocupam a reserva de código.\n',
+            'conflito': 'Rank no HUD pendente. A rotina de desenho do BIN já foi alterada.\n',
+            'perfil_incompativel': 'Rank no HUD do PS1 requer a imagem original Drop x15 compatível.\n',
+        }.get(manifest.get('rank_hud_ps1', {}).get('status'), '')
         simplified=sum(bool(row.get('acentos_simplificados')) for row in manifest['descricoes_aplicadas'])
         messagebox.showinfo(f'Imagem de teste {action}',
             f'Imagem de teste {action} com sucesso.\n\n'
@@ -2606,6 +2614,7 @@ class Studio(tk.Tk):
             + ('Ataque na abertura restrito pela habilidade da carta.\n'
                if mod.get('bloqueio_turno_inicial') else '')
             + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
+            + rank_hud
             + (f'Fusões personalizadas gravadas: {len(runtime["fusoes"])}.\n'
                if runtime.get('fusoes') else '')
             + (f'Decks fixos de 40 cartas: {len(runtime["decks_fixos"])} duelista(s).\n'
