@@ -184,7 +184,7 @@ class TestContentPatch(unittest.TestCase):
                 check_files={x.path:x for x in check.files() if not x.is_dir}
                 after_exe=b''.join(check.read_entry(check_files['SLUS_014.11']))
             self.assertEqual(after_exe[where(0x801C3000):where(0x801C3000)+13],
-                             bytes([1])*12+b'\\xff')
+                             bytes([1])*12+b'\xff')
             self.assertEqual(src.read_bytes(),original)
             p.effects={'1':[{'acao':'falso'}]}
             with self.assertRaisesRegex(ModError,'Build completo bloqueado'):
