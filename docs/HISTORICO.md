@@ -1,3 +1,10 @@
+## v1.7.4 — IA: escolha inteligente de Guardian Stars no Studio
+
+- O oponente nunca escolhe uma estrela que perde para um monstro **visível** no campo quando a mesma jogada oferece uma alternativa segura.
+- Quando ambas as estrelas apresentam desvantagem contra algum monstro visível, minimiza a quantidade de confrontos desfavoráveis e prefere a maior vantagem restante.
+- Monstros virados para baixo não revelam suas Guardian Stars à IA; a regra se aplica também a fusões e rituais do simulador.
+- **BIN/CUE:** a escolha de Guardian Star da IA original do PS1 ainda não foi alterada. Requer identificação e validação de hook MIPS específico antes de qualquer escrita segura.
+
 ## v1.7.3 — Configuração de bônus por tipo no campo
 
 - O editor mostra quem recebe o bônus e qual tipo entra na contagem.

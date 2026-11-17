@@ -1,3 +1,12 @@
+## v1.7.4 — Guardian Stars da IA do simulador
+
+O Studio evita escolher uma Guardian Star perdedora diante de monstros já
+revelados, quando a carta tem outra opção segura. Contra múltiplos monstros,
+minimiza desvantagens inevitáveis sem conhecer estrelas de cartas viradas
+para baixo. **Esta regra é do duelo simulado.** A escolha de estrela feita
+pela IA do BIN/CUE Drop x15 continua a original do PS1 até existir um hook
+MIPS identificado e validado para essa seleção.
+
 ## v1.7.2 — Fusões personalizadas
 
 As receitas do projeto entre IDs #001–#722 são aplicadas pelo executável
