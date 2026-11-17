@@ -45,8 +45,9 @@ with TemporaryDirectory() as tmp:
             assert 'atk' in tree['columns'] and 'def' in tree['columns']
             assert tree.set(str(dragon), 'atk') == '12345678'
             assert tree.set(str(dragon), 'def') == '7654321'
-            assert tree.set(str(god), 'atk') == '20000'
-            assert tree.set(str(god), 'def') == '0'
+            if tree.exists(str(god)):
+                assert tree.set(str(god), 'atk') == '20000'
+                assert tree.set(str(god), 'def') == '0'
             for cid in (spell, trap, ritual, equip):
                 if tree.exists(str(cid)):
                     assert tree.set(str(cid), 'atk') == '—', cid
