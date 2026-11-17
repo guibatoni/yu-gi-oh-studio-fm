@@ -536,7 +536,8 @@ class ModEditor(ttk.Frame):
         ttk.Label(lp_pane, text='Life Points iniciais — jogador e TODOS os oponentes',
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(6, 7))
         ttk.Label(lp_pane, text='Valor global único para cada duelo do mod, inclusive no simulador. '
-                  'O motor PS1 aceita até 65.535 (u16), porém o HUD original mostra quatro dígitos.',
+                  'No Drop x15 o Studio prepara cinco dígitos para LP acima de 9.999; '
+                  'a apresentação do painel deve ser conferida no ePSXe.',
                   wraplength=630, justify='left').pack(anchor='w', pady=(0, 8))
         ttk.Entry(lp_pane, textvariable=self.mod_lp, width=25).pack(anchor='w')
         ttk.Button(lp_pane, text='Salvar LP para ambos', style='Accent.TButton',
