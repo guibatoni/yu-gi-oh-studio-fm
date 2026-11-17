@@ -986,7 +986,7 @@ class Project:
         manifest = {'projeto':self.metadata['nome'], 'gerado':_timestamp(),
                     'fusoes':'ORIGINAIS_PRESERVADAS', 'cartas_editadas':len(changes),
                     'efeitos_planejados':sum(map(len,self.effects.values())),
-                    'alerta':'Efeitos e textos NÃO foram implementados no motor PS1 nesta versão',
+                    'alerta':'Exportar alterações cria arquivos JSON; não modifica o jogo. Para gravar descrições compatíveis no PS1, use Gerar jogo BIN/CUE e confira o resultado.',
                     'patch_jogavel':False, 'arquivos': ['alteracoes_cartas.json','novas_cartas.json','classes_cartas.json','textos_e_codigos.json','efeitos_planejados.json','artes_referencia.json'],
                     'cartas_virtuais':len(self.new_cards),
                     'tipo_god_status':'EDITOR_ONLY'}
