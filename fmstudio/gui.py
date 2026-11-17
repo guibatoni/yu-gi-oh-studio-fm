@@ -385,6 +385,17 @@ class EffectDialog(tk.Toplevel):
             help_text='Cada monstro correspondente nos lados escolhidos recebe o bônus, inclusive virado para baixo.'
         elif action in ('cura_lp_deck_tipo','dano_lp_deck_tipo'):
             help_text='X vezes o número de cartas do tipo no deck configurado. Ativado UMA vez ao entrar em campo.'
+        elif action == 'dano_lp':
+            if self.vars['evento'].get() == 'atacar':
+                if self.vars['alvo'].get() == 'proprio':
+                    help_text=('A cada ataque declarado, o CONTROLADOR perde X LP, '
+                               'inclusive ao atacar monstro em defesa. '
+                               'Suportado no simulador e no PS1 Drop x15 para valores até 9.999.')
+                else:
+                    help_text=('Ao atacar, causa X LP ao adversário no simulador. '
+                               'Este alvo ainda não é suportado no motor PS1.')
+            else:
+                help_text='Causa X LP ao lado selecionado. Entrada em campo suportada no PS1 Drop x15.'
         elif action=='dano_monstro_alvo':
             help_text='Dano a criatura é experimental: HP simulado começa igual à DEF-base (mínimo 1).'
         elif action=='descartar_alvo':
