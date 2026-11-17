@@ -22,7 +22,8 @@ ENTRIES = (
     'DescriptionIcon', 'SpellUsed', 'CollectTargets', 'SelectDeckDrop', 'UpdatePasswordShop',
     'DealConfiguredDecks', 'RetailCardDrop', 'InsertTierName', 'EndTierName',
     'SortTierGlyph', 'SortTierPolygon', 'CheckEditedFusion', 'summon_damage', 'protection',
-    'DeckAllowsCopies', 'DrawLiveRank',
+    'DeckAllowsCopies', 'DrawLiveRank', 'ResetCardsWithMarkers', 'FieldActionsWithMarkers',
+    'CreateMarkedPlacement', 'ConsumeFusionMaterial',
 )
 FLAGS = ('-march=r3000', '-mabi=32', '-msoft-float', '-mno-abicalls', '-fno-pic',
          '-G0', '-ffreestanding', '-fno-builtin', '-fno-stack-protector',
@@ -59,6 +60,7 @@ def main():
         password = section_bytes('.runtime_password')
         mod = section_bytes('.runtime_mod')
         rank_hud = section_bytes('.runtime_rank_hud')
+        markers = section_bytes('.runtime_markers')
 
     pieces = ['"""Gerado por tools/compile_ps1_runtime.py a partir de tools/ps1."""\n',
               f'RUNTIME_SHA256 = {hashlib.sha256(content).hexdigest()!r}',
@@ -71,7 +73,8 @@ def main():
     for label, binary, symbol in (('RUNTIME_EXT', extension, '__runtime_ext'),
                                   ('RUNTIME_PASSWORD', password, '__password'),
                                   ('RUNTIME_MOD', mod, '__runtime_mod'),
-                                  ('RUNTIME_RANK_HUD', rank_hud, '__rank_hud')):
+                                  ('RUNTIME_RANK_HUD', rank_hud, '__rank_hud'),
+                                  ('RUNTIME_MARKERS', markers, '__markers')):
         pieces.extend(('""")', '',
                        f'{label}_SHA256 = {hashlib.sha256(binary).hexdigest()!r}',
                        f'{label}_BASE = 0x{symbols[symbol + "_start"]:08X}',

@@ -38,6 +38,13 @@ SECTIONS {
         __runtime_ext_end = .;
     }
     ASSERT(__runtime_ext_end <= 0x801CFF00, "PS1 extension conflicts with the LP bank")
+    .runtime_markers 0x801CEB00 : {
+        __markers_start = .;
+        KEEP(*(.runtime.markers .runtime.markers.data))
+        . = ALIGN(4);
+        __markers_end = .;
+    }
+    ASSERT(__markers_end <= 0x801CF180, "PS1 entry markers conflict with the rank HUD")
     .runtime_rank_hud 0x801CF180 : {
         __rank_hud_start = .;
         KEEP(*(.runtime.rank_hud .runtime.rank_hud.data))

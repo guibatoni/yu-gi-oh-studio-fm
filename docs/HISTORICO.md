@@ -1,3 +1,20 @@
+## v1.8.5 — Marcadores de ATK/DEF por entrada de monstros
+
+- **Acumular ATK/DEF quando o tipo entra** soma marcadores ao próprio monstro.
+  A própria entrada conta se o tipo escolhido corresponder.
+- **Ao entrar, reduzir ATK/DEF por tipo** aplica marcadores negativos a todos
+  os monstros alvo. A destruição exige ATK e DEF efetivos em zero e respeita
+  a proteção Indestrutível quando ativa.
+- O tipo e os lados são configuráveis. O ganho observa os dois campos por
+  padrão e a redução atinge o campo adversário por padrão. DEF em branco
+  repete o ATK. Virar a carta, equipá-la ou trocar de turno preserva os pontos.
+- O duelo do Studio mostra os ajustes no histórico e na inspeção do monstro.
+  Para testar no laboratório, escolha o monstro que entra como origem e use
+  o gatilho **invocar**.
+- O BIN/CUE do Drop x15 aplica as regras às cartas originais após a animação
+  de colocação, fusão ou ritual. A exportação verifica os endereços e os
+  dados gravados. Testes MIPS executam as rotinas nativas em memória.
+
 ## v1.8.4 — Corrigir campo Compras na pool ponderada
 
 - Ao salvar um deck de oponente com uma pool já preenchida de cartas/pesos, um campo **Compras** vazio não provoca mais o erro genérico: mantém a quantidade válida anterior, ou completa as vagas livres até 40.

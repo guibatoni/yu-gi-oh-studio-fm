@@ -104,12 +104,8 @@ class DuelMatch(DuelLab):
         return [m for m in self.monsters if m['lado'] == side]
 
     def resolve(self):
-        board, events = super().resolve()
-        for monster in board:
-            bonus = self.terrain_bonuses.get((self.terrain, monster['tipo_id']), 0)
-            for stat in ('ataque', 'defesa'):
-                monster[stat] = max(0, monster[stat] + bonus)
-        return board, events
+        terrain = {kind: bonus for (field, kind), bonus in self.terrain_bonuses.items() if field == self.terrain}
+        return super().resolve(terrain_bonuses=terrain)
 
     def _notify_turn(self, side, event):
         for unit in list(self._field(side)):

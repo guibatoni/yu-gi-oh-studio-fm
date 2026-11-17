@@ -4,10 +4,10 @@ from collections import Counter
 from copy import copy, deepcopy
 import re
 
-from .continuous import SIDES, project_stats, resolve_field
-from .core import ModError, check_effect, simulation_nonnegative_int
+from .continuous import SIDES, _in_scope, project_stats, resolve_field
+from .core import ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ModError, check_effect, simulation_nonnegative_int
 from .guardian import guardian_bonuses
-from .mod_data import card_effects, opposite, validate_deck
+from .mod_data import MONSTER_TYPES, card_effects, opposite, validate_deck
 from .tables import DECK_SIZE
 
 MAX_DECK = DECK_SIZE
@@ -43,7 +43,7 @@ class DuelLab:
     Qualquer evento só é aplicado quando trigger() é explicitamente invocado.
     """
     state_fields = ('monsters', 'equipments', 'decks', 'initial_decks', 'graveyards', 'turns',
-                    'summoned_turn', 'hands', 'lp', 'damage', 'attacks_used', 'logs')
+                    'summoned_turn', 'hands', 'lp', 'damage', 'attacks_used', 'stat_markers', 'logs')
 
     def __init__(self, cards: dict, effects: dict, *, summoning_delay: bool = False,
                  initial_lp: int | dict = 8000, default_copies: int = 3):
@@ -65,6 +65,7 @@ class DuelLab:
         self.default_copies = default_copies
         self.damage = {}  # (side,slot,card_id) => dano simulado permanente
         self.attacks_used = {}  # (side,slot,card_id) => ataques neste turno
+        self.stat_markers: dict[tuple[str, int, int], tuple[int, int]] = {}
         self.logs = []
 
     def _snapshot(self, *, include_logs=True):
@@ -134,11 +135,21 @@ class DuelLab:
         for key in new_keys:
             self.summoned_turn.setdefault(key,self.turns[key[0]])
         self.attacks_used={key:v for key,v in self.attacks_used.items() if key in new_keys}
+        self.stat_markers = {key: delta for key, delta in self.stat_markers.items() if key in new_keys}
         self.monsters=deepcopy(monsters)
         self.equipments=deepcopy(equipments or [])
 
-    def resolve(self):
-        return resolve_field(self.monsters,self.effects,equipments=self.equipments,
+    def resolve(self, *, terrain_bonuses=None):
+        board = self.monsters
+        if self.stat_markers or terrain_bonuses:
+            board = []
+            for unit in self.monsters:
+                key = (unit['lado'], int(unit['slot']), int(unit['card_id']))
+                atk, defense = self.stat_markers.get(key, (0, 0))
+                terrain = terrain_bonuses.get(int(unit['tipo_id']), 0) if terrain_bonuses else 0
+                board.append({**unit, 'modificador_atk': int(unit.get('modificador_atk', 0)) + atk + terrain,
+                              'modificador_def': int(unit.get('modificador_def', 0)) + defense + terrain})
+        return resolve_field(board,self.effects,equipments=self.equipments,
                              catalog=self.cards,zones=self.zones())
 
     def zones(self):
@@ -174,6 +185,7 @@ class DuelLab:
         self.damage.pop((side,int(slot),int(monster['card_id'])),None)
         self.summoned_turn.pop((side,int(slot),int(monster['card_id'])),None)
         self.attacks_used.pop((side,int(slot),int(monster['card_id'])),None)
+        self.stat_markers.pop((side,int(slot),int(monster['card_id'])),None)
         return True
 
     def new_turn(self, side: str) -> None:
@@ -343,6 +355,9 @@ class DuelLab:
             visible = source.get('face_up', True) if source is not None else kind != 'armadilha' or event != 'invocar'
             summary = self._apply_trigger(card_effects(self.effects, cid), event, side, opposing,
                                           target_side, target_slot, kind, source_slot, strict)
+            if (event == 'invocar' and kind == 'monstro' and source is not None
+                    and int(source['tipo_id']) in MONSTER_TYPES):
+                summary.extend(self._apply_entry_markers(source))
             for entry in summary:
                 record = dict(entry)
                 if entry['acao'] in ('dano_lp', 'cura_lp', 'dano_lp_deck_tipo', 'cura_lp_deck_tipo'):
@@ -353,10 +368,53 @@ class DuelLab:
             self._restore(before)
             raise
 
+    def _apply_entry_markers(self, entering):
+        summaries = []
+        weakened = set()
+        reductions = [check_effect(effect) for effect in card_effects(self.effects, int(entering['card_id']))
+                      if effect['acao'] == ENTRY_SHRINK]
+
+        def applies(effect, source, other):
+            return (effect['tipo_id'] in (-1, int(other['tipo_id']))
+                    and _in_scope(source['lado'], other['lado'], effect['escopo']))
+
+        for unit in self.monsters:
+            if int(unit['tipo_id']) not in MONSTER_TYPES:
+                continue
+            gains = [check_effect(effect) for effect in card_effects(self.effects, int(unit['card_id']))
+                     if effect['acao'] == ENTRY_GROW]
+            gain = [effect for effect in gains if applies(effect, unit, entering)]
+            loss = [effect for effect in reductions if applies(effect, entering, unit)]
+            if not (gain or loss):
+                continue
+            key = (unit['lado'], int(unit['slot']), int(unit['card_id']))
+            atk, defense = self.stat_markers.get(key, (0, 0))
+            for action, effects, sign in ((ENTRY_GROW, gain, 1), (ENTRY_SHRINK, loss, -1)):
+                if effects:
+                    da, dd = (sign * sum(effect[stat] for effect in effects) for stat in ('valor', 'valor_def'))
+                    atk, defense = atk + da, defense + dd
+                    summaries.append({'acao': action, 'alvo': key[:2], 'valor': da, 'valor_def': dd})
+            self.stat_markers[key] = (atk, defense)
+            if loss:
+                weakened.add(key[:2])
+
+        # Check the batch together so an aura does not depend on slot order.
+        while weakened:
+            doomed = [(m['lado'], m['slot']) for m in self.resolve()[0]
+                      if (m['lado'], m['slot']) in weakened and not m['indestrutivel']
+                      and m['ataque'] == m['defesa'] == 0]
+            if not doomed:
+                break
+            for side, slot in doomed:
+                if self.remove(side, slot):
+                    summaries.append({'acao': 'destruido_por_marcador', 'alvo': (side, slot)})
+            weakened.difference_update(doomed)
+        return summaries
+
     def _apply_trigger(self,effects,event,side,opposing,target_side,target_slot,kind,source_slot,strict):
         summary=[]
         for raw in effects:
-            if raw.get('evento') != event:
+            if raw.get('evento') != event or raw.get('acao') in ENTRY_EFFECTS:
                 continue
             eff=check_effect(raw)
             action=eff['acao']; value=eff['valor']
