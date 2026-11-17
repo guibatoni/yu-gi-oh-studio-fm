@@ -166,8 +166,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     texts={int(cid):project.get(int(cid)).get('descricao','')
            for cid,rows in getattr(project,'edits',{}).items()
            if 'descricao' in rows and 1<=int(cid)<=722}
-    descriptions_studio_only=sorted(int(cid) for cid,rows in
-        getattr(project,'edits',{}).items() if 'descricao' in rows and int(cid)>722)
+    descriptions_studio_only=sorted(
+        {int(cid) for cid,rows in getattr(project,'edits',{}).items()
+         if 'descricao' in rows and int(cid)>722}
+        | {int(cid) for cid in getattr(project,'new_cards',{})
+           if int(cid)>722 and project.get(int(cid)).get('descricao')})
     god_cards=ps1_god24_card_ids(project)
     god_icon_card=legacy_god_description_icon_card(project)
     try:
