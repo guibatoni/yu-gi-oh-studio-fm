@@ -21,7 +21,7 @@ INIT_CALL = 0x80017B08
 LP_CODE = 0x801CFF00
 LP_TABLE = 0x801CFFA0
 LP_BANK_END = 0x801D0000
-LP_MAX = 9999  # four digits in the PS1 HUD
+LP_MAX = 65535  # u16 no motor PS1; o HUD original exibe somente quatro dígitos
 LEGACY_SCAN_COUNT = CARD_COUNT - 2
 _LP_INIT = 0x0C005D68
 _LP_JAL = 0x0C000000 | ((LP_CODE >> 2) & 0x03FFFFFF)
@@ -120,7 +120,7 @@ def compile_mod(project, *, profile, wa_verified):
         if value is None:
             return 0
         if not profile or value > LP_MAX:
-            plan.pending.append(f'{label}: LP {value} requer o Studio ou o perfil Drop x15 com até quatro dígitos.')
+            plan.pending.append(f'{label}: {value} LP não cabe no campo u16 do PS1 (1–65535), ou exige o perfil Drop x15.')
             return 0
         plan.applied.append(label)
         return value
@@ -137,10 +137,17 @@ def compile_mod(project, *, profile, wa_verified):
         plan.groups[opponent, kind] = data
         plan.applied.append(name)
 
-    plan.player_lp = lp(config.get('lp_jogador'), 'LP inicial do jogador')
+    # Um valor para ambos, inclusive todos os 39 duelistas, não só o
+    # oponente selecionado no editor. 0 no banco significa "use retail 8000".
+    global_lp = config.get('lp_inicial', config.get('lp_jogador'))
+    plan.player_lp = lp(global_lp, 'LP inicial global do mod')
+    if plan.player_lp:
+        plan.life = [plan.player_lp] * DUELIST_COUNT
+        if plan.player_lp > 9999:
+            plan.pending.append(
+                'HUD original do PS1 tem quatro dígitos: LP acima de 9999 requer validação visual no ePSXe.')
     for key, changes in config.get('duelistas', {}).items():
         opponent = int(key)
-        plan.life[opponent] = lp(changes.get('lp'), f'LP do duelista #{opponent}')
         if 'deck' in changes:
             deck = changes['deck']
             fixed, pools = deck['cartas'], deck['pools']
