@@ -14,7 +14,8 @@ class LifeIconTests(unittest.TestCase):
         for name in ("vinculo_vida", "restaurar_lp"):
             with self.subTest(icon=name):
                 self.assertIn(name, CUSTOM_ICONS)
-                self.assertIn(name, ICON_CODES)
+                # MIPS renderer supports only nine old custom slots; do not emit invalid PS1 codes.
+                self.assertNotIn(name, ICON_CODES)
                 pixels = decode_icon_png(ROOT / (name + ".png"))
                 self.assertEqual(len(pixels), 256)
                 self.assertTrue(any(alpha == 0 for *_, alpha in pixels))
