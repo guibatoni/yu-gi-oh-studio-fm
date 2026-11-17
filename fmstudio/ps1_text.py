@@ -15,7 +15,7 @@ from .tables import CARD_COUNT
 
 # Matches DescriptionIcon in tools/ps1/hooks.S. God uses the v1.4.24 slot.
 ICON_CODES = {name: 0x40 + index for index, name in enumerate(
-    name for name in CUSTOM_ICONS if name != 'god')}
+    name for name in CUSTOM_ICONS if name not in ('god', 'vinculo_vida', 'restaurar_lp'))}
 ICON_CODES['god'] = 0x31
 MAX_ROWS, COLUMN_WIDTH = 9, 21
 

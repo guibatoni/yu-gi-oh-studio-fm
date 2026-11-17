@@ -941,13 +941,30 @@ class Studio(tk.Tk):
         ttk.Button(desc_tools,text='Inserir ícone',command=self.choose_description_icon).pack(side='left',padx=(0,6))
         ttk.Button(desc_tools,text='Cor no trecho',command=self.choose_description_color).pack(side='left',padx=(0,6))
         ttk.Button(desc_tools,text='Referenciar carta',command=self.choose_description_reference).pack(side='left')
-        self.description=tk.Text(body,height=4,wrap='word',bg=SURFACE,fg=TEXT,insertbackground=TEXT,
-                                 selectbackground='#365a73',highlightthickness=1,highlightbackground=BORDER,font=('Segoe UI',10))
-        self.description.pack(fill='x')
+        ttk.Label(desc_tools,text='Altura (linhas):').pack(side='left',padx=(16,4))
+        self.description_height=tk.IntVar(value=8)
+        self.description_height_spin=ttk.Spinbox(desc_tools,from_=4,to=28,width=5,
+            textvariable=self.description_height,command=self._resize_description)
+        self.description_height_spin.pack(side='left')
+        self.description_height_spin.bind('<Return>',lambda _event:self._resize_description())
+        self.description_height_spin.bind('<FocusOut>',lambda _event:self._resize_description())
+        edit_frame=ttk.Frame(body)
+        edit_frame.pack(fill='x')
+        self.description=tk.Text(edit_frame,height=8,wrap='word',bg=SURFACE,fg=TEXT,insertbackground=TEXT,
+                                 selectbackground='#365a73',highlightthickness=1,highlightbackground=BORDER,font=('Segoe UI',11),undo=True)
+        description_scroll=ttk.Scrollbar(edit_frame,orient='vertical',command=self.description.yview)
+        self.description.configure(yscrollcommand=description_scroll.set)
+        description_scroll.pack(side='right',fill='y')
+        self.description.pack(side='left',fill='both',expand=True)
         tk.Label(body,text='PRÉVIA DA DESCRIÇÃO — cores e ícones (não é a renderização exata do PS1)',bg=BG,fg=MUTED,font=('Segoe UI',9)).pack(anchor='w',pady=(7,3))
-        self.description_preview=tk.Text(body,height=5,wrap='word',bg='#182339',fg=TEXT,
+        preview_frame=ttk.Frame(body)
+        preview_frame.pack(fill='both',expand=True)
+        self.description_preview=tk.Text(preview_frame,height=8,wrap='word',bg='#182339',fg=TEXT,
             highlightthickness=1,highlightbackground=BORDER,font=('Consolas',11),state='disabled',cursor='arrow')
-        self.description_preview.pack(fill='both',expand=True)
+        preview_scroll=ttk.Scrollbar(preview_frame,orient='vertical',command=self.description_preview.yview)
+        self.description_preview.configure(yscrollcommand=preview_scroll.set)
+        preview_scroll.pack(side='right',fill='y')
+        self.description_preview.pack(side='left',fill='both',expand=True)
         buttons=ttk.Frame(body)
         buttons.pack(fill='x',pady=(12,0))
         ttk.Button(buttons,text='Salvar projeto (todas as cartas)',style='Accent.TButton',command=self.save_project).pack(side='left')
@@ -2364,30 +2381,70 @@ class Studio(tk.Tk):
         self._stage_current()
         self._update_pending_label()
 
+    def _resize_description(self):
+        try:
+            height=max(4,min(28,int(self.description_height.get())))
+        except (ValueError,tk.TclError):
+            height=8
+        self.description_height.set(height)
+        self.description.configure(height=height)
+
     def choose_description_icon(self):
         if not self.project: return
-        popup=tk.Toplevel(self);popup.title('Ícones de descrição • 16×16');popup.geometry('590x530')
+        popup=tk.Toplevel(self)
+        popup.title('Ícones de descrição • 16×16')
+        popup.geometry('780x700')
+        popup.minsize(540,420)
+        popup.resizable(True,True)
+        popup.transient(self)
         popup.configure(bg=BG)
+        header=ttk.Frame(popup,padding=(12,8))
+        header.pack(fill='x')
+        ttk.Label(header,text='Clique em um ícone para inserir na descrição. Arraste as bordas para ampliar.').pack(side='left')
+        ttk.Button(header,text='Fechar',command=popup.destroy).pack(side='right')
         pane=tk.Frame(popup,bg=BG);pane.pack(fill='both',expand=True)
         cv=tk.Canvas(pane,bg=BG,highlightthickness=0)
-        scroll=ttk.Scrollbar(pane,command=cv.yview);scroll.pack(side='right',fill='y')
-        cv.pack(side='left',fill='both',expand=True);cv.configure(yscrollcommand=scroll.set)
-        body=tk.Frame(cv,bg=BG);wid=cv.create_window((0,0),window=body,anchor='nw')
+        scroll=ttk.Scrollbar(pane,orient='vertical',command=cv.yview)
+        scroll.pack(side='right',fill='y')
+        cv.pack(side='left',fill='both',expand=True)
+        cv.configure(yscrollcommand=scroll.set)
+        body=tk.Frame(cv,bg=BG)
+        wid=cv.create_window((0,0),window=body,anchor='nw')
         body.bind('<Configure>',lambda e:cv.configure(scrollregion=cv.bbox('all')))
         cv.bind('<Configure>',lambda e:cv.itemconfigure(wid,width=e.width))
+        def wheel(event):
+            if event.num==4: step=-1
+            elif event.num==5: step=1
+            else: step=-1 if event.delta>0 else 1
+            cv.yview_scroll(step,'units')
+            return 'break'
+        def bind_wheel(_event):
+            popup.bind_all('<MouseWheel>',wheel)
+            popup.bind_all('<Button-4>',wheel)
+            popup.bind_all('<Button-5>',wheel)
+        def unbind_wheel(_event):
+            popup.unbind_all('<MouseWheel>')
+            popup.unbind_all('<Button-4>')
+            popup.unbind_all('<Button-5>')
+        cv.bind('<Enter>',bind_wheel)
+        cv.bind('<Leave>',unbind_wheel)
+        popup.bind('<Destroy>',lambda e:unbind_wheel(e) if e.widget is popup else None)
         popup._icon_refs=[]
-        tk.Label(body,text='Ícones do Studio (PS1 no perfil Drop x15)',bg=BG,fg=ACCENT).pack(anchor='w',pady=8,padx=12)
+        tk.Label(body,text='ÍCONES DO STUDIO — 16×16 (ampliados 2× apenas na lista)',
+                 bg=BG,fg=ACCENT).pack(anchor='w',pady=8,padx=12)
         for name,label in CUSTOM_ICONS.items():
-            row=tk.Frame(body,bg=BG);row.pack(fill='x',padx=12,pady=2)
+            row=tk.Frame(body,bg=BG)
+            row.pack(fill='x',padx=12,pady=3)
             photo=self.get_icon_image(name)
-            if photo: popup._icon_refs.append(photo)
-            btn=ttk.Button(row,text=label,command=lambda n=name:(self.insert_description_token('{icon:'+n+'}'),popup.destroy()))
-            btn.pack(side='left',fill='x',expand=True)
-            if photo: tk.Label(row,image=photo,bg=BG).pack(side='left',padx=8)
-        tk.Label(body,text='ÍCONES NATIVOS (códigos F8 já documentados no jogo)',bg=BG,fg=ACCENT).pack(anchor='w',pady=(12,5),padx=12)
+            enlarged=photo.zoom(2,2) if photo else None
+            if enlarged:
+                popup._icon_refs.append(enlarged)
+                tk.Label(row,image=enlarged,bg=BG,width=40).pack(side='left',padx=(0,8))
+            ttk.Button(row,text=label,command=lambda n=name:(self.insert_description_token('{icon:'+n+'}'),popup.destroy())).pack(side='left',fill='x',expand=True)
+        tk.Label(body,text='ÍCONES NATIVOS (códigos F8 documentados no jogo)',bg=BG,fg=ACCENT).pack(anchor='w',pady=(12,5),padx=12)
         for name,code in NATIVE_ICONS.items():
             ttk.Button(body,text=f'{name}   •   {{f8 0B {code:02X}}}',
-                command=lambda code=code:(self.insert_description_token(f'{{f8 0B {code:02X}}}'),popup.destroy())).pack(fill='x',padx=12,pady=1)
+                command=lambda code=code:(self.insert_description_token(f'{{f8 0B {code:02X}}}'),popup.destroy())).pack(fill='x',padx=12,pady=2)
 
     def choose_description_color(self):
         if not self.project:return
