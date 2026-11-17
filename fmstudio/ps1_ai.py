@@ -35,7 +35,7 @@ HARD_AI_PATCHES = (
 
 
 def mode_for(project):
-    raw = (getattr(project, 'metadata', {}).get('edicao_mod') or {}).get('ia_ps1', 'dificil')
+    raw = (getattr(project, 'metadata', {}).get('edicao_mod') or {}).get('ia_ps1', 'normal')
     if raw not in AI_MODES:
         raise ModError('IA do PS1: escolha Normal ou Difícil em Config. MOD.')
     return raw
