@@ -8,7 +8,12 @@ from fmstudio.ps1_runtime import compile_effects
 
 with TemporaryDirectory() as tmp:
     project=Project.create(Path(tmp)/'attack-recoil', 'Dano controlador')
-    cid=project.add_card(name='Monstro com dano próprio')
+    cid=1
+    project.cards[cid] = {'id':cid, 'nome':'Monstro com dano próprio',
+        'descricao':'', 'ataque':1200, 'defesa':800,
+        'tipo_id':0, 'atributo_id':0, 'nivel':4,
+        'guardian_1_id':0, 'guardian_2_id':0}
+    project.save()
     root=Studio()
     try:
         root.project=project
