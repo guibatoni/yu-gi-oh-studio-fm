@@ -20,6 +20,11 @@ from .tables import (
 
 FIRST_TURN_PC = 0x80017B18
 FIRST_TURN_SOURCE = 0x34421000
+CHEST_DIM_FLAG_PC = 0x800325F8
+CHEST_DIM_FLAG = 0x240B0080  # addiu t3, zero, 0x80
+CHEST_ROW_FLAG_PC = 0x80032644
+CHEST_ROW_CONTEXT = (0x25040001, 0xA0A00000, 0xA4A4FFF7)
+CHEST_ROW_VISIBLE = 0xA0AB0000  # sb t3, 0(a1)
 INIT_CALL = 0x80017B08
 LP_CODE = 0x801CFF00
 LP_TABLE = 0x801CFFA0
@@ -255,6 +260,31 @@ def _replace_word(out, pc, before, after):
 def _has_opening_attack_lock(exe):
     offset = FIRST_TURN_PC - EXE_DELTA
     return exe[offset:offset+4] == struct.pack('<I', FIRST_TURN_SOURCE)
+
+
+def inspect_chest_catalog(exe):
+    row_start = CHEST_ROW_FLAG_PC - EXE_DELTA - 4
+    dim_start = CHEST_DIM_FLAG_PC - EXE_DELTA
+    retail = struct.pack('<3I', *CHEST_ROW_CONTEXT)
+    visible = struct.pack('<3I', CHEST_ROW_CONTEXT[0], CHEST_ROW_VISIBLE, CHEST_ROW_CONTEXT[2])
+    observed = exe[row_start:row_start + len(retail)]
+    if exe[dim_start:dim_start + 4] != struct.pack('<I', CHEST_DIM_FLAG):
+        status = 'divergente'
+    else:
+        status = {retail: 'ausente', visible: 'aplicado'}.get(bytes(observed), 'divergente')
+    return {'status': status, 'cartas': CARD_COUNT if status == 'aplicado' else 0}
+
+
+def patch_chest_catalog(exe):
+    """Show empty rows with the stock dim flag on the verified Drop x15."""
+    status = inspect_chest_catalog(exe)['status']
+    if status == 'aplicado':
+        return exe
+    if status != 'ausente':
+        raise ModError('A rotina do catálogo do baú diverge do Drop x15.')
+    out = bytearray(exe)
+    _replace_word(out, CHEST_ROW_FLAG_PC, CHEST_ROW_CONTEXT[1], CHEST_ROW_VISIBLE)
+    return bytes(out)
 
 
 def patch_executable(exe, plan, *, profile):

@@ -52,6 +52,7 @@ def audit(project) -> dict:
             blocked.append('IA PS1 Difícil requer imagem Drop x15 com SLUS original confirmado')
     if native_profile:
         supported.append('Bloqueio de ataque na abertura com exceção por carta')
+        supported.append(f'Catálogo de {CARD_COUNT} cartas no baú, inclusive as sem cópias')
     supported.extend(f'Drops do deck do duelista #{opponent}' for opponent in native_plan.deck_drops)
     if native_plan.name_colors:
         supported.append(f'Cores de tier em {native_plan.name_colors} nomes de cartas no PS1')

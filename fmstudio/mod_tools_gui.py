@@ -211,8 +211,8 @@ class PasswordsDialog(tk.Toplevel):
         self.chest_search = tk.StringVar()
         ttk.Label(chest, text='ID, nome, tipo ou descrição').pack(anchor='w')
         ttk.Entry(chest, textvariable=self.chest_search).pack(fill='x')
-        self.chest = _tree(chest, [('id', 'ID', 70), ('nome', 'Carta', 290), ('qtd', 'Cópias', 90)],
-                           raw_values=lambda item, field: int(item) if field == 'id' else self.chest.set(item, field))
+        self.chest = _tree(chest, [('id', 'ID', 70), ('nome', 'Carta', 290), ('qtd', 'Cópias no baú', 100)],
+                           raw_values=self._chest_sort_value)
         self.chest_search.trace_add('write', lambda *_: self._refresh_chest())
         self.chest.bind('<Double-1>', lambda _e: reveal(int(self.chest.selection()[0]))
                         if self.chest.selection() else None)
@@ -247,16 +247,26 @@ class PasswordsDialog(tk.Toplevel):
     def _destination(self):
         self.profile.configure(state='normal' if self.into_starter.get() else 'disabled')
 
+    def _chest_sort_value(self, item, field):
+        if field == 'qtd':
+            return int(chest_cards(self.project).get(item, 0))
+        return int(item) if field == 'id' else self.chest.set(item, field)
+
     def _refresh_chest(self):
+        selection = self.chest.selection()
         self.chest.delete(*self.chest.get_children())
         query = search_text(self.chest_search.get())
-        for index, (key, count) in enumerate(sorted(chest_cards(self.project).items(), key=lambda item: int(item[0]))):
-            cid = int(key)
-            if not card_matches(query, cid, self.cards.get(cid, {})):
+        owned = chest_cards(self.project)
+        for index, (cid, card) in enumerate(sorted(self.cards.items())):
+            if not card_matches(query, cid, card):
                 continue
-            self.chest.insert('', 'end', iid=key, values=(compact_number(cid), display_name(cid, self.cards), count),
-                              tags=card_row_tags(self.chest, self.cards.get(cid), index))
+            count = int(owned.get(str(cid), 0))
+            self.chest.insert('', 'end', iid=str(cid),
+                              values=(compact_number(cid), display_name(cid, self.cards), count or '0/0'),
+                              tags=card_row_tags(self.chest, card, index))
         self.chest.sort_rows()
+        if selection and self.chest.exists(selection[0]):
+            self.chest.selection_set(selection[0])
         self.profile.configure(values=list(self.project.metadata.get(CONFIG_KEY, {}).get('iniciais', {})))
 
     def _grant(self, cid):

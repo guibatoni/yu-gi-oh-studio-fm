@@ -180,18 +180,20 @@ class StableDiscOutputTests(DiscBuildTests):
     def test_rebuild_restores_original_lock_even_without_other_edits(self):
         import struct
         from unittest.mock import patch
-        from fmstudio.ps1_mod import FIRST_TURN_PC, FIRST_TURN_SOURCE
+        from fmstudio.ps1_mod import CHEST_ROW_FLAG_PC, FIRST_TURN_PC, FIRST_TURN_SOURCE, patch_chest_catalog
         from fmstudio.tables import EXE_DELTA
+        from test_ps1_mod import seed_chest_catalog
 
         offset = FIRST_TURN_PC - EXE_DELTA
-        original = bytearray(offset + 4)
+        original = bytearray(CHEST_ROW_FLAG_PC - EXE_DELTA + 8)
         original[:8] = b'PS-X EXE'
         struct.pack_into('<I', original, offset, FIRST_TURN_SOURCE)
+        seed_chest_catalog(original)
         self.original = bytes(original)
         fake_disc(self.src, self.original)
         digest = hashlib.sha256(self.original).hexdigest()
         self.project.metadata['base_sha256']['slus'] = digest
-        self.patched = self.original[:offset] + struct.pack('<I', 0x34420000)
+        self.patched = self.original[:offset] + struct.pack('<I', 0x34420000) + self.original[offset+4:]
         legacy = build_test_disc(self.project, self.src)
         self.assertNotEqual(Path(legacy['bin']).read_bytes(), self.src.read_bytes())
 
@@ -200,21 +202,26 @@ class StableDiscOutputTests(DiscBuildTests):
             fresh = build_test_disc(self.project, self.src)
         self.assertEqual(fresh['bin'], legacy['bin'])
         self.assertEqual(fresh['acao_arquivo'], 'substituido')
-        self.assertEqual(fresh['setores_modificados'], 0)
+        self.assertEqual(fresh['setores_modificados'], 1)
         self.assertTrue(fresh['edicao_do_mod_ps1']['bloqueio_turno_inicial'])
-        self.assertEqual(Path(fresh['bin']).read_bytes(), self.src.read_bytes())
+        self.assertEqual(fresh['catalogo_bau_ps1']['status'], 'aplicado')
+        with DiscReader(fresh['bin']) as reader:
+            slus = next(entry for entry in reader.files() if entry.path == 'SLUS_014.11')
+            self.assertEqual(b''.join(reader.read_entry(slus)), patch_chest_catalog(self.original))
 
     def test_dificil_ai_reaches_bin_and_keeps_original_disc_unmodified(self):
         import struct
         from unittest.mock import patch
         from fmstudio.ps1_ai import HARD_AI_PATCHES
-        from fmstudio.ps1_mod import FIRST_TURN_PC, FIRST_TURN_SOURCE
+        from fmstudio.ps1_mod import CHEST_ROW_FLAG_PC, FIRST_TURN_PC, FIRST_TURN_SOURCE
         from fmstudio.tables import EXE_DELTA
+        from test_ps1_mod import seed_chest_catalog
 
-        end = max(pc - EXE_DELTA + 8 for pc, *_ in HARD_AI_PATCHES)
+        end = max(CHEST_ROW_FLAG_PC - EXE_DELTA + 8, *(pc - EXE_DELTA + 8 for pc, *_ in HARD_AI_PATCHES))
         source = bytearray(end + 4)
         source[:8] = b'PS-X EXE'
         struct.pack_into('<I', source, FIRST_TURN_PC - EXE_DELTA, FIRST_TURN_SOURCE)
+        seed_chest_catalog(source)
         for pc, old, _, _ in HARD_AI_PATCHES:
             struct.pack_into('<I', source, pc - EXE_DELTA, old)
         self.original = bytes(source)
@@ -248,12 +255,14 @@ class StableDiscOutputTests(DiscBuildTests):
         from fmstudio.ps1_mod import (FIRST_TURN_PC, FIRST_TURN_SOURCE,
                                        LP_BANK_END, INIT_CALL, _LP_INIT)
         from fmstudio.tables import EXE_DELTA
+        from test_ps1_mod import seed_chest_catalog
 
         # A imagem fake reserva todo o banco nativo de LP, não contém ROM real.
         source = bytearray(LP_BANK_END-EXE_DELTA+0x800)
         source[:8] = b'PS-X EXE'
         struct.pack_into('<I', source, INIT_CALL-EXE_DELTA, _LP_INIT)
         struct.pack_into('<I', source, FIRST_TURN_PC-EXE_DELTA, FIRST_TURN_SOURCE)
+        seed_chest_catalog(source)
         for pc, original, _, _ in LP_HUD_PATCHES:
             struct.pack_into('<I', source, pc-EXE_DELTA, original)
         for pc, original in DECK_COUNT_WORDS:

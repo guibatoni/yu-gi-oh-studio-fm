@@ -43,10 +43,24 @@ with TemporaryDirectory() as temp:
     assert root.tree.get_children() == (str(cid),)
     editor.open_passwords()
     codes = next(child for child in root.winfo_children() if isinstance(child, PasswordsDialog))
+    assert set(codes.chest.get_children()) == {str(card) for card in project.cards}
+    assert all(codes.chest.set(item, 'qtd') == '0/0' for item in codes.chest.get_children())
+    assert chest_cards(project) == {}
+    codes.chest_search.set('ritual de teste')
+    assert codes.chest.get_children() == (str(cid),)
+    codes.chest.selection_set(str(cid))
     codes.ids.query.set(str(cid))
     codes.ids.redeem()
     assert codes.ids.tree.selection() == (str(cid),)
     assert chest_cards(project) == {str(cid): 1}
+    assert codes.chest.selection() == (str(cid),)
+    assert codes.chest.set(str(cid), 'qtd') == '1'
+    codes.chest_search.set('')
+    sort_by_quantity = codes.chest.heading('qtd', 'command')
+    codes.tk.call(sort_by_quantity)
+    assert codes.chest.get_children()[-1] == str(cid)
+    codes.tk.call(sort_by_quantity)
+    assert codes.chest.get_children()[0] == str(cid)
     codes.ids._open()
 
     deck_editor = editor.opponent_deck

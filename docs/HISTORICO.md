@@ -1,3 +1,15 @@
+## v1.8.8 — Catálogo completo no baú
+
+- A aba **Baú** mostra todas as cartas do projeto, inclusive as
+  personalizadas. Cartas sem cópias aparecem com **0/0**.
+- A busca encontra também as cartas ainda fora da coleção. A coluna
+  **Cópias no baú** usa a quantidade real para ordenar a lista.
+- O **Drop x15** lista os 722 IDs do disco na tela de montagem de deck.
+  A visualização usa os contadores do jogo e permite abrir a ficha
+  com **Triângulo**. Colocar uma carta no deck exige uma cópia no baú.
+- Gere um novo **BIN/CUE** e use **Verificar BIN/CUE** para confirmar
+  o catálogo na cópia.
+
 ## v1.8.7 — Corrigir Ao atacar → Causar dano LP → Próprio / Controlador
 
 - **Causa corrigida:** o compilador do Drop x15 aceitava `dano_lp` apenas com evento `invocar`, então o efeito `atacar` configurado na carta era marcado como pendente e não entrava no BIN/CUE. Ele passa a preencher o campo nativo `attack_cost` da carta, cobrado pela rotina MIPS `Battle()` a cada ataque declarado, em ambos os duelistas.

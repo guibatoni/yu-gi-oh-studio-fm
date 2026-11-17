@@ -117,7 +117,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     """
     source_image=Path(source_image).resolve()
     from .ps1_runtime import SOURCE_SHA256, compile_effects, install_runtime
-    from .ps1_mod import LP_BANK_END, LP_CODE, compile_mod, patch_executable, patch_wa, wa_sha
+    from .ps1_mod import (
+        LP_BANK_END, LP_CODE, compile_mod, inspect_chest_catalog, patch_chest_catalog,
+        patch_executable, patch_wa, wa_sha,
+    )
     from .passwords import validate_ps1_prefix
     texts={int(cid):project.get(int(cid)).get('descricao','')
            for cid,rows in getattr(project,'edits',{}).items()
@@ -357,6 +360,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     patched_exe,native_report=install_runtime(
         original_exe,patched_exe,native_plan,description_icons=bool(description_icons))
     patched_exe=patch_executable(patched_exe,mod_plan,profile=native_profile)
+    chest_catalog_report = {'status': 'perfil_incompativel', 'cartas': 0}
+    if native_profile:
+        patched_exe = patch_chest_catalog(patched_exe)
+        chest_catalog_report = inspect_chest_catalog(patched_exe)
     from .ps1_lp_hud import patch_lp_hud, verify_lp_hud
     # O HUD é um patch separado da RAM: 20000 LP na memória requer também
     # cinco dígitos no painel para os dois lados.
@@ -474,6 +481,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'ia_nativa_ps1':ai_report,
                 'contador_lp_ps1':lp_hud_report,
                 'rank_hud_ps1':rank_hud_report,
+                'catalogo_bau_ps1':chest_catalog_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
                                     'decks_fixos':list(native_plan.fixed_decks)},
@@ -514,6 +522,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                                'A cópia anterior foi preservada.')
             if native_profile and not all(checked['edicao_do_mod_ps1'].values()):
                 raise ModError('As regras de duelo do BIN divergem do projeto. A cópia anterior foi preservada.')
+            if native_profile and checked['catalogo_bau_ps1']['status'] != 'aplicado':
+                raise ModError('O catálogo do baú não foi confirmado no BIN. A cópia anterior foi preservada.')
             if god24_enabled:
                 if (checked['god24_mascaras_bau']['status']!='aplicado_2_de_2'
                         or checked['god24_renderizador_lista_bau']
