@@ -44,6 +44,12 @@ AURAS = {'aura_tipo', 'bonus_por_tipo', 'bonus_deck_tipo', 'bonus_mao_tipo',
 CONTROL = {'descartar_alvo', 'dano_monstro_alvo', ENTRY_SHRINK,
            'monstro_imune_magia', 'monstro_imune_armadilha'}
 FIELD_SPELLS = {330, 331, 332, 333, 334, 335}
+FIELD_AFFINITY = {
+    330: {5, 9, 19}, 331: {2, 10, 11, 18}, 332: {0, 6, 15},
+    333: {3, 4}, 334: {12, 13, 16}, 335: {1, 7},
+}
+# A geração retail das pools adversárias lê apenas os 720 primeiros pesos.
+PS1_DECK_SCAN_MAX = 720
 
 
 @dataclass(frozen=True)
@@ -57,9 +63,12 @@ class CampaignDeck:
     effect_monsters: int
     max_fusion_atk: int
     notes: tuple[str, ...]
+    fixed_for_ps1: bool = False
 
     @property
     def profile(self):
+        if self.fixed_for_ps1:
+            return {'cartas': list(self.cards), 'pools': []}
         return {'cartas': [], 'pools': [{'compras': DECK_SIZE,
                                           'pesos': dict(self.weights)}]}
 
@@ -137,11 +146,12 @@ def generate_campaign_deck(cards, effects, fusions, equips, opponent, *,
     coerente, sem substituir resultados por IDs inventados ou efeitos fictícios.
     """
     level = campaign_level(opponent)
-    theme = tuple(t for t in DUELIST_THEMES[opponent][1] if t in MONSTER_TYPES)
+    theme = tuple(t for t in DUELIST_THEMES[opponent][1] if t in MONSTER_TYPES)[:2]
     focus = FOCI[opponent]
     rng = rng or SystemRandom()
     allowed = {cid: card for cid, card in cards.items()
-               if (not ps1_only or 1 <= cid <= CARD_COUNT and not card.get('virtual'))}
+               if (not ps1_only or 1 <= cid <= PS1_DECK_SCAN_MAX
+                   and not card.get('virtual'))}
     kinds = {cid: int(card.get('tipo_id', -1)) for cid, card in allowed.items()}
     limits = {cid: deck_copy_limit(effects, cid, default_copies)
               for cid in allowed}
@@ -249,13 +259,32 @@ def generate_campaign_deck(cards, effects, fusions, equips, opponent, *,
     route_ids = {cid for route in routes[:60] for cid in route[1]}
     def score(cid):
         themed = 1350 if kinds[cid] in theme else 0
+        # Efeitos de aura/bônus só trazem valor extra se houver alvos reais
+        # na composição ou no arquétipo do rival.
+        related = 0
+        for effect in card_effects(effects, cid):
+            if effect.get('acao') not in AURAS:
+                continue
+            kind = int(effect.get('tipo_id', -1) or -1)
+            attr = int(effect.get('atributo_id', -1) or -1)
+            targets = [other for other in counts if other in monsters]
+            kind_match = (kind < 0 or kind in theme or
+                          any(kinds[other] == kind for other in targets))
+            attr_match = attr < 0 or any(
+                int(allowed[other].get('atributo_id', -1)) == attr
+                for other in targets)
+            if (kind_match and attr_match) or (effect.get('combinar_filtros') == 'ou'
+                                               and (kind_match or attr_match)):
+                related += 370
+            else:
+                related -= 300
         effects_bonus = max(-1500, min(4300, effect_score[cid])) * (1.25 + .2 * (level-3))
         combo = 800 if cid in route_ids else (430 if useful_edges[cid] else -900)
         power = _power(allowed[cid]) // 3
         attr = allowed[cid].get('atributo_id')
         ally = sum(amount for other, amount in counts.items()
                    if other in monsters and allowed[other].get('atributo_id') == attr)
-        return themed + effects_bonus + combo + power + ally * 55 - counts[cid]*450
+        return themed + effects_bonus + related + combo + power + ally * 55 - counts[cid]*450
 
     def monster_slots():
         return sum(amount for cid, amount in counts.items() if cid in monsters)
@@ -285,7 +314,9 @@ def generate_campaign_deck(cards, effects, fusions, equips, opponent, *,
         if typ == 23:
             score_support += 420 + 90 * len(set(equips.get(cid, ())) & available_reachable)
         elif cid in FIELD_SPELLS:
-            score_support += 120 + int(level * 80)
+            if not set(theme) & FIELD_AFFINITY[cid]:
+                continue
+            score_support += 250 + int(level * 80)
         elif typ == 21:
             score_support += 150 * (level-3)
         candidate_support.append((score_support, cid))
@@ -320,7 +351,14 @@ def generate_campaign_deck(cards, effects, fusions, equips, opponent, *,
     if not ps1_only and any(cid > CARD_COUNT or allowed[cid].get('virtual') for cid in counts):
         notes.append('Cartas customizadas #723+: deck exclusivo do Studio, sem exportação PS1.')
     weights = _weights(counts, preferences)
+    fixed = ps1_only and any(
+        deck_copy_limit(effects, cid, default_copies) < 3 or counts[cid] > 3
+        for cid in counts
+    )
+    if fixed:
+        notes.append('Limites de 1–2 cópias ou mais de 3 cópias: exportação PS1 usa deck fixo; '
+                     'pesos ficam registrados no plano da campanha.')
     return CampaignDeck(opponent, level, focus, deck, weights,
                         tuple(unique_steps), sum(counts[cid] for cid in counts
                                                  if cid in monsters and effect_score[cid] > 0),
-                        max_fusion_atk, tuple(notes))
+                        max_fusion_atk, tuple(notes), fixed)
