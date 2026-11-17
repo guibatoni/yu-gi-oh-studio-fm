@@ -130,14 +130,15 @@ class EffectDialog(tk.Toplevel):
     def __init__(self, master, on_save, *, initial_effect=None):
         super().__init__(master)
         self.on_save=on_save
+        self.cards = getattr(master, 'project', None)
         self.initial_effect = dict(initial_effect) if initial_effect is not None else None
         self.title('Editar efeito — Studio FM' if self.initial_effect else 'Criar efeito — Studio FM')
         self.configure(bg=BG)
-        self.geometry('610x755')
-        self.minsize(565,650)
+        self.geometry('650x790')
+        self.minsize(590,670)
         self.transient(master)
         self.grab_set()
-        form=ttk.Frame(self,padding=20)
+        form=ttk.Frame(self,padding=14)
         form.pack(fill='both',expand=True)
         self.vars={}
         self.combos={}
@@ -209,6 +210,9 @@ class EffectDialog(tk.Toplevel):
         self.filter_combo.bind('<<ComboboxSelected>>', lambda _: self.vars['combinar_filtros'].set(
             tuple(FILTER_COMBINATIONS)[self.filter_combo.current()]))
         self.combos['combinar_filtros'] = self.filter_combo
+        self.specific_button=ttk.Button(form, text='Escolher carta específica do deck…',
+                                        command=self._open_specific)
+        self.specific_button.grid(row=row,column=0,sticky='ew',pady=(0,9));row+=1
         self.labels['escopo']=ttk.Label(form)
         self.labels['escopo'].grid(row=row,column=0,sticky='w');row+=1
         self.vars['escopo']=tk.StringVar(value='aliados')
@@ -307,6 +311,10 @@ class EffectDialog(tk.Toplevel):
             self.vars['valor'].set('1')
         if key == 'acao' and action == 'dano_lp':
             self._set('alvo', 'inimigo')
+        if action == 'vinculo_vida':
+            self._set('evento', 'atacar')
+            self._set('alvo', 'proprio')
+            self.vars['valor'].set('0')
         if action in ENTRY_EFFECTS and (key == 'acao' or value == ENTRY_TYPE_EVENT):
             scope = 'todos' if action == ENTRY_GROW else 'inimigos'
             self.vars['escopo'].set(scope)
@@ -361,7 +369,7 @@ class EffectDialog(tk.Toplevel):
                 selected = -1
                 self.vars['tipo_id'].set(selected)
             self.type_combo.current(choices.index(selected))
-        protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'}) or action in BOOLEAN_ACTIONS
+        protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'}) or action in BOOLEAN_ACTIONS or action == 'vinculo_vida'
         self.def_entry.configure(state='normal' if continuous or marker else 'disabled')
         self.type_combo.configure(state='readonly' if typ else 'disabled')
         self.attribute_combo.configure(state='readonly' if filtered else 'disabled')
@@ -372,7 +380,11 @@ class EffectDialog(tk.Toplevel):
         elif self.vars['valor'].get()=='0' and not (continuous or marker):
             self.vars['valor'].set('500' if action!='descartar_alvo' else '1')
         self.value_entry.configure(state='disabled' if protection else 'normal')
-        if action=='bonus_cemiterio_tipo':
+        self.specific_button.grid() if action == 'bonus_deck_tipo' else self.specific_button.grid_remove()
+        if action == 'vinculo_vida':
+            self.labels['valor'].configure(text='Cura automática: ATK efetivo do atacante')
+            help_text='⚔ ♥ Ao declarar um ataque, restaura LP iguais ao ATK efetivo. Funciona mesmo se o alvo defender. Disponível no simulador; PS1 ainda não suporta.'
+        elif action=='bonus_cemiterio_tipo':
             help_text='Recebe o bônus por carta correspondente no cemitério. Atualiza conforme as cartas entram ou saem.'
         elif action=='bonus_deck_tipo':
             help_text='Bônus fixo por carta correspondente na composição inicial do deck.'
@@ -412,6 +424,17 @@ class EffectDialog(tk.Toplevel):
             help_text='Efeito ativado; mantenha os testes no simulador antes de planejar implementação no PS1.'
         self.help.configure(text=help_text)
 
+    def _open_specific(self):
+        project = self.cards
+        if project is None:
+            messagebox.showerror('Sem projeto', 'Abra um projeto antes de selecionar cartas.', parent=self)
+            return
+        catalog = {cid:project.get(cid) for cid in project.cards}
+        def submit(entry):
+            self.on_save(entry)
+            self.destroy()
+        SpecificCardEffectDialog(self, catalog, submit, default_origin='deck')
+
     def _submit(self):
         entry={key:v.get() for key,v in self.vars.items()}
         try:
@@ -424,11 +447,11 @@ class EffectDialog(tk.Toplevel):
 
 class SpecificCardEffectDialog(tk.Toplevel):
     """Adicionar bônus por carta selecionada sem digitar IDs na descrição."""
-    def __init__(self, master, cards, on_save, *, initial_effect=None):
+    def __init__(self, master, cards, on_save, *, initial_effect=None, default_origin='campo'):
         super().__init__(master)
         self.initial_effect = dict(initial_effect) if initial_effect else None
         self.title('Editar bônus por carta específica' if self.initial_effect
-                   else 'Efeito por carta específica')
+                   else 'Bônus contínuo por carta específica')
         self.geometry('590x560')
         self.configure(bg=BG)
         self.transient(master)
@@ -441,6 +464,8 @@ class SpecificCardEffectDialog(tk.Toplevel):
         self.selected=tk.StringVar()
         self.combo=ttk.Combobox(pane,textvariable=self.selected,values=list(self.labels),width=62)
         self.combo.pack(fill='x',pady=(0,12))
+        ttk.Label(pane, text='Digite o ID ou parte do nome para encontrar a carta.',
+                  foreground='#edc47e').pack(anchor='w',pady=(0,8))
         if self.labels:self.combo.current(0)
         if self.initial_effect:
             old_ref = int(self.initial_effect.get('carta_referencia_id', 0))
@@ -449,11 +474,11 @@ class SpecificCardEffectDialog(tk.Toplevel):
                 self.selected.set(old_label)
         ttk.Label(pane,text='Contar cartas em:').pack(anchor='w')
         self.origin=tk.StringVar(value=self.initial_effect.get('origem_contagem', 'campo')
-                                 if self.initial_effect else 'campo')
+                                 if self.initial_effect else default_origin)
         for label,val in [('Campo (inclusive cartas viradas para baixo)','campo'),('Monte de compra','deck'),
                           ('Mão','mao'),('Cemitério','cemiterio')]:
             ttk.Radiobutton(pane,text=label,value=val,variable=self.origin).pack(anchor='w',pady=3)
-        ttk.Label(pane,text='Escopo:').pack(anchor='w',pady=(7,3))
+        ttk.Label(pane,text='Quais decks/campos contam?').pack(anchor='w',pady=(7,3))
         self.scope=tk.StringVar(value=self.initial_effect.get('escopo', 'aliados')
                                 if self.initial_effect else 'aliados')
         scope=ttk.Combobox(pane,textvariable=self.scope,values=['aliados','inimigos','todos'],state='readonly')
@@ -466,6 +491,7 @@ class SpecificCardEffectDialog(tk.Toplevel):
         for key,v in [('ATK por cópia',self.attack),('DEF por cópia',self.defense)]:
             block=ttk.Frame(row);block.pack(side='left',padx=(0,16))
             ttk.Label(block,text=key).pack(anchor='w');ttk.Entry(block,width=15,textvariable=v).pack()
+        ttk.Label(pane,text='Exemplo: 3 cópias × +200 ATK = +600 ATK.').pack(anchor='w',pady=(8,2))
         ttk.Label(pane,text='Observação (opcional)').pack(anchor='w',pady=(10,3))
         self.note=tk.StringVar(value=self.initial_effect.get('observacao', '')
                                if self.initial_effect else '')
