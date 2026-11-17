@@ -2,7 +2,7 @@
 from tempfile import TemporaryDirectory
 from pathlib import Path
 from fmstudio.gui import Studio, EffectDialog, FieldDialog
-from fmstudio.core import Project
+from fmstudio.core import ENTRY_GROW, ENTRY_SHRINK, ENTRY_TYPE_EVENT, Project
 from fmstudio.drafts import DraftSession
 
 with TemporaryDirectory() as td:
@@ -57,5 +57,32 @@ with TemporaryDirectory() as td:
     assert [row['ataque'] for row in result] == [1500, 1000, 1000]
     result, _ = reopened.simulate_field([board[0], board[2]])
     assert [row['ataque'] for row in result] == [1000, 1000]
+
+    dialog = EffectDialog(root, lambda e: root.drafts.add_effect(1, e))
+    dialog.combos['evento'].current(list(dialog.sources['evento']).index(ENTRY_TYPE_EVENT))
+    dialog.combos['evento'].event_generate('<<ComboboxSelected>>')
+    root.update()
+    assert dialog.vars['acao'].get() == ENTRY_GROW and dialog.vars['escopo'].get() == 'todos'
+    assert dialog.recipient.cget('text') == 'Esta carta'
+    assert 24 in dialog.type_ids and 23 not in dialog.type_ids
+    assert dialog.def_entry.instate(('!disabled',))
+    dialog.vars['valor'].set('200')
+    dialog._submit()
+    growth = root.drafts.get_effects(1)[-1]
+    assert growth['valor'] == growth['valor_def'] == 200
+
+    dialog = EffectDialog(root, lambda e: root.drafts.replace_effect(1, 2, e), initial_effect=growth)
+    dialog.combos['acao'].current(list(dialog.sources['acao']).index(ENTRY_SHRINK))
+    dialog.combos['acao'].event_generate('<<ComboboxSelected>>')
+    root.update()
+    assert dialog.vars['evento'].get() == 'invocar' and dialog.vars['escopo'].get() == 'inimigos'
+    assert dialog.recipient.cget('text') == 'Monstros do tipo escolhido'
+    dialog.type_combo.current(dialog.type_ids.index(19))
+    dialog.type_combo.event_generate('<<ComboboxSelected>>')
+    root.update()
+    dialog.vars['valor_def'].set('350')
+    dialog._submit()
+    debuff = root.drafts.get_effects(1)[2]
+    assert (debuff['acao'], debuff['tipo_id'], debuff['valor'], debuff['valor_def']) == (ENTRY_SHRINK, 19, 200, 350)
     root.destroy()
-print('GUI: aura e bônus próprio de +500 por Plant aliado virado para baixo conferidos.')
+print('GUI: auras, bônus contínuo e criação/edição de marcadores de entrada conferidos.')

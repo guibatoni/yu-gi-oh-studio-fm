@@ -5,7 +5,7 @@ from random import Random
 import tempfile
 import unittest
 
-from fmstudio.core import Project, ModError
+from fmstudio.core import ENTRY_GROW, ENTRY_SHRINK, ENTRY_TYPE_EVENT, Project, ModError
 from fmstudio.duel_ai import choose_attack, choose_play, play_ai_turn
 from fmstudio.duel_engine import DuelLab, parse_card_ids
 from fmstudio.duel_match import Attack, DuelMatch, make_match
@@ -40,6 +40,64 @@ class StudioMatchTests(unittest.TestCase):
                       90001:card(kind=20), 90002:card(kind=21), 90003:card(kind=22),
                       90004:card(kind=23)}
         self.decks = {PLAYER:[1,2,3,4], CPU:[1,2,3,4]}
+
+    def test_entry_growth_roundtrips_and_stays_with_the_field_instance(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = Project.create(Path(folder), 'Marcadores')
+            listener = project.add_card(type_id=19)
+            plant = project.add_card(type_id=19)
+            dragon = project.add_card(type_id=0)
+            project.set_card(listener, {'ataque': 1000, 'defesa': 800})
+            project.add_effect(listener, effect(ENTRY_GROW, 200, event=ENTRY_TYPE_EVENT, tipo_id=19))
+            project = Project.open(Path(folder))
+            game = DuelMatch({cid: project.get(cid) for cid in project.cards}, project.effects,
+                             {PLAYER: [listener, listener], CPU: [plant, dragon]}, rng=Random(9))
+
+            def play(side, cid):
+                action = next(a for a in game.legal_plays(side) if a.card_id == cid and not a.face_up)
+                game.play(side, action)
+                return action.slot
+
+            slot = play(PLAYER, listener)
+            key = (PLAYER, slot, listener)
+            self.assertEqual(game.stat_markers[key], (200, 200))
+            game.end_turn(PLAYER)
+            rival = play(CPU, plant)
+            self.assertEqual(game.stat_markers[key], (400, 400))
+            game.remove(CPU, rival)
+            game.end_turn(CPU)
+            game.end_turn(PLAYER)
+            play(CPU, dragon)
+            resolved = next(m for m in game.resolve()[0] if m['lado'] == PLAYER)
+            self.assertEqual((resolved['ataque'], resolved['defesa']), (1400, 1200))
+            self.assertEqual(game.fork().stat_markers, game.stat_markers)
+            game.end_turn(CPU)
+            game.remove(PLAYER, slot)
+            self.assertNotIn(key, game.stat_markers)
+            self.assertEqual(play(PLAYER, listener), slot)
+            self.assertEqual(game.stat_markers[key], (200, 200))
+
+    def test_fusion_applies_shrink_once_to_enemy_type_and_checks_effective_zero(self):
+        cards = {**self.cards,
+                 5: card(250, 400, kind=19), 6: card(200, 650, kind=19),
+                 7: card(100, 100, kind=19), 8: card(800, 800, kind=19)}
+        effects = {90000: [effect(ENTRY_SHRINK, 500, event='invocar', target='aliados_tipo', tipo_id=19)],
+                   7: [effect('monstro_indestrutivel', 0)]}
+        game = DuelMatch(cards, effects, {PLAYER: [2, 3], CPU: [5, 6, 7, 4]},
+                         fusions={(2, 3): 90000}, terrain_bonuses={(1, 19): 100}, rng=Random(10))
+        game.terrain = 1
+        game.set_field([unit(PLAYER, 1, 8, cards[8]), dict(unit(CPU, 1, 5, cards[5]), face_up=False),
+                        unit(CPU, 2, 6, cards[6]), unit(CPU, 3, 7, cards[7]), unit(CPU, 4, 4, cards[4])])
+        fusion = next(a for a in game.legal_plays(PLAYER)
+                      if a.kind == 'fusao' and a.slot != 1 and a.position == 'ataque')
+        game.play(PLAYER, fusion)
+        board = {m['card_id']: (m['ataque'], m['defesa']) for m in game.resolve()[0]}
+        self.assertNotIn(5, board)
+        self.assertEqual((board[6], board[7], board[8], board[4]), ((0, 250), (0, 0), (900, 900), (50, 50)))
+        self.assertEqual(game.graveyards[CPU], [5])
+        self.assertEqual([e['alvo'] for e in game.logs if e['acao'] == 'destruido_por_marcador'], [(CPU, 1)])
+        game.remove(PLAYER, fusion.slot)
+        self.assertEqual(game.stat_markers[(CPU, 2, 6)], (-500, -500))
 
     def test_fair_draws_follow_each_shuffled_deck(self):
         decks = {PLAYER:[1,2,3,4,90000,90001,90002], CPU:[1,2,3,4,90004,90003,90000]}

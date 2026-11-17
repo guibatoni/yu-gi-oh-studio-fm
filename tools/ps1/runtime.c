@@ -8,9 +8,10 @@ typedef unsigned int u32;
 enum {
     OCCUPIED = 0x8000, USED = 0x4000, FACE_DOWN = 0x1000, DEFENSE = 0x800,
     MAGIC = 1, TRAP = 2, INDESTRUCTIBLE = 4, PIERCING = 8, DIRECT = 16, FIRST_TURN = 32,
-    FIELD = 5, PLACING = 7, BATTLE = 9,
+    FIELD = 5, PLACING = 7, CONFIRMING = 8, BATTLE = 9,
     CARD_COUNT = 722, DECK_SIZE = 40, RECORD_COUNT = 30, DUELIST_COUNT = 40,
-    AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE, SUMMON_HEAL
+    AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE, SUMMON_HEAL,
+    ENTRY_GROW, ENTRY_SHRINK
 };
 
 typedef struct {
@@ -34,7 +35,7 @@ typedef struct {
     Bonus bonuses[];
 } Rules;
 typedef struct {
-    u8 default_copies, pad;
+    u8 default_copies, entry_markers;
     u16 offsets[CARD_COUNT + 1];
     u16 password_prefix;
     u8 deck_drops[DUELIST_COUNT / 8];
@@ -69,6 +70,7 @@ register u8 *game_gp __asm__("$28");
 #define ENTRY __attribute__((used, noinline, section(".text.entry")))
 #define EXTENSION __attribute__((noinline, section(".runtime.extension")))
 #define MOD_RULE __attribute__((used, noinline, section(".runtime.mod")))
+#define MARKER_RULE __attribute__((used, noinline, section(".runtime.markers")))
 #define CARDS ((Card *)0x801A7AD8)
 #define CONFIG ((const Config *)0x801CD7A0)
 #define STATS ((const u32 *)0x801D4244)
@@ -83,6 +85,13 @@ register u8 *game_gp __asm__("$28");
 #define BATTLE_TRAP GAME(u16, 0x8009B22A)
 #define BATTLE_TARGET GAME(s8, 0x8009B1B9)
 #define SIDE(side) (0x800E9FF0u + (side) * 32u)
+
+typedef struct { int attack, defense; } Marker;
+static struct {
+    Marker slots[10];
+    u32 fusion_slots;
+    u16 pending_slot, pending_id;
+} markers __attribute__((section(".runtime.markers.data")));
 
 static unsigned type_of(int id)
 {
@@ -168,6 +177,11 @@ static EXTENSION int count_bonus(const Bonus *bonus, unsigned source_side)
 
 static unsigned cap_stat(int value) { return value < 0 ? 0 : value > 9999 ? 9999 : value; }
 
+static MARKER_RULE Marker *slot_marker(unsigned slot)
+{
+    return &markers.slots[slot < 20 ? slot - 5 : slot - 15];
+}
+
 ENTRY u32 CalculateStats(const Card *card)
 {
     int slot = field_slot(card);
@@ -176,6 +190,11 @@ ENTRY u32 CalculateStats(const Card *card)
     if (monster_zone(slot) && field_monster(slot, 1)) {
         unsigned side = owner(slot);
         if (duel.field[slot].id == card->id) attack += duel.field[slot].equip_attack;
+        if (CONFIG->entry_markers) {
+            const Marker *marker = slot_marker(slot);
+            attack += marker->attack;
+            defense += marker->defense;
+        }
         for (unsigned i = 5; i < 25; i = i == 9 ? 20 : i + 1) {
             if (!field_monster(i, 1)) continue;
             const Rules *rule = rules(CARDS[i].id);
@@ -236,7 +255,7 @@ static void cemetery(unsigned side, int id)
     if (type < 32 && duel.graveyard[side][type] != 0xFFFF) duel.graveyard[side][type]++;
 }
 
-static void end_instance(unsigned slot)
+static EXTENSION void end_instance(unsigned slot)
 {
     cemetery(owner(slot), CARDS[slot].id);
     duel.field[slot] = (Instance){0};
@@ -495,6 +514,94 @@ ENTRY void ConfirmPlacement(void)
             duel.pending_equip = (Instance){0};
         }
     }
+}
+
+void MARKER_RULE ResetCardsWithMarkers(void)
+{
+    volatile u8 *memory = (volatile u8 *)&markers;
+    for (unsigned i = 0; i < sizeof(markers); i++) memory[i] = 0;
+    ResetCards();
+}
+
+void MARKER_RULE ConsumeFusionMaterial(Card *card)
+{
+    int slot = field_slot(card);
+    if (monster_zone(slot)) {
+        *slot_marker(slot) = (Marker){0};
+        markers.fusion_slots |= 1u << slot;
+        duel.field[slot] = (Instance){0};
+    }
+    RemoveCard(card);
+}
+
+/* Only the two placement call sites use this wrapper. The animation may
+ * still have live pointers to the new object, so resolve at the field phase. */
+void MARKER_RULE CreateMarkedPlacement(unsigned raw_slot, int deck_index)
+{
+    unsigned slot = raw_slot & 0x80 ? (raw_slot & 0x7F) + 15 : raw_slot;
+    u32 fused = markers.fusion_slots;
+    int reused = phase() == CONFIRMING && object_slot(OBJECTS[0]) == (int)slot &&
+        monster_zone(slot) && !(fused & (1u << slot));
+    FN(void, 0x80024D34, unsigned, int)(raw_slot, deck_index);
+    if (!monster_zone(slot) || !field_monster(slot, 1) || reused) return;
+    *slot_marker(slot) = (Marker){0};
+    markers.pending_slot = slot;
+    markers.pending_id = CARDS[slot].id;
+}
+
+static MARKER_RULE int entry_delta(const Rules *rule, unsigned action, unsigned side,
+                                   int id, Marker *marker)
+{
+    int applied = 0;
+    if (!rule) return 0;
+    for (unsigned i = 0; i < rule->bonus_count; i++) {
+        const Bonus *bonus = &rule->bonuses[i];
+        if (bonus->action != action || (bonus->scope != 2 && bonus->scope != side) ||
+            !matches_bonus(bonus, id, 0)) continue;
+        int sign = action == ENTRY_GROW ? 1 : -1;
+        marker->attack += sign * bonus->attack;
+        marker->defense += sign * bonus->defense;
+        applied = 1;
+    }
+    return applied;
+}
+
+static MARKER_RULE void apply_entry(void)
+{
+    unsigned source = markers.pending_slot;
+    int id = markers.pending_id;
+    markers.pending_slot = 0;
+    if (CARDS[source].id != id || !field_monster(source, 1)) return;
+    const Rules *reduction = rules(id);
+    u32 weakened = 0;
+    for (unsigned slot = 5; slot < 25; slot = slot == 9 ? 20 : slot + 1) {
+        if (!field_monster(slot, 1)) continue;
+        int subject = CARDS[slot].id;
+        unsigned side = owner(source) ^ owner(slot);
+        Marker *marker = slot_marker(slot);
+        entry_delta(rules(subject), ENTRY_GROW, side, id, marker);
+        if (entry_delta(reduction, ENTRY_SHRINK, side, subject, marker))
+            weakened |= 1u << slot;
+    }
+    /* Resolve all markers before testing for destruction. Recheck the
+     * remaining targets when a destroyed card was providing an aura. */
+    while (weakened) {
+        u32 doomed = 0;
+        for (unsigned slot = 5; slot < 25; slot = slot == 9 ? 20 : slot + 1)
+            if ((weakened & (1u << slot)) && !CalculateStats(&CARDS[slot]) &&
+                !(protection(slot) & INDESTRUCTIBLE)) doomed |= 1u << slot;
+        if (!doomed) break;
+        for (unsigned slot = 5; slot < 25; slot = slot == 9 ? 20 : slot + 1)
+            if (doomed & (1u << slot)) RemoveCard(&CARDS[slot]);
+        weakened &= ~doomed;
+    }
+}
+
+void MARKER_RULE FieldActionsWithMarkers(void)
+{
+    markers.fusion_slots = 0;
+    if (markers.pending_slot && !EFFECT_FLAGS) apply_entry();
+    FieldActions();
 }
 
 ENTRY unsigned DeckAllowsCopies(int id, unsigned copies)

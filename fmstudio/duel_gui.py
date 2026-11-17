@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .continuous import SIDES
-from .core import ModError
+from .core import ENTRY_EFFECTS, ModError
 from .duel_ai import play_ai_turn, posture
 from .duel_rank import project_rank
 from .expanded import display_name
@@ -207,7 +207,11 @@ class MatchDialog(tk.Toplevel):
         if side != 'jogador' and not unit['face_up']:
             return
         name = display_name(unit['card_id'], self.game.cards)
-        show_exact(self, name, f'ATK {unit["ataque"]}\nDEF {unit["defesa"]}\n{guardian_name(unit["guardian_id"])}',
+        details = f'ATK {unit["ataque"]}\nDEF {unit["defesa"]}\n{guardian_name(unit["guardian_id"])}'
+        atk, defense = self.game.stat_markers.get((side, slot, unit['card_id']), (0, 0))
+        if atk or defense:
+            details += f'\nMarcadores de entrada {atk:+} ATK / {defense:+} DEF'
+        show_exact(self, name, details,
                    art=self.project.art_path(unit['card_id']) if self.project else None)
 
     def _inspect_zone(self, zone):
@@ -235,6 +239,14 @@ class MatchDialog(tk.Toplevel):
                     text += f' Guardian {bonuses[0]:+}/{bonuses[1]:+}.'
             elif action=='novo_turno':
                 text=f'Início do turno de {event["lado"]}.'
+            elif action in ENTRY_EFFECTS or action == 'destruido_por_marcador':
+                side, slot = event['alvo']
+                side_name = 'Seu campo' if side == 'jogador' else 'Campo oponente'
+                text = f'{side_name} · slot {slot} · '
+                if action == 'destruido_por_marcador':
+                    text += 'Destruído por ficar com ATK e DEF em 0.'
+                else:
+                    text += f'Marcador {event["valor"]:+} ATK / {event["valor_def"]:+} DEF.'
             elif 'carta' in event:
                 side = event['lado']
                 visible = side == 'jogador' or event.get('face_up', True)

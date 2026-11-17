@@ -6,7 +6,7 @@ import struct
 from dataclasses import dataclass
 
 from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
-from .core import ModError, check_effect
+from .core import ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ModError, check_effect
 from .mod_data import CONFIG_KEY
 from .passwords import PS1_ID_PREFIX
 from .rarities import RARITIES, TYPE_OVERRIDES, name_style
@@ -17,6 +17,8 @@ from .ps1_runtime_blob import (
     RUNTIME_EXT, RUNTIME_EXT_BASE, RUNTIME_EXT_END, RUNTIME_EXT_SHA256,
     RUNTIME_PASSWORD, RUNTIME_PASSWORD_BASE, RUNTIME_PASSWORD_END, RUNTIME_PASSWORD_SHA256,
     RUNTIME_MOD, RUNTIME_MOD_BASE, RUNTIME_MOD_END, RUNTIME_MOD_SHA256,
+    RUNTIME_MARKERS, RUNTIME_MARKERS_BASE, RUNTIME_MARKERS_END, RUNTIME_MARKERS_SHA256,
+    RUNTIME_RANK_HUD_BASE,
 )
 from .tables import CARD_COUNT, DECK_SIZE, DUELIST_COUNT, EXE_DELTA
 
@@ -31,10 +33,10 @@ PROTECTIONS = {
     'equip_imune_armadilha': 2, 'equip_imune_magia_armadilha': 3, 'equip_indestrutivel': 4,
 }
 PLAY_ACTIONS = ((EFFECT_ACTIONS - {'bonus_mao_tipo'}) | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
-                {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp', 'cura_lp'})
+                set(ENTRY_EFFECTS) | {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp', 'cura_lp'})
 SUPPORTED = PLAY_ACTIONS | COPY_ACTIONS
 BONUS_CODES = {'aura_tipo': 1, 'bonus_por_tipo': 2, 'bonus_deck_tipo': 3,
-               'bonus_cemiterio_tipo': 6}
+               'bonus_cemiterio_tipo': 6, ENTRY_GROW: 9, ENTRY_SHRINK: 10}
 SCOPES = {'aliados': 0, 'inimigos': 1, 'todos': 2}
 SUMMON_DAMAGE = 7
 SUMMON_HEAL = 8
@@ -89,11 +91,17 @@ class EffectPlan:
         return any(action in PLAY_ACTIONS for _, action in self.accepted)
 
     @property
+    def entry_markers(self):
+        return any(action in ENTRY_EFFECTS for _, action in self.accepted)
+
+    @property
     def data_end(self):
         return CONFIG_ADDRESS + len(self.data) if self.data else DUEL_STATE
 
     @property
     def bank_end(self):
+        if self.entry_markers:
+            return RUNTIME_MARKERS_BASE
         if self.mod_features:
             return RUNTIME_MOD_BASE
         if self.password_prefix is not None:
@@ -210,7 +218,7 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
             if action in EQUIPMENT_ACTIONS and card_type != 23:
                 pending.append(f'#{cid}: {action} exige carta de Equipamento no PS1.')
                 continue
-            if action in EFFECT_ACTIONS:
+            if action in EFFECT_ACTIONS or action in ENTRY_EFFECTS:
                 if action == 'bonus_por_carta_id':
                     match = effect['carta_referencia_id']
                     if match > CARD_COUNT:
@@ -259,6 +267,7 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
             data.extend(payload)
         struct.pack_into('<H', data, 2 + 2 * cid, offsets[payload])
         accepted.extend(entries)
+    data[1] = any(action in ENTRY_EFFECTS for _, action in accepted)
     configured = accepted or deck_drops or prefix is not None or fixed_decks or colors or edited_fusions
     plan = EffectPlan(bytes(data) if configured else b'', tuple(accepted), tuple(pending), default,
                       deck_drops, prefix, tuple(sorted(fixed_decks)), len(colors), edited_fusions)
@@ -307,15 +316,22 @@ CALLS = (
     (0x8001F67C, 0x8001F0D0, 'AttackTrap'),
     (0x80019870, 0x80026BA4, 'SpellUsed'),
 )
+MARKER_CALLS = (
+    (0x8001A618, 0x80024954, 'ConsumeFusionMaterial'),
+    (0x8001B590, 0x80024D34, 'CreateMarkedPlacement'),
+    (0x8002673C, 0x80024D34, 'CreateMarkedPlacement'),
+)
 
 
 def _rule_patches(plan: EffectPlan):
     if plan.gameplay:
+        marker_wrappers = {'FieldActions': 'FieldActionsWithMarkers',
+                           'ResetCards': 'ResetCardsWithMarkers'} if plan.entry_markers else {}
         for pc, old, key in (*SCENE_HANDLERS, *EFFECT_HANDLERS):
-            yield pc, (old,), (ENTRY_POINTS[key],)
+            yield pc, (old,), (ENTRY_POINTS[marker_wrappers.get(key, key)],)
         for pc, original_words, key in FUNCTION_ENTRIES:
-            yield pc, original_words, (_jump(ENTRY_POINTS[key]), 0)
-        for pc, original_target, key in CALLS:
+            yield pc, original_words, (_jump(ENTRY_POINTS[marker_wrappers.get(key, key)]), 0)
+        for pc, original_target, key in (*CALLS, *(MARKER_CALLS if plan.entry_markers else ())):
             yield pc, (_jump(original_target, link=True),), (_jump(ENTRY_POINTS[key], link=True),)
     if plan.copy_rules:
         # The native inventory check and the forty-slot check stay in place.
@@ -388,6 +404,9 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     if plan.gameplay:
         ext_start = RUNTIME_EXT_BASE - EXE_DELTA
         code_ok = code_ok and exe[ext_start:ext_start+len(RUNTIME_EXT)] == RUNTIME_EXT
+    if plan.entry_markers:
+        start = RUNTIME_MARKERS_BASE - EXE_DELTA
+        code_ok = code_ok and exe[start:start + len(RUNTIME_MARKERS)] == RUNTIME_MARKERS
     if plan.password_prefix is not None:
         password_start = RUNTIME_PASSWORD_BASE - EXE_DELTA
         code_ok = code_ok and exe[password_start:password_start+len(RUNTIME_PASSWORD)] == RUNTIME_PASSWORD
@@ -452,6 +471,15 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
         if any(exe[ext_start:ext_end]):
             raise ModError('Extensão PS1 conflita com código ou texto no espaço reservado.')
         out[ext_start:ext_end] = RUNTIME_EXT
+    if plan.entry_markers:
+        begin, end = RUNTIME_MARKERS_BASE - EXE_DELTA, RUNTIME_MARKERS_END - EXE_DELTA
+        if (not RUNTIME_MARKERS or end - begin != len(RUNTIME_MARKERS) or end > len(exe)
+                or RUNTIME_MARKERS_END > RUNTIME_RANK_HUD_BASE
+                or hashlib.sha256(RUNTIME_MARKERS).hexdigest() != RUNTIME_MARKERS_SHA256):
+            raise ModError('Extensão de marcadores PS1 incompleta ou fora da área reservada.')
+        if any(exe[begin:end]):
+            raise ModError('Extensão de marcadores PS1 conflita com código ou texto na área reservada.')
+        out[begin:end] = RUNTIME_MARKERS
     if plan.password_prefix is not None:
         password_start = RUNTIME_PASSWORD_BASE - EXE_DELTA
         password_end = RUNTIME_PASSWORD_END - EXE_DELTA

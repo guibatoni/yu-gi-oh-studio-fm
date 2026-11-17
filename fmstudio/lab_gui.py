@@ -3,7 +3,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from .core import EVENTS, ModError
+from .core import ENTRY_TYPE_EVENT, EVENTS, ModError
 from .duel_engine import DuelLab, parse_card_ids
 from .gui import BG, SURFACE, TEXT, MUTED, ACCENT, BORDER, compact_number
 from .guardian import guardian_options
@@ -144,7 +144,7 @@ class AdvancedFieldDialog(tk.Toplevel):
                      values=list(self.slot_options)).pack(side='left',padx=5)
         tk.Label(controls,text='Gatilho',bg=BG,fg=TEXT).pack(side='left',padx=(8,0))
         self.event=tk.StringVar(value='invocar')
-        opts=[k for k in EVENTS if k not in ('continuo','equipado','regra_deck')]
+        opts=[k for k in EVENTS if k not in ('continuo','equipado','regra_deck', ENTRY_TYPE_EVENT)]
         ttk.Combobox(controls,textvariable=self.event,width=16,state='readonly',values=opts).pack(side='left',padx=5)
         self.origin_kind=tk.StringVar(value='monstro')
         ttk.Combobox(controls,textvariable=self.origin_kind,width=12,state='readonly',values=['monstro','magia','armadilha']).pack(side='left',padx=5)
@@ -375,5 +375,6 @@ class AdvancedFieldDialog(tk.Toplevel):
             self._last_hand[side]='__RESET__'
         self.lab.damage.clear()
         self.lab.attacks_used.clear()
+        self.lab.stat_markers.clear()
         self.logs.clear()
         self.evaluate()

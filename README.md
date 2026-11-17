@@ -1,3 +1,19 @@
+# Studio FM v1.8.5 — Marcadores de entrada
+
+Em **Cartas → Efeitos e bônus → Adicionar efeito**, escolha uma das ações.
+
+- **Acumular ATK/DEF quando o tipo entra** soma o valor à carta a cada entrada
+  de um monstro do tipo escolhido. O bônus permanece até a carta sair do campo.
+- **Ao entrar, reduzir ATK/DEF por tipo** subtrai o valor de cada monstro do tipo
+  nos campos escolhidos. A redução dura até cada alvo sair do campo. Um alvo
+  afetado é destruído se o ATK e a DEF efetivos ficarem em zero.
+
+Escolha o tipo e os lados que participam. Deixe a DEF em branco para repetir
+o valor do ATK. A colocação virada para baixo também conta. Para jogar no
+PlayStation, salve o projeto e gere um novo **BIN/CUE** do Drop x15 compatível.
+
+---
+
 # Studio FM v1.8.3 — Rank no HUD do PlayStation
 
 Em duelos contra o computador no **Drop x15**, a projeção aparece abaixo

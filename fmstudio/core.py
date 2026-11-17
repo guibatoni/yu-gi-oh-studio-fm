@@ -22,6 +22,10 @@ SCHEMA_VERSION = 1
 DEFAULT_NAME_COLOR = '#F1CF6E'  # Cor da prévia do Studio; não altera a ROM.
 FIELDS = ('nome', 'descricao', 'cor_nome', 'raridade', 'ataque', 'defesa', 'tipo_id', 'atributo_id', 'nivel', 'guardian_1_id', 'guardian_2_id')
 NUMERIC = ('ataque', 'defesa', 'tipo_id', 'atributo_id', 'nivel', 'guardian_1_id', 'guardian_2_id')
+ENTRY_TYPE_EVENT = 'entrada_tipo'
+ENTRY_GROW = 'marcador_por_entrada_tipo'
+ENTRY_SHRINK = 'enfraquecer_tipo_entrada'
+ENTRY_EFFECTS = {ENTRY_GROW: ENTRY_TYPE_EVENT, ENTRY_SHRINK: 'invocar'}
 EVENTS = {
     'invocar': 'Ao entrar em campo', 'atacar': 'Ao atacar',
     'defender': 'Ao defender', 'destruir': 'Ao destruir outro monstro',
@@ -29,6 +33,7 @@ EVENTS = {
     'fim_turno': 'Fim do turno', 'continuo': 'Enquanto no campo',
     'equipado': 'Enquanto equipado (encantamento)',
     'regra_deck': 'Regra de montagem de deck',
+    ENTRY_TYPE_EVENT: 'Quando um monstro do tipo entra',
 }
 ACTIONS = {
     'aumentar_atk':'Aumentar ATK', 'reduzir_atk':'Reduzir ATK',
@@ -58,6 +63,8 @@ ACTIONS = {
     'bonus_por_carta_id':'Recebe ATK/DEF por carta específica',
     'bonus_cemiterio_tipo':'Recebe ATK/DEF por tipo no cemitério',
     'ataque_primeiro_turno':'Ataca no 1º turno',
+    ENTRY_GROW: 'Acumular ATK/DEF quando o tipo entra',
+    ENTRY_SHRINK: 'Ao entrar, reduzir ATK/DEF por tipo',
 }
 TARGETS = {
     'proprio':'Próprio / controlador',
@@ -288,6 +295,26 @@ def check_effect(entry: dict):
         return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
     if event == 'regra_deck':
         raise ModError('Evento de deck exclusivo das regras de cópias')
+    if action in ENTRY_EFFECTS:
+        grows = action == ENTRY_GROW
+        if event != ENTRY_EFFECTS[action] or target != ('proprio' if grows else 'aliados_tipo'):
+            raise ModError('Gatilho ou destinatário incompatível com o marcador de entrada.')
+        typ = _bounded_int(entry.get('tipo_id', -1), 'Tipo de monstro', -1, 24)
+        if 20 <= typ <= 23:
+            raise ModError('Escolha um tipo de monstro ou Todos os tipos.')
+        attack = simulation_nonnegative_int(entry.get('valor', 0), 'ATK do marcador')
+        raw_defense = entry.get('valor_def')
+        defense = (attack if raw_defense is None or not str(raw_defense).strip()
+                   else simulation_nonnegative_int(raw_defense, 'DEF do marcador'))
+        if not (attack or defense):
+            raise ModError('Informe um valor de ATK ou DEF para o marcador.')
+        scope = entry.get('escopo', 'todos' if grows else 'inimigos')
+        if scope not in SCOPES:
+            raise ModError('Escolha os lados afetados pelo marcador.')
+        return {'evento': event, 'acao': action, 'alvo': target, 'tipo_id': typ,
+                'valor': attack, 'valor_def': defense, 'escopo': scope, 'observacao': note}
+    if event == ENTRY_TYPE_EVENT:
+        raise ModError('Use o efeito de marcador por entrada de tipo com este gatilho.')
     if action == 'bonus_por_carta_id':
         if event != 'continuo' or target != 'proprio':
             raise ModError('Bônus por carta exige gatilho contínuo e alvo próprio')
@@ -819,6 +846,9 @@ class Project:
         self.save()
 
     def simulate(self, cid: int, event: str, card_override=None, effects_override=None):
+        entries = effects_override if effects_override is not None else self.effects.get(str(cid), [])
+        if event == ENTRY_TYPE_EVENT or any(e['evento'] == event and e['acao'] in ENTRY_EFFECTS for e in entries):
+            raise ModError('Abra o Laboratório de duelo para escolher o monstro que entra e testar os marcadores.')
         if event not in EVENTS or event == 'continuo':
             raise ModError('Para efeitos contínuos, utilize o simulador de campo')
         stats = card_override if card_override is not None else self.get(cid)
@@ -828,7 +858,7 @@ class Project:
                  'ataque_adversario':1800, 'defesa_adversario':1500,
                  'lp_jogador':lp,'lp_adversario':lp}
         applied = []
-        for eff in (effects_override if effects_override is not None else self.effects.get(str(cid), [])):
+        for eff in entries:
             if eff['evento'] != event:
                 continue
             value = int(eff['valor'])

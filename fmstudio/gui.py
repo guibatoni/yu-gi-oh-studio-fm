@@ -10,6 +10,7 @@ from decimal import Decimal
 from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from pathlib import Path
 from .core import (Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR,
+                   ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ENTRY_TYPE_EVENT,
                    ONCE_ACTIONS, legacy_god_description_icon_card, ps1_god24_card_ids,
                    ps1_supports_god24)
 from .drafts import DraftSession
@@ -44,7 +45,7 @@ def caption_key(mapping, key):
 
 
 def effect_target_label(action, target):
-    return 'Esta carta' if action in SCALING_ACTIONS else caption_key(TARGETS, target)
+    return 'Esta carta' if action in SCALING_ACTIONS or action == ENTRY_GROW else caption_key(TARGETS, target)
 
 
 def compact_number(value, width=13):
@@ -112,6 +113,8 @@ class EffectDialog(tk.Toplevel):
         'dano_lp_deck_tipo': 'inimigo',
         'descartar_alvo': 'inimigo',
         'dano_monstro_alvo': 'monstro_alvo',
+        ENTRY_GROW: 'proprio',
+        ENTRY_SHRINK: 'aliados_tipo',
     }
     def __init__(self, master, on_save, *, initial_effect=None):
         super().__init__(master)
@@ -232,7 +235,9 @@ class EffectDialog(tk.Toplevel):
         self.vars[key].set(value)
         action=self.vars['acao'].get()
         if key=='evento':
-            if value=='continuo' and action not in EFFECT_ACTIONS and action not in (
+            if value == ENTRY_TYPE_EVENT:
+                self._set('acao', ENTRY_GROW)
+            elif value=='continuo' and action not in EFFECT_ACTIONS and action not in (
                     QUICK_ACTIONS - {'sem_limite_deck', 'limite_copias_deck', 'perder_lp_por_ataque'}):
                 self._set('acao','aura_tipo')
             elif value=='equipado' and action not in EQUIPMENT_ACTIONS:
@@ -241,10 +246,13 @@ class EffectDialog(tk.Toplevel):
                 self._set('acao','limite_copias_deck')
             elif value not in ('continuo','equipado','regra_deck') and (
                     action in EFFECT_ACTIONS|EQUIPMENT_ACTIONS or
+                    action in ENTRY_EFFECTS and value != ENTRY_EFFECTS[action] or
                     action in QUICK_ACTIONS and not (value=='atacar' and action=='perder_lp_por_ataque')):
                 self._set('acao','aumentar_atk')
         if key=='acao':
-            if value in EFFECT_ACTIONS or value in QUICK_ACTIONS - {'sem_limite_deck', 'limite_copias_deck', 'perder_lp_por_ataque'}:
+            if value in ENTRY_EFFECTS:
+                self._set('evento', ENTRY_EFFECTS[value])
+            elif value in EFFECT_ACTIONS or value in QUICK_ACTIONS - {'sem_limite_deck', 'limite_copias_deck', 'perder_lp_por_ataque'}:
                 self._set('evento','continuo')
             elif value in EQUIPMENT_ACTIONS:
                 self._set('evento','equipado')
@@ -254,13 +262,18 @@ class EffectDialog(tk.Toplevel):
                 self._set('evento','atacar')
             elif value in ONCE_ACTIONS:
                 self._set('evento','invocar')
-            elif self.vars['evento'].get() in ('continuo','equipado','regra_deck'):
+            elif self.vars['evento'].get() in ('continuo','equipado','regra_deck', ENTRY_TYPE_EVENT):
                 self._set('evento','invocar')
         action=self.vars['acao'].get()
         if key=='acao' and action=='descartar_alvo':
             self.vars['valor'].set('1')
         if key == 'acao' and action == 'dano_lp':
             self._set('alvo', 'inimigo')
+        if action in ENTRY_EFFECTS and (key == 'acao' or value == ENTRY_TYPE_EVENT):
+            scope = 'todos' if action == ENTRY_GROW else 'inimigos'
+            self.vars['escopo'].set(scope)
+            self.scope_combo.current(list(SCOPES).index(scope))
+            self.vars['valor_def'].set('')
         self._refresh_controls()
 
     def _refresh_recipient(self, action):
@@ -280,25 +293,43 @@ class EffectDialog(tk.Toplevel):
     def _refresh_controls(self):
         action=self.vars['acao'].get()
         continuous=action in EFFECT_ACTIONS
+        marker = action in ENTRY_EFFECTS
         self._refresh_recipient(action)
         counted = action in SCALING_ACTIONS
         self.labels['valor'].configure(
-            text='Bônus de ATK por carta contada' if counted else
+            text='ATK a reduzir' if action == ENTRY_SHRINK else 'ATK a acumular' if action == ENTRY_GROW else
+                 'Bônus de ATK por carta contada' if counted else
                  'Bônus de ATK' if continuous else 'X pontos (ATK, LP, dano ou cartas descartadas)')
-        self.labels['valor_def'].configure(text='Bônus de DEF por carta contada' if counted else 'Bônus de DEF')
+        self.labels['valor_def'].configure(
+            text='DEF do marcador (vazio usa o valor de ATK)' if marker else
+                 'Bônus de DEF por carta contada' if counted else 'Bônus de DEF')
         type_label = {'aura_tipo': 'Tipo de monstro que recebe o bônus',
-                      'bonus_por_tipo': 'Tipo contado no campo'}.get(action, 'Tipo contado')
+                      'bonus_por_tipo': 'Tipo contado no campo',
+                      ENTRY_GROW: 'Tipo de monstro que dispara o ganho',
+                      ENTRY_SHRINK: 'Tipo de monstro que perde ATK/DEF'}.get(action, 'Tipo contado')
         self.labels['tipo_id'].configure(text=type_label)
-        self.labels['escopo'].configure(text='Lados afetados pela aura' if action == 'aura_tipo' else 'Lados que entram na contagem')
-        typ=continuous or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo')
+        scope_label = {'aura_tipo': 'Lados afetados pela aura',
+                       ENTRY_GROW: 'Campos onde a entrada conta',
+                       ENTRY_SHRINK: 'Campos atingidos pela redução'}
+        self.labels['escopo'].configure(text=scope_label.get(action, 'Lados que entram na contagem'))
+        typ=continuous or marker or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo')
+        choices = [-1, *(i for i in range(25) if not marker or i < 20 or i == 24)]
+        if self.type_ids != choices:
+            self.type_ids = choices
+            self.type_combo.configure(values=['Todos os tipos', *(f'{i:02d} — {TYPE_NAMES[i]}' for i in choices[1:])])
+            selected = self.vars['tipo_id'].get()
+            if selected not in choices:
+                selected = -1
+                self.vars['tipo_id'].set(selected)
+            self.type_combo.current(choices.index(selected))
         protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'}) or action in BOOLEAN_ACTIONS
-        self.def_entry.configure(state='normal' if continuous else 'disabled')
+        self.def_entry.configure(state='normal' if continuous or marker else 'disabled')
         self.type_combo.configure(state='readonly' if typ else 'disabled')
         self.attribute_combo.configure(state='readonly' if continuous else 'disabled')
-        self.scope_combo.configure(state='readonly' if continuous else 'disabled')
+        self.scope_combo.configure(state='readonly' if continuous or marker else 'disabled')
         if protection:
             self.vars['valor'].set('0')
-        elif self.vars['valor'].get()=='0' and not continuous:
+        elif self.vars['valor'].get()=='0' and not (continuous or marker):
             self.vars['valor'].set('500' if action!='descartar_alvo' else '1')
         self.value_entry.configure(state='disabled' if protection else 'normal')
         if action=='bonus_cemiterio_tipo':
@@ -318,6 +349,12 @@ class EffectDialog(tk.Toplevel):
             help_text='Dano a criatura é experimental: HP simulado começa igual à DEF-base (mínimo 1).'
         elif action=='descartar_alvo':
             help_text='O oponente descarta até X cartas da mão configurada no simulador, uma vez por invocação.'
+        elif action == ENTRY_GROW:
+            help_text=('Cada entrada do tipo soma ATK/DEF a esta carta, inclusive se ela própria for do tipo. '
+                       'Monstros virados para baixo contam. Os pontos duram até a carta sair do campo.')
+        elif action == ENTRY_SHRINK:
+            help_text=('Ao entrar, reduz o ATK e a DEF de cada monstro escolhido, inclusive virado para baixo. '
+                       'A redução dura até o alvo sair do campo. Se o alvo ficar 0/0, ele é destruído.')
         elif action in EQUIPMENT_ACTIONS:
             help_text='O efeito se mantém apenas enquanto a carta estiver equipada ao monstro no simulador.'
         else:
@@ -863,7 +900,7 @@ class Studio(tk.Tk):
             lambda e: canvas.yview_scroll(-1 if e.delta>0 else 1,'units')))
         canvas.bind('<Leave>',lambda event:canvas.unbind_all('<MouseWheel>'))
         tk.Label(body,text='EFEITOS DAS CARTAS',bg=BG,fg=TEXT,font=('Segoe UI',16,'bold')).pack(anchor='w')
-        tk.Label(body,text='Drop x15: bônus, habilidades rápidas e recuperação/dano de LP ao entrar em campo são exportáveis. Outros gatilhos podem funcionar só no simulador.',
+        tk.Label(body,text='O Drop x15 aceita bônus, habilidades rápidas, marcadores de ATK/DEF e efeitos de LP ao entrar em campo.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),wraplength=780,justify='left').pack(anchor='w',pady=(8,12))
         self.effect_caption=tk.Label(body,text='Escolha uma carta',bg=BG,fg=ACCENT,font=('Segoe UI',12,'bold'))
         self.effect_caption.pack(anchor='w',pady=(0,8))
@@ -2359,8 +2396,8 @@ class Studio(tk.Tk):
         if not self.project or not self.selected_id:
             return
         event=list(EVENTS)[self.sim_combo.current()]
-        if event in ('continuo','equipado','regra_deck','atacar') or any(
-                e.get('evento') == event and e.get('acao') in ONCE_ACTIONS
+        if event in ('continuo','equipado','regra_deck','atacar', ENTRY_TYPE_EVENT) or any(
+                e.get('evento') == event and (e.get('acao') in ONCE_ACTIONS or e.get('acao') in ENTRY_EFFECTS)
                 for e in self.drafts.get_effects(self.selected_id)):
             self.simulate_field()
             return

@@ -6,11 +6,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fmstudio.abilities import quick_settings, replace_quick_effects
-from fmstudio.core import ModError
+from fmstudio.core import ENTRY_GROW, ENTRY_SHRINK, ENTRY_TYPE_EVENT, ModError, check_effect
 from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_sprite_words
 from fmstudio.ps1_runtime import (
     CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, FUSION_CONFIG, NAME_COLOR_CONFIG, RUNTIME_EXT_BASE,
-    RUNTIME_MOD_BASE, RUNTIME_PASSWORD_BASE, SUMMON_DAMAGE, SUMMON_HEAL,
+    RUNTIME_MARKERS_BASE, RUNTIME_MOD_BASE, RUNTIME_PASSWORD_BASE, SUMMON_DAMAGE, SUMMON_HEAL,
     _jump, _option_calls, _rule_patches, _valid_original_drop_entry, compile_effects, install_runtime, verify_effects,
 )
 from fmstudio.ps1_text import ICON_CODES, patch_descriptions
@@ -70,6 +70,35 @@ class TestNativeRules(unittest.TestCase):
         self.assertEqual(quick_settings(effects, default_copies=None)['limite_copias'], 3)
         self.assertIsNone(quick_settings([], default_copies=None)['limite_copias'])
         self.assertEqual(replace_quick_effects(effects, {'limite_copias': ''}, default_copies=None), [])
+
+    def test_markers_select_and_verify_their_native_hooks_and_bank(self):
+        growth = effect(ENTRY_GROW, 200, event=ENTRY_TYPE_EVENT, tipo_id=19)
+        reduction = effect(ENTRY_SHRINK, 400, event='invocar', target='aliados_tipo', tipo_id=0, valor_def=0)
+        self.project.effects = {'9': [growth, reduction]}
+        self.assertEqual(check_effect(dict(growth, valor_def=''))['valor_def'], 200)
+        for changes in ({'tipo_id': 20}, {'valor': -1}, {'evento': 'continuo'}, {'valor': 0}):
+            with self.subTest(changes=changes), self.assertRaises(ModError):
+                check_effect(dict(growth, **changes))
+        plan = compile_effects(self.project, True)
+        self.assertEqual(plan.accepted, ((9, ENTRY_GROW), (9, ENTRY_SHRINK)))
+        self.assertEqual((plan.data[1], plan.bank_end), (1, RUNTIME_MARKERS_BASE))
+        start = struct.unpack_from('<H', plan.data, 2 + 2*9)[0]
+        self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+8), (9, 2, 19, 200, 200))
+        self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+16), (10, 1, 0, 400, 0))
+        source = bytearray(sample_exe())
+        for pc, words, _ in _rule_patches(plan):
+            struct.pack_into(f'<{len(words)}I', source, where(pc), *words)
+        source = bytes(source)
+        with patch('fmstudio.ps1_runtime.SOURCE_SHA256', hashlib.sha256(source).hexdigest()):
+            result, _ = install_runtime(source, source, plan, description_icons=False)
+            self.assertEqual(verify_effects(result, plan)['quantidade'], 2)
+            occupied = bytearray(source)
+            occupied[where(RUNTIME_MARKERS_BASE)] = 1
+            with self.assertRaisesRegex(ModError, 'marcadores PS1 conflita'):
+                install_runtime(source, occupied, plan, description_icons=False)
+        damaged = bytearray(result)
+        damaged[where(RUNTIME_MARKERS_BASE)] ^= 1
+        self.assertFalse(verify_effects(damaged, plan)['rotina_presente'])
 
     def test_unknown_profile_has_no_resident_effects(self):
         plan = compile_effects(self.project, False)
