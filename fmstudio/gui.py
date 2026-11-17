@@ -2815,7 +2815,7 @@ class Studio(tk.Tk):
                'Os textos completos continuam no Studio.\n'
                f'Detalhes: {Path(manifest["bin"]).with_suffix(".json")}\n'
                if manifest.get('descricoes_nao_gravadas') else '')
-            f'Efeitos gravados no PS1: {len(runtime.get("efeitos",[]))}. '
+            + f'Efeitos gravados no PS1: {len(runtime.get("efeitos",[]))}. '
             f'Ícones de descrição: {len(manifest.get("icones_de_descricao_ps1",[]))}.\n'
             + ('Ataque na abertura restrito pela habilidade da carta.\n'
                if mod.get('bloqueio_turno_inicial') else '')
