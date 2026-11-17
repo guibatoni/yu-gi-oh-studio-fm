@@ -57,6 +57,27 @@ class ModProjectionTests(unittest.TestCase):
         self.assertTrue(any('#723' in item for item in plan.pending))
         self.assertFalse(compile_mod(project, profile=False, wa_verified=True).fusions)
 
+    def test_global_20000_lp_applies_to_every_opponent_in_native_table(self):
+        cards = {1: {'tipo_id': 0}}
+        project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={
+            'edicao_mod': {
+                'lp_inicial': 20000,
+                'lp_jogador': 8000,
+                'duelistas': {'1': {'lp': 8000}, '39': {'lp': 1500}},
+            }
+        })
+        plan = compile_mod(project, profile=True, wa_verified=False)
+        self.assertEqual(plan.player_lp, 20000)
+        self.assertEqual(len(plan.life), len(ModPlan(0, [0] * len(plan.life), {}, [], [], []).life))
+        self.assertTrue(all(value == 20000 for value in plan.life))
+        exe = bytearray(0x1D0000)
+        struct.pack_into('<I', exe, FIRST_TURN_PC-EXE_DELTA, FIRST_TURN_SOURCE)
+        struct.pack_into('<I', exe, INIT_CALL-EXE_DELTA, _LP_INIT)
+        out = patch_executable(bytes(exe), plan, profile=True)
+        self.assertEqual(struct.unpack_from('<4H', out, LP_TABLE-EXE_DELTA),
+                         (20000, 20000, 20000, 20000))
+        self.assertEqual(verify_executable(out, plan), (True, True))
+
     def test_pools_lp_and_opening_turn_verify_without_truncating_studio_settings(self):
         cards = {i:{'tipo_id':0} for i in range(1, 30)}
         project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={'edicao_mod':{
@@ -68,9 +89,9 @@ class ModProjectionTests(unittest.TestCase):
             }}})
         plan = compile_mod(project, profile=True, wa_verified=True)
         self.assertEqual(plan.player_lp,8800)
-        self.assertEqual(plan.life[:3],[0,6101,0])
+        self.assertEqual(plan.life[:3],[8800,8800,8800])
         self.assertEqual(set(plan.groups),{(1,'pow'),(1,'deck')})
-        self.assertEqual(len(plan.pending),3)
+        self.assertEqual(len(plan.pending),2)
         self.assertTrue(all(sum(row)==POOL_TOTAL for row in plan.groups.values()))
         exe = bytearray(0x1D0000)
         struct.pack_into('<I',exe,FIRST_TURN_PC-EXE_DELTA,FIRST_TURN_SOURCE)

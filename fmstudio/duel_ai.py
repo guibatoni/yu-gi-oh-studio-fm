@@ -217,6 +217,8 @@ def choose_play(match, side='adversario'):
     baseline = _preferred_attack(view, side, stance)
     baseline_win = baseline and baseline[0][0] == 3
     best = None
+    defensive_fallback = None
+    no_monsters = not view._field(side)
     for action in options:
         branch = view.fork()
         try:
@@ -252,7 +254,18 @@ def choose_play(match, side='adversario'):
         key = (win, score, attack_value)
         if (win or score > 0) and (best is None or key > best[0]):
             best = key, action
-    return best[1] if best else None
+        # Uma IA sem monstros não deve simplesmente passar a vez porque
+        # as unidades inimigas têm poder muito maior: estabelecer defesa
+        # preserva a chance de sobreviver e comprar/fundir no turno seguinte.
+        # Só monstros normais em defesa (sem consumir material de fusão).
+        if no_monsters and action.kind == 'monstro' and action.position == 'defesa':
+            unit = next((unit for unit in board
+                         if unit['lado'] == side and unit['slot'] == action.slot), None)
+            if unit is not None:
+                choice = (unit['defesa'], int(not action.face_up), score)
+                if defensive_fallback is None or choice > defensive_fallback[0]:
+                    defensive_fallback = choice, action
+    return best[1] if best else defensive_fallback[1] if defensive_fallback else None
 
 
 def _reposition(match, side):

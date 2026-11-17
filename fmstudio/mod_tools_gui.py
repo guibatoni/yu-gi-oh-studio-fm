@@ -295,12 +295,15 @@ class DeckGeneratorDialog(tk.Toplevel):
         self.default_copies, self.trap_thresholds = default_copies, trap_thresholds
         self.on_use = use_deck
         self.deck = None
-        self.max_atk = tk.StringVar()
-        self.max_def = tk.StringVar()
         self.difficulty = tk.StringVar(value='Difícil')
+        self.ps1_only = tk.BooleanVar(value=bool(getattr(editor.winfo_toplevel(), 'project', None)
+                                                  and ps1_supports_god24(editor.winfo_toplevel().project)))
         self.status = tk.StringVar()
         self.summary = tk.StringVar()
-        suggestions = _suggest_quantities(cards, effects, default_copies, fixed)
+        eligible = ({cid: card for cid, card in cards.items()
+                     if 1 <= cid <= CARD_COUNT and not card.get('virtual')}
+                    if self.ps1_only.get() else cards)
+        suggestions = _suggest_quantities(eligible, effects, default_copies, fixed)
         self.quantities = {typ: tk.StringVar(value=str(suggestions[typ]))
                            for typ in sorted(MONSTER_TYPES.union(SUPPORT_TYPES))}
 
@@ -310,20 +313,19 @@ class DeckGeneratorDialog(tk.Toplevel):
         for pane, name in ((setup, 'Composição'), (monsters, 'Tipos de Monstro'), (preview, 'Prévia')):
             self.tabs.add(pane, text=name)
         self.preview = preview
-        for row, (label, var) in enumerate((
-                ('ATK máximo da carta base', self.max_atk), ('DEF máxima da carta base', self.max_def))):
-            ttk.Label(setup, text=label).grid(row=row, column=0, sticky='w', pady=5)
-            ttk.Entry(setup, width=16, textvariable=var).grid(row=row, column=1, sticky='w', padx=10)
-        ttk.Label(setup, text='Deixe em branco para liberar o teto. Resultados de fusão têm poder livre.',
-                  wraplength=570).grid(row=2, column=0, columnspan=2, sticky='w', pady=(0, 10))
-        for row, (typ, label) in enumerate(((20, 'Magias'), (21, 'Armadilhas'), (23, 'Equipamentos')), 3):
+        ttk.Label(setup, text='Sem limite de ATK ou DEF no Studio. A geração combina '
+                  'força, fusões, equipamentos e proporções escolhidas.',
+                  wraplength=570).grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 10))
+        for row, (typ, label) in enumerate(((20, 'Magias'), (21, 'Armadilhas'), (23, 'Equipamentos')), 1):
             self._quantity(setup, typ, label, row, 0)
-        ttk.Label(setup, text='Dificuldade').grid(row=6, column=0, sticky='w', pady=5)
+        ttk.Checkbutton(setup, text='Gerar somente cartas compatíveis com PS1 (#001–#722)',
+                        variable=self.ps1_only).grid(row=4,column=0,columnspan=2,sticky='w',pady=7)
+        ttk.Label(setup, text='Dificuldade').grid(row=5, column=0, sticky='w', pady=5)
         ttk.Combobox(setup, textvariable=self.difficulty, values=list(DIFFICULTIES),
-                     state='readonly', width=15).grid(row=6, column=1, sticky='w', padx=10)
+                     state='readonly', width=15).grid(row=5, column=1, sticky='w', padx=10)
         if new_starter:
             ttk.Label(setup, text='O deck escolhido será salvo em um novo perfil inicial.',
-                      wraplength=550).grid(row=7, column=0, columnspan=2, sticky='w', pady=5)
+                      wraplength=550).grid(row=6, column=0, columnspan=2, sticky='w', pady=5)
         for i, typ in enumerate(sorted(MONSTER_TYPES)):
             row, column = divmod(i, 2)
             self._quantity(monsters, typ, TYPE_NAMES[typ], row, column * 2)
@@ -341,7 +343,7 @@ class DeckGeneratorDialog(tk.Toplevel):
                                      state='disabled', style='Accent.TButton')
         self.use_button.pack(side='right')
         ttk.Button(controls, text='Gerar prévia', command=self._generate).pack(side='right', padx=(0, 6))
-        for var in (self.max_atk, self.max_def, self.difficulty, *self.quantities.values()):
+        for var in (self.difficulty, self.ps1_only, *self.quantities.values()):
             var.trace_add('write', self._invalidate)
         self._invalidate()
         self.bind('<Escape>', lambda _event: self.destroy())
@@ -366,9 +368,8 @@ class DeckGeneratorDialog(tk.Toplevel):
             result = generate_deck(
                 self.cards, self.effects, self.fusions, self.equips,
                 {typ: var.get() or '0' for typ, var in self.quantities.items()},
-                max_atk=self.max_atk.get().strip() or None, max_def=self.max_def.get().strip() or None,
                 difficulty=self.difficulty.get(), default_copies=self.default_copies,
-                trap_thresholds=self.trap_thresholds,
+                trap_thresholds=self.trap_thresholds, ps1_only=self.ps1_only.get(),
             )
         except (ModError, ValueError) as exc:
             self.status.set(str(exc))
@@ -385,7 +386,8 @@ class DeckGeneratorDialog(tk.Toplevel):
         ]
         self.summary.set('\n'.join(routes))
         self.tabs.select(self.preview)
-        self.status.set(f'{len(result.cards)} cartas · {len(result.fusions)} fusões disponíveis.')
+        source = 'pronto para deck PS1' if self.ps1_only.get() else 'modo Studio'
+        self.status.set(f'{len(result.cards)}/40 cartas · {len(result.fusions)} fusões · {source}.')
         self.use_button.state(['!disabled'])
 
     def _use(self):

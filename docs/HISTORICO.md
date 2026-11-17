@@ -1,3 +1,14 @@
+## v1.7.7 — LP global em Config. MOD, poder livre e IA/decks
+
+- **Config. MOD** é a única aba para definir o LP inicial. Um valor global vale para jogador e todos os duelistas no simulador e nas tabelas do BIN/CUE Drop x15.
+- Configurações antigas de jogador, duelistas individuais e laboratório deixam de competir pela inicialização. Ao salvar a nova configuração, a regra global tem prioridade.
+- O Studio não impõe teto artificial aos valores de ATK/DEF e LP. O gerador deixa de mostrar tetos de ATK/DEF.
+- No PS1 original, **ATK/DEF base seguem limitados a 5110**, devido aos campos de nove bits; o Studio os mantém sem cortes para o simulador e bloqueia exportações que truncariam os valores.
+- O patch Drop x15 passa a aceitar LP de 1 até **65.535**, limite real u16 do PS1, com um valor para os dois lados em qualquer duelo. **HUD original de quatro dígitos com valores acima de 9.999 ainda exige teste visual no ePSXe.** Acima de 65.535 continua somente no Studio.
+- IA do simulador: quando não possui monstros e não encontra uma jogada positiva, prefere montar defesa a encerrar o turno com campo vazio, preservando seleção de Guardian Stars segura e informações ocultas.
+- Gerador: decks de 40 cartas sem teto artificial de poder, opção de selecionar somente cartas #001–#722 para uso com PS1 e manutenção das proporções, habilidades e sinergias de fusão.
+- Para usar o LP no ePSXe, é necessário gerar **BIN/CUE novo** após salvar Config. MOD.
+
 ## v1.7.6 — Editar efeito selecionado no Cortex
 
 - Novo botão **Editar efeito selecionado** na aba Efeitos, ao lado de Adicionar/Bônus por carta/Remover; também permite abrir a edição com clique duplo na regra.

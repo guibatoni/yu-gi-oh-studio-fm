@@ -42,14 +42,14 @@ with TemporaryDirectory() as temp:
         editor._toggle_deck_drops()
         assert project.metadata[CONFIG_KEY]['duelistas']['1'][DROP_FROM_DECK]
         assert editor.deck_drop_candidates.get_children() == (str(enemy),)
-        editor.player_lp.set(str(huge))
-        editor.opponent_lp.set(str(huge+100))
+        editor.mod_lp.set(str(huge))
         editor.save_lp()
         editor.starter.set('Perfil de teste')
         editor.start_match()
         root.update()
         dialog = next(child for child in root.winfo_children() if isinstance(child, MatchDialog))
         assert dialog.game.lp['jogador'] == huge
+        assert dialog.game.lp['adversario'] == huge
         assert '…' in dialog.lp_text['jogador'].get()
         assert dialog.zones['mao'].get_children() == (str(hero),)
         dialog._open_passwords()
@@ -64,7 +64,7 @@ with TemporaryDirectory() as temp:
         dialog._play()
         dialog.fields['jogador'].selection_set('1')
         dialog._attack(True)
-        assert dialog.game.lp['adversario'] == 100
+        assert dialog.game.lp['adversario'] == 0
         assert 'Dano' in dialog.output.get('1.0','end')
         dialog.game.lp['adversario'] = 0
         dialog.render()
