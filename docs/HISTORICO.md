@@ -1,3 +1,12 @@
+## v1.8.3 — Rank ao vivo no HUD do PS1
+
+- O BIN/CUE do Drop x15 mostra a projeção POW/TEC e os pontos abaixo
+  dos LP do jogador, com a mesma fonte do jogo.
+- A pontuação lê turnos, compras, LP e ações do duelo e usa as tabelas
+  originais. A rotina é verificada após reempacotar o BIN.
+- Para jogar com a atualização, gere outra cópia da imagem original
+  e inicie um novo duelo contra o computador.
+
 ## v1.8.2 — ATK/DEF nas tabelas de Drops, Deck inicial e Deck oponente
 
 - Novas colunas **ATK** e **DEF** nos dois modos da aba **Drops do oponente** (normal e ponderado do próprio deck), nos **pools ponderados** e nas listas **Catálogo** e **Deck atual** de **Deck do oponente** e **Decks iniciais**.

@@ -17,7 +17,7 @@ import struct
 
 from .core import ModError, legacy_god_description_icon_card, ps1_god24_card_ids
 from .disc import DiscReader, DiscError, SYNC
-from .tables import CARD_COUNT
+from .tables import CARD_COUNT, EXE_DELTA
 
 RAW_SECTOR = 2352
 PAYLOAD = 2048
@@ -367,6 +367,15 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     else:
         lp_hud_report={'status':'perfil_incompativel' if lp_hud_initial>9999 else 'original',
                        'digitos':4,'lp_inicial':lp_hud_initial,'validado_epsxe':False}
+    from .ps1_rank_hud import inspect_rank_hud, patch_rank_hud
+    rank_hud_report = {'status': 'perfil_incompativel'}
+    if native_profile:
+        occupied_until = max([native_plan.data_end, *(
+            EXE_DELTA + row['offset_exe'] + row['bytes'] + 1
+            for row in written_descriptions if row.get('realocada')
+        )])
+        patched_exe, rank_hud_report = patch_rank_hud(
+            original_exe, patched_exe, occupied_until=occupied_until)
     from .ps1_ai import mode_for, patch_hard_ai, verify_hard_ai
     ai_mode=mode_for(project)
     if native_profile:
@@ -439,6 +448,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                     original_exe,reread_exe,initial_lp=lp_hud_initial):
                 raise ModError('Contador de LP: cinco dígitos divergentes no BIN final. '
                                'A imagem anterior foi preservada.')
+            if rank_hud_report['status'] == 'aplicado' and inspect_rank_hud(reread_exe)['status'] != 'aplicado':
+                raise ModError('Rank no HUD: a extensão diverge no BIN final.')
             if patched_wa is not None and b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))!=patched_wa:
                 raise ModError('WA_MRG não corresponde após reempacotamento.')
 
@@ -462,6 +473,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'efeitos_nativos_ps1':native_report,
                 'ia_nativa_ps1':ai_report,
                 'contador_lp_ps1':lp_hud_report,
+                'rank_hud_ps1':rank_hud_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
                                     'decks_fixos':list(native_plan.fixed_decks)},

@@ -1,3 +1,15 @@
+## Rank ao vivo no PS1 — v1.8.3
+
+O **Drop x15** com **SLUS_014.11** verificado mostra o rank abaixo do
+LP do jogador em duelos contra o computador. O código lê os dez
+contadores usados no resultado e chama a função de pontuação original.
+Durante a partida, projeta uma vitória por LP. O término do duelo usa
+o ajuste registrado pelo jogo.
+
+Gere um novo BIN/CUE e confirme pelo botão **Verificar BIN/CUE**.
+Projetos que já ocupam toda a reserva de código e textos recebem
+um aviso sobre o rank na geração.
+
 ## Studio FM v1.8.0
 
 O rank em tempo real, as cadeias Expert, a Supreme e as cartas #723+

@@ -1,7 +1,7 @@
 name: Validar rank, cartas expandidas e decks
 on:
   push:
-    branches: [feature/studio-rank-decks-expert]
+    branches: [feature/studio-rank-decks-expert, feature/studio-v1.8.3-ps1-rank-hud]
   workflow_dispatch:
 permissions:
   contents: write
@@ -37,12 +37,12 @@ jobs:
       - name: Montar pacote Python
         run: python tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip
       - name: Registrar runtime validado
-        if: github.ref == 'refs/heads/feature/studio-rank-decks-expert'
+        if: github.ref == 'refs/heads/feature/studio-rank-decks-expert' || github.ref == 'refs/heads/feature/studio-v1.8.3-ps1-rank-hud'
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           git add fmstudio/ps1_runtime_blob.py
           if ! git diff --cached --quiet; then
-            git commit -m "build: recompilar runtime MIPS da banlist"
-            git push origin HEAD:feature/studio-rank-decks-expert
+            git commit -m "build: recompilar runtime MIPS"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi

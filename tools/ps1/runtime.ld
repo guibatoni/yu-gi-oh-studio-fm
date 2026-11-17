@@ -38,5 +38,12 @@ SECTIONS {
         __runtime_ext_end = .;
     }
     ASSERT(__runtime_ext_end <= 0x801CFF00, "PS1 extension conflicts with the LP bank")
+    .runtime_rank_hud 0x801CF180 : {
+        __rank_hud_start = .;
+        KEEP(*(.runtime.rank_hud .runtime.rank_hud.data))
+        . = ALIGN(4);
+        __rank_hud_end = .;
+    }
+    ASSERT(__rank_hud_end <= 0x801CF500, "PS1 rank HUD conflicts with decks and name colors")
     /DISCARD/ : { *(.MIPS.abiflags .reginfo .pdr .comment .note.* .gnu.attributes .mdebug.*) }
 }
