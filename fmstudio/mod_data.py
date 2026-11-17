@@ -150,8 +150,10 @@ def _normalize_deck(value, cards):
 def normalize_rules(data, cards):
     """Validate a settings snapshot without changing the project."""
     out = deepcopy(data)
+    if 'lp_inicial' in out:
+        out['lp_inicial'] = positive_int(out['lp_inicial'], 'LP inicial para ambos')
     if 'lp_jogador' in out:
-        out['lp_jogador'] = positive_int(out['lp_jogador'], 'LP do jogador')
+        out['lp_jogador'] = positive_int(out['lp_jogador'], 'LP legado do jogador')
     for key, duelist in out.get('duelistas', {}).items():
         if not 0 <= simulation_nonnegative_int(key, 'ID do duelista') < len(DUELIST_NAMES_REFERENCE):
             raise ModError(f'Duelista #{key} fora da grade original.')
@@ -224,13 +226,20 @@ def save_rules(project, rules):
     return clean
 
 
-def starting_life(project, opponent):
+def global_starting_lp(project):
+    """Uma única configuração de LP do mod aplicada a ambos os participantes.
+
+    Arquivos antigos usam lp_jogador como fonte de migração; as antigas
+    substituições por duelista e do laboratório não definem mais o duelo.
+    """
     config = project.metadata.get(CONFIG_KEY, {})
-    legacy = project.metadata.get('studio_initial_lp', 8000)
-    return {
-        'jogador': config.get('lp_jogador', legacy),
-        'adversario': config.get('duelistas', {}).get(str(opponent), {}).get('lp', legacy),
-    }
+    return positive_int(config.get('lp_inicial', config.get('lp_jogador', 8000)),
+                        'LP inicial para ambos')
+
+
+def starting_life(project, opponent):
+    value = global_starting_lp(project)
+    return {'jogador': value, 'adversario': value}
 
 
 def base_tables(project):
