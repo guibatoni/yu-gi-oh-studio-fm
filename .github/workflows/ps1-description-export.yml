@@ -1,0 +1,27 @@
+name: Verificar descrições PS1 e build (PR)
+on:
+  pull_request:
+    paths:
+      - 'fmstudio/disc_build.py'
+      - 'fmstudio/gui.py'
+      - 'tests/test_ps1_description_export.py'
+      - '.github/workflows/ps1-description-export.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ps1-description:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias
+        run: python -m pip install pillow
+      - name: Compilar sintaxe Python
+        run: python -m compileall -q fmstudio tests app.py updater_main.py
+      - name: Testar exportacao de descricoes PS1
+        run: python -m unittest discover -s tests -p test_ps1_description_export.py -v
+      - name: Rodar suite completa do Studio
+        run: python -m unittest discover -s tests -v
