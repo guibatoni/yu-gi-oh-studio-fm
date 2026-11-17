@@ -1,3 +1,12 @@
+## v1.7.6 — Editar efeito selecionado no Cortex
+
+- Novo botão **Editar efeito selecionado** na aba Efeitos, ao lado de Adicionar/Bônus por carta/Remover; também permite abrir a edição com clique duplo na regra.
+- Formulário de edição reutiliza os dados existentes (gatilho, ação, alvo, valor ATK/DEF, tipo, atributo, escopo e observação) sem acrescentar um segundo efeito.
+- Efeitos de bônus por carta específica mantêm formulário próprio e agora podem ter quantidade, zona, escopo e observação editados sem inserir um segundo texto na descrição.
+- Habilidades rápidas já listadas podem ser editadas; a linha original é substituída de forma validada e reversível.
+- A alteração permanece em rascunho até **Salvar projeto** / Ctrl+S. Cancelar preserva tudo e a seleção da linha é restaurada após salvar.
+- Botões de edição separados dos controles PS1 para evitar cortes em janelas menores.
+
 ## v1.7.5 — Recuperação de LP no PS1 e ataque inicial virado para baixo
 
 - **Recuperar LP ao entrar em campo** passa a ser exportado para o motor nativo do Drop x15, além de funcionar no simulador. O controlador recebe o valor configurado uma vez por entrada em campo, inclusive com a carta setada; o LP nativo é limitado à capacidade do campo de 16 bits para impedir estouro.
