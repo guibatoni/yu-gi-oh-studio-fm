@@ -369,6 +369,20 @@ class StudioMatchTests(unittest.TestCase):
         with self.assertRaises(ModError):
             deal_deck(profile,cards,{},Random(8))
 
+    def test_ai_sets_defender_instead_of_passing_with_empty_board(self):
+        cards = {1: card(100, 2300, stars=(1, 2)),
+                 2: card(9000, 9000, stars=(3, 4))}
+        game = DuelMatch(cards, {}, {PLAYER: [2], CPU: [1]},
+                         first=CPU, rng=Random(7))
+        game.set_field([unit(PLAYER, 1, 2, cards[2], position='ataque')])
+        self.assertFalse(game._field(CPU))
+        choice = choose_play(game, CPU)
+        self.assertIsNotNone(choice)
+        self.assertEqual(choice.card_id, 1)
+        self.assertEqual(choice.position, 'defesa')
+        game.play(CPU, choice)
+        self.assertTrue(game._field(CPU))
+
     def test_config_mod_20000_lp_is_global_in_match_and_simulator(self):
         with tempfile.TemporaryDirectory() as path:
             project = Project.create(Path(path), 'LP global')
