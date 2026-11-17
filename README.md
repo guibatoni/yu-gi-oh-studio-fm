@@ -1,3 +1,22 @@
+# Studio FM v1.8.9 — Vínculo com Vida e seleção de carta no deck
+
+No Studio, em **Cartas → Efeitos e bônus → Adicionar efeito**, escolha
+**Ao atacar → ⚔♥ Vínculo com Vida**. Ao declarar um ataque, o controlador
+recupera LP equivalentes ao ATK efetivo (incluindo bônus). Isso também
+funciona contra monstros em defesa; a cura pode coexistir com custos de LP.
+O campo de valor é automático e não exige digitação.
+
+**♥ Recuperar LP** facilita a identificação do efeito de restauração.
+Para **Enquanto no campo → Recebe bônus por cartas no deck**, clique
+**Escolher carta específica do deck…** para selecionar ID ou nome;
+o bônus considera cada cópia exata daquela carta na composição inicial.
+
+**Compatibilidade:** Vínculo com Vida funciona no simulador do Studio.
+O patch de runtime do PS1 ainda não implementa essa habilidade; gerar BIN/CUE
+não ativará a cura por ataque no ePSXe. A interface deve indicar essa limitação.
+
+---
+
 # Studio FM v1.8.8 — Catálogo completo no baú
 
 Abra **Passwords e baú → Baú** para consultar todas as cartas do projeto,
