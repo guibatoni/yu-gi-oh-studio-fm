@@ -10,7 +10,7 @@ from fmstudio.core import ModError
 from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_sprite_words
 from fmstudio.ps1_runtime import (
     CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, FUSION_CONFIG, NAME_COLOR_CONFIG, RUNTIME_EXT_BASE,
-    RUNTIME_MOD_BASE, SUMMON_DAMAGE, SUMMON_HEAL,
+    RUNTIME_MOD_BASE, RUNTIME_PASSWORD_BASE, SUMMON_DAMAGE, SUMMON_HEAL,
     _jump, _option_calls, _rule_patches, _valid_original_drop_entry, compile_effects, install_runtime, verify_effects,
 )
 from fmstudio.ps1_text import ICON_CODES, patch_descriptions
