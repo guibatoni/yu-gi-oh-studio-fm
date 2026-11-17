@@ -800,7 +800,7 @@ class ModEditor(ttk.Frame):
         head = ttk.Frame(self)
         head.pack(fill='x', pady=(0, 8))
         ttk.Label(head, text='Duelista').pack(side='left', padx=(0, 5))
-        chooser = ttk.Combobox(head, textvariable=self.duelist, state='readonly', values=list(self.duelist_ids), width=24)
+        chooser = ttk.Combobox(head, textvariable=self.duelist, state='readonly', values=list(self.duelist_ids), width=34)
         chooser.pack(side='left')
         chooser.bind('<<ComboboxSelected>>', lambda _e: self._load_duelist())
         self.campaign_badge = tk.Label(
@@ -1285,7 +1285,7 @@ class ModEditor(ttk.Frame):
             lines = [
                 f'{len(results)} deck(s), todos com 40 posições ponderadas e peso total 2048.',
                 f'{effects_count} posições de monstros com efeito (na composição projetada).',
-                'O Studio só usará IDs customizados #723+ quando essa opção for marcada.',
+                'IDs #723+ só entram no modo Studio, sem exportação nativa ao PS1.',
                 'A ação substitui os decks escolhidos, NÃO altera cartas, efeitos ou fusões.',
                 'Um backup do projeto será feito ao salvar.',
             ]
@@ -1307,9 +1307,13 @@ class ModEditor(ttk.Frame):
                     'efeitos': generated.effect_monsters,
                     'fusao_max_atk': generated.max_fusion_atk,
                     'customizadas': allow_custom,
+                    'deck_fixo_ps1': generated.fixed_for_ps1,
+                    'pesos_planejados': (generated.weights
+                                        if generated.fixed_for_ps1 else {}),
                 }
                 if duelist.get(DROP_FROM_DECK):
-                    candidates = set(profile['pools'][0]['pesos'])
+                    candidates = (set(profile['cartas']) if profile['cartas']
+                                  else set(profile['pools'][0]['pesos']))
                     current = duelist.setdefault(DECK_DROP_WEIGHTS, {})
                     for group in DROP_GROUPS:
                         original = current.get(group, {})
