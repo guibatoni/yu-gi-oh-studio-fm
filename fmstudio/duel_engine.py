@@ -280,10 +280,17 @@ class DuelLab:
                     destroyed.append((enemy,target['slot']))
                 if not attacker['indestrutivel']:
                     destroyed.append((side,attacker['slot']))
+        lifesteal = sum(1 for raw in card_effects(self.effects, int(source['card_id']))
+                        if raw.get('acao') == 'vinculo_vida' and raw.get('evento') == 'atacar'
+                        and check_effect(raw)['alvo'] == 'proprio')
+        # Cura por ataque DECLARADO, inclusive em defesa e sem dano de batalha.
+        # Múltiplos exemplares do mesmo efeito não acumulam cura duplicada.
+        healed = atk if lifesteal else 0
         return {'acao':'ataque','origem':(side,slot),
                 'alvo':('LP',enemy) if direct else (enemy,target_slot),
                 'posicao':against, 'ataques_usados':used+1,'ataques_max':maximum,
                 'custo_lp':min(cost,self.lp[side]),
+                'cura_lp_vinculo':healed,
                 'dano_lp_jogador':min(self.lp[side], cost+lost_attacker),
                 'dano_lp_oponente':min(self.lp[enemy], lost_defender),
                 'perfurante':attacker['perfurante'],
@@ -298,6 +305,7 @@ class DuelLab:
         key = (side, int(slot), int(self.get(side, slot)['card_id']))
         self.attacks_used[key] = result['ataques_usados']
         self.lp[side] -= result['dano_lp_jogador']
+        self.lp[side] += result['cura_lp_vinculo']
         self.lp[opposite(side)] -= result['dano_lp_oponente']
         for target_side, target_slot_to_destroy in result['destruidos']:
             self.remove(target_side, target_slot_to_destroy)
@@ -359,6 +367,10 @@ class DuelLab:
             source = self.get(side, source_slot) if source_slot is not None else None
             visible = source.get('face_up', True) if source is not None else kind != 'armadilha' or event != 'invocar'
             effects = card_effects(self.effects, cid)
+            if event == 'atacar':
+                # Cura do vínculo já é aplicada na resolução do ataque;
+                # esta via executa apenas efeitos adicionais de evento.
+                effects = [raw for raw in effects if raw.get('acao') != 'vinculo_vida']
             if skip_attack_cost and event == 'atacar':
                 # DuelMatch usa o custo somado em preview_attack/super().attack.
                 # O outro dano_lp (alvo inimigo) continua ativando normalmente.
