@@ -357,6 +357,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     patched_exe,native_report=install_runtime(
         original_exe,patched_exe,native_plan,description_icons=bool(description_icons))
     patched_exe=patch_executable(patched_exe,mod_plan,profile=native_profile)
+    from .ps1_ai import mode_for, patch_hard_ai, verify_hard_ai
+    ai_mode=mode_for(project)
+    if native_profile:
+        patched_exe,ai_report=patch_hard_ai(original_exe,patched_exe,mode=ai_mode)
+    else:
+        ai_report={'modo':ai_mode,'status':'perfil_incompativel' if ai_mode=='dificil'
+                   else 'original', 'rotinas':[], 'validado_epsxe':False}
     if mod_plan.needs_wa:
         if original_wa is None or hashlib.sha256(original_wa).hexdigest()!=expected_wa:
             raise ModError('As tabelas de duelistas exigem o WA_MRG vinculado ao projeto.')
@@ -413,8 +420,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         # A releitura confere o SLUS e, quando necessário, o arquivo WA gravado.
         with DiscReader(stage_bin) as verify:
             files={e.path.upper():e for e in verify.files() if not e.is_dir}
-            if b''.join(verify.read_entry(files['SLUS_014.11']))!=patched_exe:
+            reread_exe=b''.join(verify.read_entry(files['SLUS_014.11']))
+            if reread_exe!=patched_exe:
                 raise ModError('SLUS não corresponde após reempacotamento.')
+            if native_profile and not verify_hard_ai(original_exe,reread_exe,mode=ai_mode):
+                raise ModError('IA PS1: patch incompleto após reempacotamento; BIN antigo preservado.')
             if patched_wa is not None and b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))!=patched_wa:
                 raise ModError('WA_MRG não corresponde após reempacotamento.')
 
@@ -436,6 +446,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'descricoes_aplicadas':written_descriptions,
                 'icones_de_descricao_ps1':sorted(description_icons),
                 'efeitos_nativos_ps1':native_report,
+                'ia_nativa_ps1':ai_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
                                     'decks_fixos':list(native_plan.fixed_decks)},
