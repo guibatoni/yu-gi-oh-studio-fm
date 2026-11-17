@@ -450,7 +450,7 @@ class ModEditor(ttk.Frame):
         self.mod_lp = tk.StringVar(value='8000')
         self.ps1_ai_modes = {'Normal — IA original': 'normal',
                              'Difícil — IA aprimorada': 'dificil'}
-        self.ps1_ai_choice = tk.StringVar(value='Difícil — IA aprimorada')
+        self.ps1_ai_choice = tk.StringVar(value='Normal — IA original')
         self.opponent_first = tk.BooleanVar()
         self.status = tk.StringVar(value='Abra um projeto para editar as tabelas.')
         self.duelist_ids = {f'{i:02d} · {name}': i for i, name in enumerate(DUELIST_NAMES_REFERENCE) if i}
@@ -577,9 +577,9 @@ class ModEditor(ttk.Frame):
             self.pools, self.stock, _, _ = base_tables(self.project)
             self.rules = normalize_rules(self.project.metadata.get(CONFIG_KEY, {}), self.cards)
             self.mod_lp.set(str(starting_life(self.project, self._duel_id())['jogador']))
-            current_ai = self.rules.get('ia_ps1', 'dificil')
+            current_ai = self.rules.get('ia_ps1', 'normal')
             self.ps1_ai_choice.set(next((label for label, code in self.ps1_ai_modes.items()
-                                         if code == current_ai), 'Difícil — IA aprimorada'))
+                                         if code == current_ai), 'Normal — IA original'))
             self.status.set('')
         else:
             self.cards, self.pools, self.rules, self.stock = {}, {}, {}, []
