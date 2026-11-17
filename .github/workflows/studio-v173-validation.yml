@@ -1,0 +1,33 @@
+name: Validar Studio FM 1.7.3
+on:
+  push:
+    branches: [validation/studio-v1.7.3]
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar Tk e Python
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3-tk python3-pil python3-venv xvfb xauth
+      - name: Verificar código e testes
+        run: |
+          python3 -m compileall -q app.py fmstudio tools tests
+          python3 -m unittest discover -s tests -v
+      - name: Verificar interface
+        run: |
+          export PYTHONPATH=.
+          for test in tests/gui*_smoke.py; do
+            printf '%s\n' "$test"
+            timeout 40s xvfb-run -a python3 "$test"
+          done
+      - name: Conferir o efeito no MIPS
+        run: |
+          python3 -m venv /tmp/studio-mips
+          /tmp/studio-mips/bin/pip -q install unicorn==2.1.4
+          PYTHONPATH=. /tmp/studio-mips/bin/python tests/verify_plant_field_bonus_mips.py
+      - name: Conferir o pacote do atualizador
+        run: python3 tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip

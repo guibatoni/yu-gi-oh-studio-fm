@@ -1,3 +1,10 @@
+## v1.7.3 — Configuração de bônus por tipo no campo
+
+- O editor mostra quem recebe o bônus e qual tipo entra na contagem.
+- Em um bônus por tipo no campo, **Esta carta** ganha ATK/DEF por monstro do
+  tipo contado, inclusive por monstros virados para baixo. Na aura, cada
+  monstro do tipo escolhido recebe o bônus.
+
 ## v1.7.2 — Fusões personalizadas no BIN/CUE
 
 - Receitas salvas em **Relações** com IDs originais passam a integrar a
