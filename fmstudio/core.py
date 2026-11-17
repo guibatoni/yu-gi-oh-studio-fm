@@ -39,7 +39,8 @@ EVENTS = {
 ACTIONS = {
     'aumentar_atk':'Aumentar ATK', 'reduzir_atk':'Reduzir ATK',
     'aumentar_def':'Aumentar DEF', 'reduzir_def':'Reduzir DEF',
-    'dano_lp':'Causar dano aos LP', 'cura_lp':'Recuperar LP',
+    'dano_lp':'Causar dano aos LP', 'cura_lp':'♥ Recuperar LP ao entrar / evento',
+    'vinculo_vida':'⚔♥ Vínculo com Vida (cura ao atacar)',
     'aura_tipo':'Aura por tipo ou atributo',
     'bonus_por_tipo':'Recebe bônus por cartas no campo',
     'bonus_deck_tipo':'Recebe bônus por cartas no deck',
@@ -296,6 +297,12 @@ def check_effect(entry: dict):
         if action != 'ataques_multiplos' and amount:
             raise ModError('Habilidade de proteção/combate não usa valor numérico')
         return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
+    if action == 'vinculo_vida':
+        if event != 'atacar' or target != 'proprio':
+            raise ModError('Vínculo com Vida exige Ao atacar e alvo próprio/controlador.')
+        if str(entry.get('valor', 0)) != '0':
+            raise ModError('Vínculo com Vida usa o ATK efetivo; não informe valor fixo.')
+        return {'evento': event, 'acao': action, 'alvo': target, 'valor': 0, 'observacao': note}
     if action == 'perder_lp_por_ataque':
         if event != 'atacar' or target != 'proprio':
             raise ModError('Perda de LP exige evento "Ao atacar" e alvo próprio')
