@@ -75,7 +75,9 @@ with TemporaryDirectory() as tmp:
         root.update()
         box = ed.drops.tree.bbox(str(dragon), 'peso')
         if box:
-            ed.drops._edit_weight(SimpleNamespace(x=box[0] + 3, y=box[1] + 3))
+            # Clique no centro da célula para não acertar a borda da coluna anterior.
+            ed.drops._edit_weight(SimpleNamespace(
+                x=box[0] + box[2] // 2, y=box[1] + box[3] // 2))
             assert ed.drops.inline is not None
             ed.drops._close_inline()
         ed.drops.tree.selection_set([str(dragon), str(spell)])
