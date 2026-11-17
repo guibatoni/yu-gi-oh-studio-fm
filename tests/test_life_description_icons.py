@@ -4,6 +4,8 @@ from pathlib import Path
 
 from fmstudio.ps1_god_icon import decode_icon_png
 from fmstudio.ps1_text import ICON_CODES, _indexed_sprite
+from fmstudio.core import ModError
+from fmstudio.ps1_content import _encode_description
 from fmstudio.richtext import CUSTOM_ICONS, tokens
 
 ROOT = Path(__file__).resolve().parents[1] / "assets" / "icons"
