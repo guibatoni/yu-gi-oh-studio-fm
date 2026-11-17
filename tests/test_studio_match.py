@@ -369,6 +369,23 @@ class StudioMatchTests(unittest.TestCase):
         with self.assertRaises(ModError):
             deal_deck(profile,cards,{},Random(8))
 
+    def test_config_mod_20000_lp_is_global_in_match_and_simulator(self):
+        with tempfile.TemporaryDirectory() as path:
+            project = Project.create(Path(path), 'LP global')
+            project.cards[1] = card(1500, 1200)
+            save_rules(project, {
+                'lp_inicial': 20000, 'lp_jogador': 8500,
+                'duelistas': {'1': {'lp': 7000, 'deck': {'cartas': [1]}},
+                              '2': {'lp': 9000, 'deck': {'cartas': [1]}}},
+                'iniciais': {'Teste': {'cartas': [1]}},
+            })
+            for opponent in (1, 2):
+                self.assertEqual(starting_life(project, opponent), {PLAYER: 20000, CPU: 20000})
+                match = make_match(project, None, opponent, 'Teste', rng=Random(7))
+                self.assertEqual(match.lp, {PLAYER: 20000, CPU: 20000})
+            state, _ = project.simulate(1, 'invocar')
+            self.assertEqual((state['lp_jogador'], state['lp_adversario']), (20000, 20000))
+
     def test_project_roundtrip_expanded_card_relations_and_mod_rules(self):
         with tempfile.TemporaryDirectory() as path:
             project = Project.create(Path(path),'Novo')
