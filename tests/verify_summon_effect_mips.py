@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from unicorn import Uc, UC_ARCH_MIPS, UC_MODE_LITTLE_ENDIAN, UC_MODE_MIPS32
 from unicorn.mips_const import (
-    UC_MIPS_REG_A0, UC_MIPS_REG_GP, UC_MIPS_REG_RA, UC_MIPS_REG_SP,
+    UC_MIPS_REG_A0, UC_MIPS_REG_GP, UC_MIPS_REG_RA, UC_MIPS_REG_SP, UC_MIPS_REG_V0,
 )
 
 from fmstudio.ps1_runtime import CONFIG_ADDRESS, SUMMON_DAMAGE, SUMMON_HEAL, compile_effects
@@ -20,12 +20,15 @@ project = SimpleNamespace(
     effects={'2': [
         {'evento': 'invocar', 'acao': 'cura_lp', 'alvo': 'proprio', 'valor': 2000},
         {'evento': 'invocar', 'acao': 'dano_lp', 'alvo': 'inimigo', 'valor': 600},
+        {'evento': 'continuo', 'acao': 'ataque_primeiro_turno', 'alvo': 'proprio', 'valor': 0},
+        {'evento': 'continuo', 'acao': 'monstro_imune_magia', 'alvo': 'proprio', 'valor': 0},
     ]},
     metadata={},
     get=lambda cid: {'tipo_id': 0},
 )
 plan = compile_effects(project, True)
-assert plan.accepted == ((2, 'cura_lp'), (2, 'dano_lp')), plan
+assert plan.accepted == ((2, 'cura_lp'), (2, 'dano_lp'),
+                         (2, 'ataque_primeiro_turno'), (2, 'monstro_imune_magia')), plan
 off = struct.unpack_from('<H', plan.data, 2 + 2 * 2)[0]
 assert struct.unpack_from('<BBHHH', plan.data, off + 8)[0] == SUMMON_HEAL
 assert struct.unpack_from('<BBHHH', plan.data, off + 16)[0] == SUMMON_DAMAGE
@@ -48,6 +51,8 @@ for pc, data in ((RUNTIME_BASE, RUNTIME),
     write(pc, data)
 for slot in (5, 20):
     write(0x801A7AD8 + 28 * slot + 12, struct.pack('<h', 2))
+    write(0x801A7AD8 + 28 * slot + 22, struct.pack('<H', 0x9000))  # occupied, face-down
+write(0x8009B23A, struct.pack('<H', 5))  # FIELD phase
 
 def summon(slot):
     ret = 0x80010000
@@ -56,6 +61,25 @@ def summon(slot):
     cpu.reg_write(UC_MIPS_REG_GP, 0x8009AF08)
     cpu.reg_write(UC_MIPS_REG_SP, 0x801FF000)
     cpu.emu_start(ENTRY_POINTS['summon_damage'], ret, timeout=1_000_000, count=80_000)
+
+def protection(slot):
+    ret = 0x80010000
+    cpu.reg_write(UC_MIPS_REG_A0, slot)
+    cpu.reg_write(UC_MIPS_REG_RA, ret)
+    cpu.reg_write(UC_MIPS_REG_GP, 0x8009AF08)
+    cpu.reg_write(UC_MIPS_REG_SP, 0x801FF000)
+    cpu.emu_start(ENTRY_POINTS['protection'], ret, timeout=1_000_000, count=80_000)
+    return cpu.reg_read(UC_MIPS_REG_V0)
+
+# Hidden monster retains ONLY FIRST_TURN (0x20), not MAGIC immunity (0x01).
+assert protection(5) == 0x20, protection(5)
+assert protection(20) == 0x20, protection(20)
+write(0x801A7AD8 + 28 * 5 + 22, struct.pack('<H', 0x8000))  # visible
+assert protection(5) == 0x21, protection(5)
+write(0x801A7AD8 + 28 * 5 + 22, struct.pack('<H', 0x9000))
+write(0x801A7AD8 + 28 * 20 + 22, struct.pack('<H', 0))
+assert protection(20) == 0, protection(20)
+write(0x801A7AD8 + 28 * 20 + 22, struct.pack('<H', 0x9000))
 
 set_lp(0, 8000)
 set_lp(1, 8000)
@@ -66,4 +90,4 @@ assert (lp(0), lp(1)) == (9400, 9400), (lp(0), lp(1))
 set_lp(0, 65000)
 summon(5)
 assert lp(0) == 65535, lp(0)
-print('MIPS: cura 2000 LP na invocação, dano 600 ao rival, ambos os donos e saturação u16 conferidos.')
+print('MIPS: cura/dano LP, proteção FIRST_TURN oculta e sem imunidade mágica, ambos os donos e saturação conferidos.')
