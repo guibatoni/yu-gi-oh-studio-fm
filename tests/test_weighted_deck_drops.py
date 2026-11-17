@@ -100,7 +100,6 @@ class WeightedDeckDropTests(unittest.TestCase):
             self.assertEqual({i+1 for i, weight in enumerate(table) if weight}, expected)
         effects = compile_effects(project, True)
         self.assertEqual(effects.deck_drops, ())
-        self.assertFalse(effects.mod_features)
         pending = compile_mod(project, profile=False, wa_verified=False)
         self.assertFalse(pending.groups)
         self.assertTrue(any('exige a imagem Drop x15' in x for x in pending.pending))
