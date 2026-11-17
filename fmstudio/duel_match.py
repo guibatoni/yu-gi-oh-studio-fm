@@ -424,6 +424,10 @@ class DuelMatch(DuelLab):
             self.logs.append(result)
             return result
         result = super().attack(side, action.slot, target_slot=action.target, against=None)
+        # Incluir custos e gatilhos de ataque no resultado do duelo,
+        # não somente o dano de combate calculado por super().attack.
+        result['dano_lp_jogador'] = max(0, old_lp[side] - self.lp[side])
+        result['dano_lp_oponente'] = max(0, old_lp[enemy] - self.lp[enemy])
         if target is not None and (enemy, action.target) in result['destruidos'] and self.get(side, action.slot) is not None:
             self.apply_event(source['card_id'], side, 'destruir', source_slot=action.slot, strict=False)
         return result
