@@ -1,3 +1,13 @@
+# Studio FM v1.8.13 — Geração de campanha difícil
+
+Em **Edição do Mod → Deck do oponente**, selecione **Gerar Decks Difíceis (3/5 → 5/5)** para construir todos os 39 decks ou regenerar somente o adversário selecionado. A dificuldade sobe de 3,0 a 5,0; o cabeçalho e o seletor exibem o nível e o foco de efeito. A IA recebe decks baseados nas cartas e efeitos *existentes*, rotas de fusão encadeadas (até três etapas), materiais com 1500 ATK/DEF base no máximo, equips realmente compatíveis e pools ponderadas com total 2048.
+
+**Compatibilidade:** o modo PS1 usa apenas IDs até 720 nos pools de deck (limite de leitura retail); com limites de cópias 1–2, o gerador converte a lista em deck fixo para o perfil Drop x15, guardando os pesos sugeridos nos metadados. A opção de cartas **#723+** é exclusiva do simulador Studio e não significa que o motor PS1 poderá executá-las. Efeitos inéditos do Studio também dependem do suporte específico do motor PS1 e podem não funcionar no ePSXe. Quando não houver fusões 3000+ viáveis ou monstros com efeito suficientes na ISO, o gerador apresenta aviso e não inventa conteúdo.
+
+A geração valida todos os decks antes de gravar, pede confirmação, mantém os drops e todas as demais configurações, e usa a rotina de backup existente no projeto. Para instalações Windows, o GitHub Actions gera o executável e publica o release.
+
+---
+
 # Studio FM v1.8.12 — 39 decks ponderados de oponentes
 
 Na aba **Edição do Mod → Deck do oponente**, use **Aplicar 39 decks (3/5–5/5)** para instalar as 39 pools ponderadas (40 compras, 2048 pontos cada). A aplicação exige confirmação e mantém outros ajustes do projeto. Os materiais de fusão respeitam o limite base de 1500 ATK/DEF; fusões e equipamentos podem superá-lo. O botão não altera o projeto até o usuário confirmar. Faça backup antes de aplicar; dados de cartas customizadas, receitas e drops que não dependem do deck continuam preservados.
