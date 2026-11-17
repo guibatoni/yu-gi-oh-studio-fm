@@ -24,7 +24,7 @@ jobs:
           python -m unittest discover -s tests -v
       - name: Editar efeito na interface real
         run: |
-          xvfb-run -a python tests/gui_effect_edit_smoke.py
-          xvfb-run -a python tests/gui_continuous_smoke.py
+          PYTHONPATH=. xvfb-run -a python tests/gui_effect_edit_smoke.py
+          PYTHONPATH=. xvfb-run -a python tests/gui_continuous_smoke.py
       - name: Validar pacote do atualizador
         run: python tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip
