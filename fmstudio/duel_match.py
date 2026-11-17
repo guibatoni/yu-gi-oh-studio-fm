@@ -415,6 +415,9 @@ class DuelMatch(DuelLab):
             if self.get(side, action.slot) is not None:
                 self.attacks_used[side, action.slot, source['card_id']] = starting['ataques_usados']
             self.lp[side] = max(0, self.lp[side] - starting['custo_lp'])
+            # Um ataque declarado também cura quando é interrompido por armadilha.
+            if self.get(side, action.slot) is not None:
+                self.lp[side] += starting.get('cura_lp_vinculo', 0)
             result = {'acao': 'ataque', 'origem': (side, action.slot), 'alvo': starting['alvo'],
                       'dano_lp_jogador': max(0, old_lp[side] - self.lp[side]),
                       'dano_lp_oponente': max(0, old_lp[enemy] - self.lp[enemy]),
