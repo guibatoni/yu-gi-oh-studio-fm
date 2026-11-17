@@ -35,7 +35,7 @@ with TemporaryDirectory() as td:
     assert dialog.recipient.cget('text') == 'Esta carta'
     assert not dialog.combos['alvo'].grid_info()
     assert dialog.labels['tipo_id'].cget('text') == 'Tipo contado no campo'
-    assert dialog.type_combo.cget('state') == 'readonly'
+    assert dialog.type_combo.instate(('readonly', '!disabled'))
     dialog.type_combo.current(dialog.type_ids.index(19))
     dialog.type_combo.event_generate('<<ComboboxSelected>>')
     root.update()
