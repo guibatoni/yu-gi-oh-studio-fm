@@ -655,28 +655,66 @@ class ModEditor(ttk.Frame):
             self.drops.load(self.cards, weights)
 
     def _render_deck_drops(self):
-        profile = duelist_profile(self.rules, self.pools, self._duel_id())
-        fixed = set(profile.get('cartas', ()))
-        pool = {cid for row in profile.get('pools', ()) for cid in row['pesos']}
-        ids = sorted(fixed | pool)
-        self.deck_drop_candidates.delete(*self.deck_drop_candidates.get_children())
-        for index, cid in enumerate(ids):
-            source = 'Fixa e pool' if cid in fixed and cid in pool else 'Fixa' if cid in fixed else 'Pool'
-            self.deck_drop_candidates.insert('', 'end', iid=str(cid), values=(
-                compact_number(cid), display_name(cid, self.cards), source),
-                tags=card_row_tags(self.deck_drop_candidates, self.cards.get(cid), index))
-        self.deck_drop_detail.configure(text=f'{len(ids)} candidatas na configuração salva. A vitória premia uma carta do deck efetivamente sorteado, em qualquer rank.')
+        opponent = self._duel_id()
+        candidates = deck_drop_candidates(self.rules, self.pools, opponent)
+        # Exibir também os candidatos com peso zero para poder reativá-los.
+        cards = {cid: self.cards[cid] for cid in sorted(candidates) if cid in self.cards}
+        rank = self.rank_ids[self.rank.get()]
+        weights = deck_drop_weights(self.rules, self.pools, opponent, rank)
+        self.deck_drop_table.load(cards, weights)
+        label = DROP_GROUPS.get(RANK_GROUPS.get(rank, rank), rank)
+        self.deck_drop_detail.configure(text=(
+            f'{len(cards)} cartas candidatas do deck salvo · {label}. '
+            'Selecione uma carta e edite o peso; peso 0 impede o drop. '
+            'A probabilidade muda automaticamente. '
+            'Decks com pools usam seus candidatos configurados, mesmo se '
+            'a carta não saiu no sorteio deste duelo.'
+        ))
 
-    def _open_drop_candidate(self, _event):
-        selection = self.deck_drop_candidates.selection()
-        if selection:
-            self.studio.select_card(int(selection[0]))
+    def _save_deck_drop(self, weights):
+        opponent = self._duel_id()
+        group = RANK_GROUPS.get(self.rank_ids[self.rank.get()],
+                               self.rank_ids[self.rank.get()])
+        candidates = deck_drop_candidates(self.rules, self.pools, opponent)
+        if not candidates:
+            raise ModError('Salve primeiro o deck do oponente para editar seus drops.')
+        if not weights:
+            raise ModError('Mantenha pelo menos uma carta com peso positivo em cada grupo.')
+        if not set(weights).issubset(candidates):
+            raise ModError('Drops do próprio deck só aceitam cartas do deck do oponente.')
+        rules = self._edit()
+        duel = self._selected_duelist(rules)
+        if not duel.get(DROP_FROM_DECK):
+            raise ModError('Ative drops ponderados do próprio deck antes de editar.')
+        duel.setdefault(DECK_DROP_WEIGHTS, {})[group] = weights
+        self._commit(rules, f'Pesos de drop do deck salvos em {DROP_GROUPS[group]}.')
+
+    def _reset_deck_drop(self):
+        try:
+            opponent = self._duel_id()
+            candidates = deck_drop_candidates(self.rules, self.pools, opponent)
+            weights = {cid: 1 for cid in sorted(candidates)}
+            self._save_deck_drop(weights)
+            self._render_deck_drops()
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Drops ponderados', str(exc), parent=self)
 
     def _toggle_deck_drops(self):
         try:
             rules = self._edit()
-            self._selected_duelist(rules)[DROP_FROM_DECK] = self.use_deck_drops.get()
-            caption = 'Drops do próprio deck ativados.' if self.use_deck_drops.get() else 'Pesos por rank restaurados.'
+            opponent = self._duel_id()
+            active = self.use_deck_drops.get()
+            duel = self._selected_duelist(rules)
+            if active:
+                ids = deck_drop_candidates(rules, self.pools, opponent)
+                if not ids:
+                    raise ModError('Salve primeiro um deck de oponente com cartas para ativar os drops.')
+                custom = duel.setdefault(DECK_DROP_WEIGHTS, {})
+                for group in DROP_GROUPS:
+                    custom.setdefault(group, {cid: 1 for cid in sorted(ids)})
+            duel[DROP_FROM_DECK] = active
+            caption = ('Drops ponderados do próprio deck ativados.'
+                       if active else 'Pesos por rank do modo original restaurados.')
             self._commit(rules, caption)
         except (ModError, ValueError, OSError) as exc:
             self.status.set(str(exc))
