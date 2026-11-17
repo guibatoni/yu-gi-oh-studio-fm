@@ -506,20 +506,29 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             reread_exe=b''.join(verify.read_entry(files['SLUS_014.11']))
             if reread_exe!=patched_exe:
                 raise ModError('SLUS não corresponde após reempacotamento.')
+            # Confirmar texto compilado de cada carta, não apenas ponteiro e FF.
+            # Falha interrompe o build na pasta temporária, sem tocar no BIN anterior.
+            confirmed_descriptions = []
             if written_descriptions:
-                from .ps1_content import description_slot
+                from .ps1_description_verify import inspect_exe_description
+                catalog = {i:project.get(i) for i in project.cards} if hasattr(project, 'cards') else {}
                 for row in written_descriptions:
-                    try:
-                        offset, _ = description_slot(reread_exe, row['id'])
-                    except ModError as exc:
+                    checked = inspect_exe_description(
+                        reread_exe, row['id'], texts[row['id']], catalog,
+                        original_exe=original_exe, native_profile=native_profile)
+                    if checked['status'] != 'aplicada':
                         raise ModError(
-                            f'Carta #{row["id"]}: a descrição não pode ser lida no BIN final: {exc}. '
-                            'A cópia anterior foi preservada.') from exc
-                    if (offset != row['offset_exe'] or
-                            reread_exe[offset + row['bytes'] - 1] != 0xFF):
+                            f'Carta #{row["id"]}: texto do BIN não corresponde ao salvo no Studio: '
+                            f'{checked["motivo"]} O BIN/CUE anterior foi preservado.')
+                    if checked['offset_exe'] != row['offset_exe']:
                         raise ModError(
-                            f'Carta #{row["id"]}: a descrição gravada diverge do ponteiro PS1. '
-                            'A cópia anterior foi preservada.')
+                            f'Carta #{row["id"]}: ponteiro da descrição difere do manifesto. '
+                            'O BIN/CUE anterior foi preservado.')
+                    confirmed_descriptions.append({
+                        'id': row['id'],
+                        'ponteiro': checked['ponteiro'],
+                        'sha256_texto': checked['sha256_texto_bin'],
+                    })
             if native_profile and ai_mode=='dificil' and not verify_hard_ai(original_exe,reread_exe,mode=ai_mode):
                 raise ModError('IA PS1: patch incompleto após reempacotamento; BIN antigo preservado.')
             if native_profile and lp_hud_initial>9999 and not verify_lp_hud(
@@ -547,6 +556,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'setores_modificados':len(changed),'lbas':sorted(changed),
                 'nomes_aplicados':written_names,
                 'descricoes_aplicadas':written_descriptions,
+                'descricoes_confirmadas_no_bin':confirmed_descriptions,
                 'descricoes_nao_gravadas':descriptions_not_written,
                 'politica_descricoes_ps1':description_policy,
                 'descricoes_somente_studio':descriptions_studio_only,
