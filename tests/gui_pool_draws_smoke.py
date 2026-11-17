@@ -6,7 +6,7 @@ from unittest.mock import patch
 from fmstudio.core import ModError, Project
 from fmstudio.drafts import DraftSession
 from fmstudio.gui import Studio
-from fmstudio.mod_data import CONFIG_KEY
+from fmstudio.mod_data import CONFIG_KEY, normalize_rules
 from fmstudio.tables import DECK_SIZE
 
 
@@ -36,7 +36,9 @@ with TemporaryDirectory() as temp:
         assert saved['pools'][0]['compras'] == 40
         assert saved['pools'][0]['pesos'] == weighted
         assert saved['cartas'] == []
-        assert Project.open(project.folder).metadata[CONFIG_KEY]['duelistas']['1']['deck'] == saved
+        reopened = Project.open(project.folder)
+        normalized = normalize_rules(reopened.metadata[CONFIG_KEY], reopened.cards)
+        assert normalized['duelistas']['1']['deck'] == saved
 
         # Se o Spinbox ficar temporariamente vazio, preservar o valor salvo.
         editor.draws.set('')
