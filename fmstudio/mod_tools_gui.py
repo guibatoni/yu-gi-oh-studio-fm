@@ -20,11 +20,11 @@ from .passwords import (
 from .tables import CARD_COUNT, DECK_SIZE, TYPE_NAMES
 
 
-def _tree(parent, columns, *, height=6, raw_values=None):
+def _tree(parent, columns, *, height=6, raw_values=None, selectmode='browse'):
     holder = ttk.Frame(parent)
     holder.pack(fill='both', expand=True, pady=(6, 0))
     tree = ttk.Treeview(holder, columns=[row[0] for row in columns], show='headings',
-                        selectmode='browse', height=height)
+                        selectmode=selectmode, height=height)
     tree.tag_configure('stripe', background=ROW_ALT)
     tree.pack(side='left', fill='both', expand=True)
     scroll = ttk.Scrollbar(holder, command=tree.yview)

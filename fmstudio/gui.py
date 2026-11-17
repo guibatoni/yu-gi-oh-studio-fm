@@ -644,7 +644,7 @@ class Studio(tk.Tk):
         filters.columnconfigure(1,weight=1)
         treeholder = tk.Frame(sidebar,bg=SURFACE)
         treeholder.pack(fill='both',expand=True,padx=8,pady=(0,8))
-        self.tree = ttk.Treeview(treeholder,columns=('id','nome','atk','def'),show='headings',selectmode='browse')
+        self.tree = ttk.Treeview(treeholder,columns=('id','nome','atk','def'),show='headings',selectmode='extended')
         for col,text,width,anchor in [('id','ID',48,'w'),('nome','Nome / identificação',146,'w'),('atk','ATK',56,'e'),('def','DEF',56,'e')]:
             self.tree.heading(col,text=text)
             self.tree.column(col,width=width,anchor=anchor,stretch=(col=='nome'))
@@ -655,10 +655,12 @@ class Studio(tk.Tk):
         scroll.pack(side='right',fill='y')
         self.tree.bind('<<TreeviewSelect>>',self._on_card_select)
         self.tree.bind('<Button-3>', self._card_menu)
+        self.tree.bind('<Control-a>', self._select_visible_cards)
         self.tree.bind('<Double-1>', lambda _event: self.tabs.select(self.tab_cards) if self.tree.selection() else None)
         self.card_menu = self._menu(self)
         self.card_menu.add_command(label='Abrir carta', command=lambda: self.tabs.select(self.tab_cards))
-        self.card_menu.add_command(label='Adicionar ao deck do oponente', command=self._add_selected_to_deck)
+        self.card_menu.add_command(label='Adicionar selecionadas ao deck do oponente',
+                                   command=self._add_selected_to_deck)
         self.count_label = tk.Label(sidebar,text='Importe suas tabelas para começar',bg=SURFACE,fg=MUTED,font=('Segoe UI',9))
         self.count_label.pack(anchor='w',padx=14,pady=(0,5))
         self.pending_label = tk.Label(sidebar,text='Nenhuma edição pendente',bg=SURFACE,fg=MUTED,font=('Segoe UI',9,'bold'))
@@ -702,7 +704,8 @@ class Studio(tk.Tk):
         item = self.tree.identify_row(event.y)
         if not item or self._extract_running:
             return
-        self.tree.selection_set(item)
+        if item not in self.tree.selection():
+            self.tree.selection_set(item)
         self.tree.focus(item)
         self._on_card_select()
         try:
@@ -710,9 +713,15 @@ class Studio(tk.Tk):
         finally:
             self.card_menu.grab_release()
 
+    def _select_visible_cards(self, _event=None):
+        visible = self.tree.get_children()
+        self.tree.selection_set(visible)
+        return 'break'
+
     def _add_selected_to_deck(self):
-        if self.selected_id is not None:
-            self.mod_editor.add_catalog_card(self.selected_id)
+        selected = [int(cid) for cid in self.tree.selection()]
+        if selected:
+            self.mod_editor.add_catalog_cards(selected)
 
     def _form_entry(self,parent,label,key,row,width=22,kind='text'):
         ttk.Label(parent,text=label).grid(row=row*2,column=0,sticky='w',padx=(0,12),pady=(9,2))
@@ -1408,7 +1417,8 @@ class Studio(tk.Tk):
         return row[{'atk': 'ataque', 'def': 'defesa', 'nome': 'nome'}[field]]
 
     def _refresh_cards(self):
-        keep = str(self.selected_id) if self.selected_id else None
+        keep = self.tree.selection()
+        active = str(self.selected_id) if self.selected_id else None
         top = self.tree.yview()[0]
         self.tree.delete(*self.tree.get_children())
         if not self.project or not self.project.cards:
@@ -1447,8 +1457,11 @@ class Studio(tk.Tk):
             count+=1
         self.sort_cards()
         self.count_label.configure(text=f'{count} cartas exibidas  •  {len(self.project.cards)} carregadas')
-        if keep and self.tree.exists(keep):
-            self.tree.selection_set(keep)
+        valid = [cid for cid in keep if self.tree.exists(cid)]
+        if valid:
+            self.tree.selection_set(valid)
+        elif active and self.tree.exists(active):
+            self.tree.selection_set(active)
         self.tree.yview_moveto(top)
         self._update_pending_label()
 

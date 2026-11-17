@@ -47,7 +47,9 @@ class WeightTable(ttk.Frame):
         search.pack(fill='x', pady=(0, 5))
         ttk.Label(search, text='Filtrar lista').pack(side='left', padx=(0, 5))
         ttk.Entry(search, textvariable=self.query).pack(side='left', fill='x', expand=True)
-        ttk.Label(self, text='Adicionar por nome ou IDs separados por vírgula',
+        ttk.Button(search, text='Selecionar visíveis',
+                   command=self._select_visible).pack(side='right', padx=(7, 0))
+        ttk.Label(self, text='Selecione várias cartas com Ctrl/Shift ou informe IDs separados por vírgula.',
                   foreground=MUTED).pack(anchor='w')
         edit = ttk.Frame(self)
         edit.pack(fill='x', pady=(0, 5))
@@ -62,12 +64,12 @@ class WeightTable(ttk.Frame):
         weight.pack(side='left', padx=(0, 4))
         weight.bind('<Return>', lambda _event: self._apply())
         ttk.Button(edit, text='Aplicar peso', command=self._apply).pack(side='left')
-        ttk.Button(edit, text='Remover', style='Danger.TButton',
+        ttk.Button(edit, text='Remover selecionadas', style='Danger.TButton',
                    command=self._remove).pack(side='left', padx=(4, 0))
         holder = ttk.Frame(self)
         holder.pack(fill='both', expand=True)
         self.tree = ttk.Treeview(holder, columns=WEIGHT_COLUMNS, displaycolumns=WEIGHT_COLUMNS[:-1],
-                                 show='headings', height=6)
+                                 show='headings', selectmode='extended', height=6)
         widths = (58, 195, 70, 105, 100)
         for key, label, width in zip(WEIGHT_COLUMNS, ('ID', 'Carta', 'Peso', 'Chance', 'Chance PS1'), widths):
             self.tree.heading(key, text=label)
@@ -79,6 +81,8 @@ class WeightTable(ttk.Frame):
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind('<<TreeviewSelect>>', self._select)
         self.tree.bind('<Double-1>', self._edit_weight)
+        self.tree.bind('<Delete>', lambda _event: self._remove())
+        self.tree.bind('<Control-a>', self._select_visible)
         self.summary = ttk.Label(self, foreground=MUTED)
         self.summary.pack(anchor='w', pady=(3, 0))
         self.query.trace_add('write', lambda *_: self.render())
@@ -130,10 +134,14 @@ class WeightTable(ttk.Frame):
                 _probability(self._ps1_weight(cid), POOL_TOTAL) if self.ps1_weights else '—'),
                 tags=card_row_tags(self.tree, self.cards.get(cid), index))
         self.sort_rows()
-        if keep and self.tree.exists(keep[0]):
-            self.tree.selection_set(keep[0])
+        valid = [item for item in keep if self.tree.exists(item)]
+        if valid:
+            self.tree.selection_set(valid)
         self.tree.yview_moveto(top)
-        self.summary.configure(text=f'{len(self.weights)} cartas · peso total {compact_number(total)}')
+        count = len(self.tree.selection())
+        suffix = f' · {count} selecionadas' if count > 1 else ''
+        self.summary.configure(text=(
+            f'{len(self.weights)} cartas com peso · peso total {compact_number(total)}{suffix}'))
 
     def _search(self, _event=None):
         query = search_text(self.selected.get()).strip()
@@ -142,16 +150,32 @@ class WeightTable(ttk.Frame):
 
     def _select(self, _event):
         selection = self.tree.selection()
-        if selection and int(selection[0]) in self.cards:
+        if len(selection) == 1 and int(selection[0]) in self.cards:
             cid = int(selection[0])
             self.selected.set(f'#{cid} — {display_name(cid, self.cards)}')
             self.weight.set(str(self.weights.get(cid, 0)))
+        elif len(selection) > 1:
+            self.selected.set('')
+        self.summary.configure(text=(
+            f'{len(self.weights)} cartas com peso · peso total {compact_number(sum(self.weights.values()))}'
+            + (f' · {len(selection)} selecionadas' if len(selection) > 1 else '')))
+
+    def _select_visible(self, _event=None):
+        visible = self.tree.get_children()
+        self.tree.selection_set(visible)
+        self._select(None)
+        if visible:
+            self.tree.focus(visible[0])
+            self.tree.focus_set()
+        return 'break'
 
     def _apply(self):
         try:
             raw = self.selected.get().strip()
             amount = simulation_nonnegative_int(self.weight.get(), 'Peso')
-            if raw in self.labels:
+            if len(self.tree.selection()) > 1:
+                ids = [int(cid) for cid in self.tree.selection()]
+            elif raw in self.labels:
                 ids = [self.labels[raw]]
             elif re.fullmatch(r'#?[0-9]+(?:[\s,]+#?[0-9]+)*', raw):
                 ids = [positive_int(part.removeprefix('#'), 'Carta') for part in re.split(r'[\s,]+', raw)]
@@ -167,9 +191,10 @@ class WeightTable(ttk.Frame):
             messagebox.showerror('Tabela de pesos', str(exc), parent=self)
 
     def _remove(self):
-        if self.tree.selection():
+        selection = tuple(int(cid) for cid in self.tree.selection())
+        if selection:
             try:
-                self._set(int(self.tree.selection()[0]), 0)
+                self._update_weights(dict.fromkeys(selection, 0))
             except (ModError, OSError, ValueError) as exc:
                 messagebox.showerror('Tabela de pesos', str(exc), parent=self)
 
@@ -301,15 +326,21 @@ class DeckProfileEditor(ttk.Frame):
         fixed.grid(row=0, column=1, sticky='nsew', padx=(3, 0))
         from .mod_tools_gui import _tree
         self.catalog = _tree(catalog, [('id', 'ID', 50), ('nome', 'Carta', 120),
-                                       ('tipo', 'Tipo', 80)], height=5, raw_values=self._catalog_sort_value)
+                                       ('tipo', 'Tipo', 80)], height=5, raw_values=self._catalog_sort_value,
+                             selectmode='extended')
         self.deck = _tree(fixed, [('id', 'ID', 50), ('nome', 'Carta', 126),
-                                  ('qtd', 'Cópias', 58)], height=5, raw_values=self._deck_sort_value)
+                                  ('qtd', 'Cópias', 58)], height=5, raw_values=self._deck_sort_value,
+                          selectmode='extended')
         self.catalog.bind('<Double-1>', lambda _event: self.change_card('add'))
         self.catalog.bind('<Return>', lambda _event: self.change_card('add'))
         self.catalog.bind('<<TreeviewSelect>>', self._update_buttons)
+        self.catalog.bind('<Control-a>', self._select_all_catalog)
         self.deck.bind('<<TreeviewSelect>>', self._select_copy)
+        self.deck.bind('<Control-a>', self._select_all_deck)
         self.deck.bind('<Delete>', lambda _event: self.change_card('remove'))
         search.bind('<Return>', lambda _event: self._focus_result())
+        ttk.Label(self.fixed_pane, text='Ctrl/Shift: selecione várias cartas; as ações valem para todas.',
+                  foreground=MUTED).pack(anchor='w', pady=(3, 0))
 
         controls = ttk.Frame(self.fixed_pane)
         controls.pack(fill='x', pady=2)
@@ -318,8 +349,8 @@ class DeckProfileEditor(ttk.Frame):
         self.add_count.pack(side='left', padx=(0, 4))
         self.add_btn = ttk.Button(controls, text='＋ Adicionar', style='Accent.TButton',
                                   command=lambda: self.change_card('add'))
-        self.add_btn.pack(side='left', padx=(0, 10))
-        ttk.Label(controls, text='Total da carta').pack(side='left', padx=(0, 4))
+        self.add_btn.pack(side='left', padx=(0, 6))
+        ttk.Label(controls, text='Total por carta').pack(side='left', padx=(0, 4))
         ttk.Spinbox(controls, from_=1, to=MAX_DECK, width=3,
                     textvariable=self.quantity).pack(side='left', padx=(0, 4))
         self.set_btn = ttk.Button(controls, text='Ajustar', command=lambda: self.change_card('set'))
@@ -327,6 +358,12 @@ class DeckProfileEditor(ttk.Frame):
                                      command=lambda: self.change_card('remove'))
         for button in (self.set_btn, self.remove_btn):
             button.pack(side='left', padx=(0, 4))
+        selection_tools = ttk.Frame(self.fixed_pane)
+        selection_tools.pack(fill='x', pady=(3, 0))
+        ttk.Button(selection_tools, text='Selecionar catálogo visível',
+                   command=self._select_all_catalog).pack(side='left', padx=(0, 6))
+        ttk.Button(selection_tools, text='Selecionar deck visível',
+                   command=self._select_all_deck).pack(side='left')
         ttk.Label(self.fixed_pane, text='IDs (ex. 16x2, 723)').pack(anchor='w', pady=(3, 0))
         ttk.Entry(self.fixed_pane, textvariable=self.fixed).pack(fill='x')
 
@@ -387,8 +424,9 @@ class DeckProfileEditor(ttk.Frame):
             tree.insert('', 'end', iid=str(cid), values=values,
                         tags=card_row_tags(tree, self.cards.get(cid), index))
         tree.sort_rows()
-        if selected and tree.exists(selected[0]):
-            tree.selection_set(selected[0])
+        valid = [item for item in selected if tree.exists(item)]
+        if valid:
+            tree.selection_set(valid)
         tree.yview_moveto(top)
 
     def _render_deck(self):
@@ -431,9 +469,27 @@ class DeckProfileEditor(ttk.Frame):
 
     def _select_copy(self, _event=None):
         selection = self.deck.selection()
-        if selection:
+        if len(selection) == 1:
             self.quantity.set(self.deck.set(selection[0], 'qtd'))
         self._update_buttons()
+
+    def _select_all_catalog(self, _event=None):
+        visible = self.catalog.get_children()
+        self.catalog.selection_set(visible)
+        if visible:
+            self.catalog.focus(visible[0])
+            self.catalog.focus_set()
+        self._update_buttons()
+        return 'break'
+
+    def _select_all_deck(self, _event=None):
+        visible = self.deck.get_children()
+        self.deck.selection_set(visible)
+        if visible:
+            self.deck.focus(visible[0])
+            self.deck.focus_set()
+        self._update_buttons()
+        return 'break'
 
     def start_fixed_deck(self):
         self.load(self.cards, {})
@@ -441,40 +497,75 @@ class DeckProfileEditor(ttk.Frame):
         self.feedback.set('Deck em branco. Adicione cartas e salve.')
 
     def change_card(self, action, cid=None, *, copies=None):
-        selection = self.catalog.selection() if action == 'add' else self.deck.selection()
-        if cid is None and not selection:
+        """Edite várias cartas atomicamente, sem ultrapassar 40 slots ou cópias.
+
+        Adicionar soma N cópias a cada ID selecionado; Ajustar define o total
+        de cópias de cada ID; Remover elimina todas as cópias selecionadas.
+        """
+        if action not in ('add', 'set', 'remove'):
+            raise ValueError(f'Ação de deck desconhecida: {action}')
+        widget = self.catalog if action == 'add' else self.deck
+        selected = (int(cid),) if cid is not None else tuple(int(item) for item in widget.selection())
+        if not selected:
             return
-        cid = cid if cid is not None else int(selection[0])
+        selected = tuple(dict.fromkeys(selected))
         try:
             ids = parse_card_ids(self.fixed.get(), maximum=MAX_DECK)
+            old_counts = Counter(ids)
+            counts = old_counts.copy()
             if action == 'add':
-                amount = positive_int(self.add_quantity.get() if copies is None else copies, 'Cópias a inserir')
+                amount = positive_int(self.add_quantity.get() if copies is None else copies,
+                                      'Cópias por carta')
+                for card_id in selected:
+                    counts[card_id] += amount
+            elif action == 'set':
+                amount = simulation_nonnegative_int(self.quantity.get(), 'Total por carta')
+                for card_id in selected:
+                    counts[card_id] = amount
             else:
-                ids = [other for other in ids if other != cid]
-                amount = positive_int(self.quantity.get(), 'Total de cópias') if action == 'set' else 0
-            space = MAX_DECK - len(ids) - self._pool_slots()
-            if amount > space:
-                if space == 1:
-                    raise ModError('Há uma vaga no deck. Informe uma cópia.')
-                if space <= 0:
-                    raise ModError('Deck cheio. Libere uma vaga nas cartas fixas ou nos pools.')
-                raise ModError(f'Há {space} vagas neste deck. Informe até {space} cópias.')
-            ids.extend([cid] * amount)
+                for card_id in selected:
+                    counts.pop(card_id, None)
+            fixed_total = sum(counts.values())
+            pools = self._pool_slots()
+            if fixed_total + pools > MAX_DECK:
+                raise ModError(f'Deck excederia {MAX_DECK} cartas: {fixed_total} fixas '
+                               f'+ {pools} de pools. Nada foi alterado.')
+            # Não reordenar cópias intercaladas do deck original. Adições
+            # entram no final; ajuste diminui a quantidade das últimas cópias.
+            if action == 'add':
+                updated = list(ids)
+                for card_id in selected:
+                    updated.extend([card_id] * amount)
+            elif action == 'remove':
+                updated = [card_id for card_id in ids if card_id not in selected]
+            else:
+                remaining = {card_id: counts[card_id] for card_id in selected}
+                updated = []
+                for card_id in ids:
+                    if card_id not in remaining:
+                        updated.append(card_id)
+                    elif remaining[card_id]:
+                        updated.append(card_id)
+                        remaining[card_id] -= 1
+                for card_id in selected:
+                    updated.extend([card_id] * remaining[card_id])
             meta = getattr(self.project, 'metadata', {})
             effects = getattr(self.project, 'effects', {})
-            if amount:
-                validate_deck(self.cards, effects, [cid] * ids.count(cid),
-                              int(meta.get('ps1_deck_global_limit', 3)))
+            validate_deck(self.cards, effects, updated,
+                          int(meta.get('ps1_deck_global_limit', 3)))
         except (ModError, ValueError) as exc:
             self.feedback.set(str(exc))
             return
-        self.fixed.set(', '.join(map(str, ids)))
+        self.fixed.set(', '.join(map(str, updated)))
         if action == 'add':
             self.add_quantity.set('1')
-        if self.deck.exists(str(cid)):
-            self.deck.selection_set(str(cid))
-            self.deck.see(str(cid))
-        self.feedback.set(f'#{cid} atualizado. Salve o deck.')
+        # Depois de adicionar, selecionar as novas cartas também no "Deck atual"
+        # preserva o fluxo legado de ajustar cópias logo na operação seguinte.
+        keep = [str(card_id) for card_id in selected if self.deck.exists(str(card_id))]
+        if keep:
+            self.deck.selection_set(keep)
+            self.deck.see(keep[0])
+        self.feedback.set(f'{len(selected)} carta(s) atualizada(s) no deck. Salve o deck.')
 
     def load(self, cards, profile, *, show_fixed=True):
         self.cards = cards
@@ -919,11 +1010,25 @@ class ModEditor(ttk.Frame):
         self.studio.notify('Carta salva no baú.' if starter is None else f'Carta salva no baú e em {starter}.')
 
     def add_catalog_card(self, cid):
+        self.add_catalog_cards([cid])
+
+    def add_catalog_cards(self, ids):
+        """Adicionar ao deck do rival um lote da biblioteca principal."""
+        if not ids:
+            return
         self.refresh_catalog()
         self.studio.tabs.select(self.studio.tab_mod)
         self.tabs.select(self.deck_pane)
-        self.opponent_deck.tabs.select(self.opponent_deck.fixed_pane)
-        self.opponent_deck.change_card('add', cid, copies=1)
+        editor = self.opponent_deck
+        editor.tabs.select(editor.fixed_pane)
+        editor.kind.set('Todos os tipos')
+        editor.query.set('')
+        available = [str(cid) for cid in dict.fromkeys(ids) if editor.catalog.exists(str(cid))]
+        if len(available) != len(set(ids)):
+            editor.feedback.set('Há cartas da seleção que não existem no catálogo deste projeto.')
+            return
+        editor.catalog.selection_set(available)
+        editor.change_card('add', copies=1)
 
     def generate_deck(self, editor):
         if self.project is None or self.studio._extract_running:
