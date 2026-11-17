@@ -73,7 +73,7 @@ class NativeAiTests(unittest.TestCase):
 
     def test_config_mod_mode_validation_and_default(self):
         project = SimpleNamespace(metadata={})
-        self.assertEqual(mode_for(project), 'dificil')
+        self.assertEqual(mode_for(project), 'normal')
         self.assertEqual(AI_MODES, ('normal', 'dificil'))
         project.metadata = {'edicao_mod': {'ia_ps1': 'normal'}}
         self.assertEqual(mode_for(project), 'normal')
