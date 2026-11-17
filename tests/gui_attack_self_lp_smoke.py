@@ -35,7 +35,9 @@ with TemporaryDirectory() as tmp:
         root.drafts.save()
         saved=Project.open(project.folder)
         assert saved.effects[str(cid)][0]['valor']==500
-        native=compile_effects(saved,True)
+        # A carta sintética está no catálogo em memória; o projeto reaberto
+        # confirma a persistência da regra, não a extração de uma ISO de teste.
+        native=compile_effects(project,True)
         assert (cid,'dano_lp') in native.accepted
         assert not native.pending
         print('GUI: Ao atacar + Dano LP + Próprio salva e compila como custo PS1.')
