@@ -13,7 +13,7 @@ from PIL import Image
 from fmstudio.core import ModError
 from fmstudio.deep_extract import EXE_START, EXE_HEADER
 from fmstudio.disc import DiscReader, SYNC
-from fmstudio.disc_build import build_test_disc, regenerate_form1
+from fmstudio.disc_build import build_test_disc, regenerate_form1, DescriptionCompatibilityError
 from fmstudio.ps1_content import patch_card_art, patch_names, name_patch_info, patch_descriptions, description_patch_info
 from fmstudio.ps1_compat import audit
 
@@ -165,6 +165,27 @@ class TestContentPatch(unittest.TestCase):
             for lba in result['lbas']:
                 raw=Path(result['bin']).read_bytes()[lba*2352:(lba+1)*2352]
                 self.assertEqual(raw,regenerate_form1(raw))
+            # Regressão: uma descrição incompatível deve bloquear no modo
+            # rigoroso, mas permitir uma segunda tentativa consciente, com
+            # a descrição original intacta e o motivo registrado no JSON.
+            previous_bin=Path(result['bin']).read_bytes()
+            p.edits={'1':{'nome':'A','descricao':'A'*50}}
+            p.get=lambda cid:{'nome':'A','descricao':'A'*50,
+                              'tipo_id':0,'atributo_id':0}
+            with self.assertRaises(DescriptionCompatibilityError):
+                build_test_disc(p,src)
+            self.assertEqual(Path(result['bin']).read_bytes(),previous_bin)
+            retry=build_test_disc(p,src,description_policy='preserve_incompatible')
+            self.assertEqual(retry['politica_descricoes_ps1'],'preserve_incompatible')
+            self.assertEqual(len(retry['descricoes_nao_gravadas']),1)
+            self.assertEqual(retry['descricoes_aplicadas'],[])
+            self.assertTrue(Path(retry['bin']).with_suffix('.json').is_file())
+            with DiscReader(Path(retry['bin'])) as check:
+                check_files={x.path:x for x in check.files() if not x.is_dir}
+                after_exe=b''.join(check.read_entry(check_files['SLUS_014.11']))
+            self.assertEqual(after_exe[where(0x801C3000):where(0x801C3000)+13],
+                             bytes([1])*12+b'\\xff')
+            self.assertEqual(src.read_bytes(),original)
             p.effects={'1':[{'acao':'falso'}]}
             with self.assertRaisesRegex(ModError,'Build completo bloqueado'):
                 build_test_disc(p,src,require_complete=True)
