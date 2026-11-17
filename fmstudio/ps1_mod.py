@@ -145,7 +145,7 @@ def compile_mod(project, *, profile, wa_verified):
         plan.life = [plan.player_lp] * DUELIST_COUNT
         if plan.player_lp > 9999:
             plan.applied.append(
-                'ATENÇÃO: HUD original do PS1 tem quatro dígitos; LP >9999 exige validação visual no ePSXe.')
+                'Contador LP de cinco dígitos solicitado; visual ainda exige validação no ePSXe.')
     for key, changes in config.get('duelistas', {}).items():
         opponent = int(key)
         if 'deck' in changes:
