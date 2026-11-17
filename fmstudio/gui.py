@@ -876,14 +876,27 @@ class Studio(tk.Tk):
         self.effect_tree.configure(yscrollcommand=effects_scroll.set)
         effects_scroll.pack(side='right',fill='y')
         self.effect_tree.pack(side='left',fill='x',expand=True,padx=1,pady=1)
+        self.effect_tree.bind('<Double-1>',lambda _event:self.edit_effect())
         buttons=ttk.Frame(body)
         buttons.pack(fill='x',pady=12)
-        ttk.Button(buttons,text='+ Adicionar efeito',style='Accent.TButton',command=self.add_effect).pack(side='left')
-        ttk.Button(buttons,text='+ Bônus por carta',command=self.add_specific_effect).pack(side='left',padx=8)
-        ttk.Button(buttons,text='Remover efeito selecionado',command=self.remove_effect).pack(side='left',padx=8)
-        ttk.Button(buttons,text='PS1: permitir Equip em criatura',command=self.allow_native_equip).pack(side='left',padx=8)
-        ttk.Button(buttons,text='PS1: trocar alvo Equip',command=self.replace_native_equip).pack(side='left',padx=8)
-        ttk.Button(buttons,text='PS1: usar adições automáticas',command=self.activate_equip_additions).pack(side='left',padx=8)
+        effect_actions=ttk.Frame(buttons)
+        effect_actions.pack(fill='x')
+        ttk.Button(effect_actions,text='+ Adicionar efeito',style='Accent.TButton',
+                   command=self.add_effect).pack(side='left')
+        ttk.Button(effect_actions,text='+ Bônus por carta',
+                   command=self.add_specific_effect).pack(side='left',padx=8)
+        ttk.Button(effect_actions,text='Editar efeito selecionado',
+                   command=self.edit_effect).pack(side='left',padx=8)
+        ttk.Button(effect_actions,text='Remover efeito selecionado',
+                   command=self.remove_effect).pack(side='left',padx=8)
+        ps1_actions=ttk.Frame(buttons)
+        ps1_actions.pack(fill='x',pady=(6,0))
+        ttk.Button(ps1_actions,text='PS1: permitir Equip em criatura',
+                   command=self.allow_native_equip).pack(side='left')
+        ttk.Button(ps1_actions,text='PS1: trocar alvo Equip',
+                   command=self.replace_native_equip).pack(side='left',padx=8)
+        ttk.Button(ps1_actions,text='PS1: usar adições automáticas',
+                   command=self.activate_equip_additions).pack(side='left',padx=8)
         native=tk.Frame(body,bg=SURFACE,padx=12,pady=8)
         native.pack(fill='x',pady=(2,8))
         tk.Label(native,text='LABORATÓRIO DE EFEITOS INÉDITOS — PLAYSTATION 1',
@@ -1650,7 +1663,7 @@ class Studio(tk.Tk):
         finally:
             self._loading_quick=False
 
-    def _refresh_effects(self, *, skip_quick=False):
+    def _refresh_effects(self, *, skip_quick=False, select_index=None):
         for iid in self.effect_tree.get_children():
             self.effect_tree.delete(iid)
         if not self.project or not self.selected_id:
@@ -1667,6 +1680,10 @@ class Studio(tk.Tk):
                 label,effect_target_label(eff['acao'], eff['alvo']),
                 ('Todos' if eff.get('tipo_id') == -1 else TYPE_NAMES[eff['tipo_id']] if 'tipo_id' in eff and 0 <= eff['tipo_id'] < len(TYPE_NAMES) else '—'),
                 eff['valor'],eff.get('valor_def','—')))
+        if select_index is not None and 0 <= select_index < len(effects):
+            self.effect_tree.selection_set(str(select_index))
+            self.effect_tree.focus(str(select_index))
+            self.effect_tree.see(str(select_index))
         self.sim_result.configure(text='Escolha um gatilho e clique Simular (não executa o PS1).')
 
     def diagnose_effect_engine(self):
@@ -2104,6 +2121,45 @@ class Studio(tk.Tk):
             self._update_pending_label()
             self._update_status(f'Efeito pendente para a carta {format_id(self.selected_id)}. Clique Salvar projeto.')
         EffectDialog(self,submit)
+
+    def edit_effect(self):
+        """Abre o formulário correto e substitui a regra selecionada no rascunho."""
+        if self._extract_running:
+            messagebox.showinfo('Extração em andamento',
+                'Conclua a extração antes de editar efeitos.',parent=self)
+            return
+        if not self.project or not self.drafts or not self.selected_id:
+            messagebox.showinfo('Selecione uma carta',
+                'Escolha uma carta e um efeito para editar.',parent=self)
+            return
+        selected=self.effect_tree.selection()
+        if not selected:
+            messagebox.showinfo('Selecione um efeito',
+                'Selecione uma linha da tabela Efeitos das cartas.',parent=self)
+            return
+        self._stage_current()
+        cid=self.selected_id
+        idx=int(selected[0])
+        effects=self.drafts.get_effects(cid)
+        if not 0 <= idx < len(effects):
+            self._refresh_effects()
+            return
+        previous=effects[idx]
+
+        def submit(entry):
+            self.drafts.replace_effect(cid,idx,entry)
+            self._refresh_project()
+            self._refresh_effects(select_index=idx)
+            self._update_pending_label()
+            self._update_status(
+                f'Efeito {idx+1} da carta {format_id(cid)} atualizado no rascunho. '
+                'Clique Salvar projeto ou pressione Ctrl+S.')
+
+        if previous['acao']=='bonus_por_carta_id':
+            cards={card_id:self.drafts.get_card(card_id) for card_id in self.project.cards}
+            SpecificCardEffectDialog(self,cards,submit,initial_effect=previous)
+        else:
+            EffectDialog(self,submit,initial_effect=previous)
 
     def add_specific_effect(self):
         if self._extract_running or not self.project or not self.selected_id:
