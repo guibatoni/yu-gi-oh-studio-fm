@@ -88,6 +88,13 @@ with TemporaryDirectory() as tmp:
             deck._select_all_deck()
             assert set(deck.deck.selection()) == {str(a), str(b), str(c)}
 
+            # Alterar lote não embaralha cartas anteriormente intercaladas.
+            deck.fixed.set(f'{a}, {b}, {a}, {c}')
+            deck.deck.selection_set([str(a), str(c)])
+            deck.quantity.set('1')
+            deck.change_card('set')
+            assert parse_card_ids(deck.fixed.get()) == [a, b, c]
+
             # Biblioteca principal: seleção múltipla segue para o deck do rival.
             root.tree.selection_set([str(d), str(e)])
             root._add_selected_to_deck()
