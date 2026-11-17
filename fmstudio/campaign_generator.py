@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from random import SystemRandom
 
-from .core import ModError
+from .core import ModError, ENTRY_GROW, ENTRY_SHRINK
 from .deck_generator import DUELIST_THEMES, _support_score
 from .mod_data import MONSTER_TYPES, card_effects, deck_copy_limit, validate_deck
 from .tables import CARD_COUNT, DECK_SIZE, DUELIST_NAMES_REFERENCE, POOL_TOTAL
@@ -34,14 +34,14 @@ EFFECT_ACTIONS = frozenset((
     'dano_monstro_alvo', 'vinculo_vida', 'ataques_multiplos',
     'monstro_indestrutivel', 'monstro_imune_magia', 'monstro_imune_armadilha',
     'dano_perfurante', 'nao_bloqueavel', 'ataque_primeiro_turno',
-    'acumular_atk_def_entrada', 'reduzir_atk_def_entrada',
+    ENTRY_GROW, ENTRY_SHRINK,
     'aumentar_atk', 'aumentar_def', 'reduzir_atk', 'reduzir_def',
 ))
 NEGATIVE_ACTIONS = {'perder_lp_por_ataque'}
 BURN = {'dano_lp', 'dano_lp_deck_tipo', 'dano_monstro_alvo'}
 AURAS = {'aura_tipo', 'bonus_por_tipo', 'bonus_deck_tipo', 'bonus_mao_tipo',
-         'bonus_cemiterio_tipo', 'bonus_por_carta_id', 'acumular_atk_def_entrada'}
-CONTROL = {'descartar_alvo', 'dano_monstro_alvo', 'reduzir_atk_def_entrada',
+         'bonus_cemiterio_tipo', 'bonus_por_carta_id', ENTRY_GROW}
+CONTROL = {'descartar_alvo', 'dano_monstro_alvo', ENTRY_SHRINK,
            'monstro_imune_magia', 'monstro_imune_armadilha'}
 FIELD_SPELLS = {330, 331, 332, 333, 334, 335}
 
@@ -87,7 +87,7 @@ def _effect_value(effects, cid, focus: str) -> int:
         if action in NEGATIVE_ACTIONS or (action == 'dano_lp' and target == 'proprio'):
             value -= 1600
             continue
-        if action not in EFFECT_ACTIONS and not action.startswith(('entrada_',)):
+        if action not in EFFECT_ACTIONS:
             continue
         amount = max(0, min(3000, int(entry.get('valor', 0) or 0)))
         score = 420 + amount // 8
