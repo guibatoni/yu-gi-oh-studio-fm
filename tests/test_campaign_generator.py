@@ -23,8 +23,8 @@ def fixture():
         202: {'tipo_id': 7, 'ataque': 3300, 'defesa': 2200},
         203: {'tipo_id': 0, 'ataque': 2700, 'defesa': 2200},
         204: {'tipo_id': 0, 'ataque': 3500, 'defesa': 2500},
-        723: {'tipo_id': 7, 'ataque': 1500, 'defesa': 1300, 'virtual': True, 'atributo_id': 1},
-        724: {'tipo_id': 7, 'ataque': 3900, 'defesa': 3300, 'virtual': True},
+        723: {'tipo_id': 0, 'ataque': 1500, 'defesa': 1300, 'virtual': True, 'atributo_id': 1},
+        724: {'tipo_id': 0, 'ataque': 3900, 'defesa': 3300, 'virtual': True},
     })
     for cid in (330, 332, 335, 336, 337, 348, 349):
         cards[cid] = {'tipo_id': 20, 'ataque': 0, 'defesa': 0}
