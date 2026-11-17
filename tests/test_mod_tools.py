@@ -184,6 +184,20 @@ class DeckGeneratorTests(unittest.TestCase):
         self.assertIn((5, 15, 1001), result.fusions)
         self.assertNotIn(1001, result.cards)
 
+    def test_generator_ps1_only_keeps_40_original_cards_with_no_power_ceiling(self):
+        available = {cid: card(0, 1000 + cid * 40, 3000) for cid in range(1, 51)}
+        available[1]['ataque'] = 10**60
+        available[90001] = card(0, 10**80, 10**80)
+        generated = generate_deck(
+            available, {}, {}, {}, {0: 40},
+            ps1_only=True, difficulty='Máximo', rng=Random(11),
+        )
+        self.assertEqual(len(generated.cards), 40)
+        self.assertTrue(all(1 <= cid <= 722 for cid in generated.cards))
+        self.assertNotIn(90001, generated.cards)
+        self.assertIn(1, generated.cards)
+        self.assertEqual(sum(Counter(generated.cards).values()), 40)
+
     def test_impossible_quotas_are_reported_without_partial_deck(self):
         with self.assertRaisesRegex(ModError, '40 cartas'):
             generate_deck(self.cards, self.effects, {}, {}, {0: 39})
