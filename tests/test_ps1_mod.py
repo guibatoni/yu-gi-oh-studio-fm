@@ -5,13 +5,34 @@ import unittest
 
 from fmstudio.core import ModError
 from fmstudio.ps1_mod import (
+    CHEST_DIM_FLAG, CHEST_DIM_FLAG_PC, CHEST_ROW_CONTEXT, CHEST_ROW_FLAG_PC, CHEST_ROW_VISIBLE,
     FIRST_TURN_PC, FIRST_TURN_SOURCE, INIT_CALL, LP_TABLE, ModPlan, _LP_INIT,
-    compile_mod, patch_executable, patch_wa, verify_executable, verify_wa,
+    compile_mod, inspect_chest_catalog, patch_chest_catalog, patch_executable, patch_wa, verify_executable, verify_wa,
 )
 from fmstudio.tables import CARD_COUNT, DECK_SIZE, DUELIST_BASE, DUELIST_STRIDE, EXE_DELTA, POOL_OFFSETS, POOL_TOTAL
 
 
+def seed_chest_catalog(exe):
+    struct.pack_into('<I', exe, CHEST_DIM_FLAG_PC - EXE_DELTA, CHEST_DIM_FLAG)
+    struct.pack_into('<3I', exe, CHEST_ROW_FLAG_PC - EXE_DELTA - 4, *CHEST_ROW_CONTEXT)
+
+
 class ModProjectionTests(unittest.TestCase):
+    def test_full_chest_changes_only_the_initial_visibility_flag(self):
+        original = bytearray(CHEST_ROW_FLAG_PC - EXE_DELTA + 8)
+        seed_chest_catalog(original)
+        self.assertEqual(inspect_chest_catalog(original)['status'], 'ausente')
+        patched = patch_chest_catalog(bytes(original))
+        self.assertEqual(inspect_chest_catalog(patched), {'status':'aplicado', 'cartas':CARD_COUNT})
+        self.assertEqual(patch_chest_catalog(patched), patched)
+        location = CHEST_ROW_FLAG_PC - EXE_DELTA
+        self.assertEqual(patched, bytes(original[:location]) + struct.pack('<I', CHEST_ROW_VISIBLE)
+                         + bytes(original[location + 4:]))
+        original[CHEST_DIM_FLAG_PC - EXE_DELTA] ^= 1
+        self.assertEqual(inspect_chest_catalog(original)['status'], 'divergente')
+        with self.assertRaisesRegex(ModError, 'baú diverge'):
+            patch_chest_catalog(original)
+
     def test_opening_attack_lock_preserved_and_legacy_unlock_rejected(self):
         plan = ModPlan(0, [], {}, [], [], [])
         offset = FIRST_TURN_PC - EXE_DELTA

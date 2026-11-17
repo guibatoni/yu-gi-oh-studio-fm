@@ -1,3 +1,15 @@
+# Studio FM v1.8.8 — Catálogo completo no baú
+
+Abra **Passwords e baú → Baú** para consultar todas as cartas do projeto,
+inclusive as personalizadas. A lista mostra **0/0** quando você ainda não
+tem nenhuma cópia, e pode ser ordenada pela quantidade no baú.
+
+Ao gerar um novo **BIN/CUE** do **Drop x15**, a tela **Montar deck** passa
+a mostrar as 722 cartas. Os contadores do baú e do deck mostram zero
+para as cartas ainda ausentes da coleção. Use **Triângulo** para ver a ficha.
+
+---
+
 # Studio FM v1.8.6 — Bônus por tipo ou atributo
 
 Em **Cartas → Efeitos e bônus**, configure **Tipo**, **Atributo** e **Combinar

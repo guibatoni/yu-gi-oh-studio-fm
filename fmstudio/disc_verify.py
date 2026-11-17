@@ -52,7 +52,7 @@ def inspect_god24_chest_mips(exe: bytes) -> dict:
 def verify_image_stats(project, source):
     from .ps1_god24_display import inspect as inspect_god_display
     from .ps1_runtime import compile_effects, verify_effects
-    from .ps1_mod import compile_mod, verify_executable, verify_wa, wa_sha
+    from .ps1_mod import compile_mod, inspect_chest_catalog, verify_executable, verify_wa, wa_sha
     from .ps1_rank_hud import inspect_rank_hud
     config=getattr(project,'metadata',{}) or {}
     profile=ps1_supports_god24(project)
@@ -143,6 +143,7 @@ def verify_image_stats(project, source):
             'god24_exibicao_tipo':god_display,
             'efeitos_nativos_ps1':runtime,
             'rank_hud_ps1':inspect_rank_hud(exe),
+            'catalogo_bau_ps1':inspect_chest_catalog(exe) if profile else {'status':'perfil_incompativel','cartas':0},
             'edicao_do_mod_ps1':{'bloqueio_turno_inicial':opening_lock if profile else None,
                                 'lp':life,'tabelas':verify_wa(wa,mod_plan)},
             'god24_teste_mao_ativado_no_projeto':god24_enabled,
@@ -165,6 +166,11 @@ def describe(result):
             f'Cartas numéricas conferidas: {result["total"]}',
             f'Corretas: {result["corretas"]} | Divergentes: {result["divergentes"]}']
     runtime=result.get('efeitos_nativos_ps1',{})
+    chest = result.get('catalogo_bau_ps1', {})
+    if chest.get('status') == 'aplicado':
+        text.append(f'Baú com {chest["cartas"]} cartas confirmado na cópia.')
+    elif chest.get('status') in ('ausente', 'divergente'):
+        text.append('Catálogo completo do baú ausente ou divergente. Gere outro BIN/CUE.')
     rank = result.get('rank_hud_ps1', {}).get('status')
     if rank == 'aplicado':
         text.append('Rank ao vivo no HUD do PS1 confirmado na cópia.')

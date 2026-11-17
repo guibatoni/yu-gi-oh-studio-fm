@@ -2704,6 +2704,8 @@ class Studio(tk.Tk):
                if mod.get('bloqueio_turno_inicial') else '')
             + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
             + rank_hud
+            + (f'Baú com {manifest["catalogo_bau_ps1"]["cartas"]} cartas, inclusive as sem cópias.\n'
+               if manifest.get('catalogo_bau_ps1', {}).get('status') == 'aplicado' else '')
             + (f'Fusões personalizadas gravadas: {len(runtime["fusoes"])}.\n'
                if runtime.get('fusoes') else '')
             + (f'Decks fixos de 40 cartas: {len(runtime["decks_fixos"])} duelista(s).\n'
