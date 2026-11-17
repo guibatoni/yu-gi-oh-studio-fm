@@ -1,3 +1,15 @@
+## Studio FM v1.8.0
+
+O rank em tempo real, as cadeias Expert, a Supreme e as cartas #723+
+estão disponíveis nas partidas do Studio. O formato original reserva
+quatro bits para estrelas e usa tabelas de 722 cartas.
+
+No Drop x15 verificado, o limite zero usa uma regra nativa no editor de
+deck e é aplicado aos decks fixos e aos pools editados que passam pela
+exportação. Para o PS1, use decks fixos de 40 cartas quando um pool de
+oponente exigir um máximo de 1 ou 2 cópias. Os pools originais de deck
+inicial só são gravados quando podem respeitar os limites configurados.
+
 ## Drops ponderados do próprio deck — v1.7.10
 
 No modo `drops_do_deck`, a versão anterior sorteava uniformemente uma

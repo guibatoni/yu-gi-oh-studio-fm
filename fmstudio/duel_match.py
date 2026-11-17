@@ -90,7 +90,7 @@ class DuelMatch(DuelLab):
         if self.reward_card is not None:
             return self.reward_card
         if self._pending_reward is None:
-            weights = drop_weights(config, pools, opponent, rank, dealt_deck=self.initial_decks['adversario'])
+            weights = drop_weights(config, pools, opponent, rank, effects=self.effects)
             self._pending_reward = weighted_choice(weights, rng or SystemRandom())
         grant(self._pending_reward)
         self.reward_card = self._pending_reward

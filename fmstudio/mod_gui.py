@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from collections import Counter
 from copy import deepcopy
+from fractions import Fraction
+from math import gcd
 from pathlib import Path
 import re
 import tkinter as tk
@@ -193,20 +195,28 @@ class WeightTable(ttk.Frame):
 
     def _edit_weight(self, event):
         item = self.tree.identify_row(event.y)
-        if not item or self.tree.identify_column(event.x) != '#3':
+        column = self.tree.identify_column(event.x)
+        if not item or column not in ('#3', '#4'):
             return
         self._close_inline()
         cid = int(item)
-        x, y, width, height = self.tree.bbox(item, 'peso')
+        field = 'peso' if column == '#3' else 'chance'
+        x, y, width, height = self.tree.bbox(item, field)
         entry = self.inline = ttk.Entry(self.tree)
-        entry.insert(0, str(self.weights.get(cid, 0)))
+        value = str(self.weights.get(cid, 0)) if field == 'peso' else self.tree.set(item, field).removesuffix('%')
+        entry.insert(0, value)
         entry.select_range(0, 'end')
         entry.place(x=x, y=y, width=width, height=height)
         entry.focus_set()
 
         def save(_event):
             try:
-                self._set(cid, simulation_nonnegative_int(entry.get(), 'Peso'))
+                if entry.get() == value:
+                    self._close_inline()
+                elif field == 'peso':
+                    self._set(cid, simulation_nonnegative_int(entry.get(), 'Peso'))
+                else:
+                    self._set_chance(cid, entry.get())
             except (ModError, OSError, ValueError) as exc:
                 messagebox.showerror('Tabela de pesos', str(exc), parent=self)
             return 'break'
@@ -215,6 +225,30 @@ class WeightTable(ttk.Frame):
         entry.bind('<Escape>', lambda _event: self._close_inline())
         entry.bind('<FocusOut>', lambda _event: self._close_inline())
         return 'break'
+
+    def _set_chance(self, cid, raw):
+        raw = raw.strip().removesuffix('%').strip().replace(',', '.')
+        if not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', raw):
+            raise ModError('Informe uma porcentagem entre 0 e 100.')
+        chance = Fraction(raw) / 100
+        if not 0 <= chance <= 1:
+            raise ModError('Informe uma porcentagem entre 0 e 100.')
+        if chance == 0:
+            self._set(cid, 0)
+            return
+        others = {other: weight for other, weight in self.weights.items() if other != cid}
+        if not others:
+            if chance != 1:
+                raise ModError('Adicione outra carta para configurar uma chance menor que 100%.')
+            self._set(cid, max(1, self.weights.get(cid, 0)))
+            return
+        if chance == 1:
+            raise ModError('Para usar 100%, zere primeiro os outros pesos.')
+        weight = sum(others.values()) * chance / (1 - chance)
+        changes = {other: value * weight.denominator for other, value in others.items()}
+        changes[cid] = weight.numerator
+        common = gcd(*changes.values())
+        self._update_weights({other: value // common for other, value in changes.items()})
 
 
 class DeckProfileEditor(ttk.Frame):
@@ -757,11 +791,12 @@ class ModEditor(ttk.Frame):
 
     def _render_deck_drops(self):
         opponent = self._duel_id()
-        candidates = deck_drop_candidates(self.rules, self.pools, opponent)
+        effects = self.project.effects if self.project else None
+        candidates = deck_drop_candidates(self.rules, self.pools, opponent, effects=effects)
         # Exibir também os candidatos com peso zero para poder reativá-los.
         cards = {cid: self.cards[cid] for cid in sorted(candidates) if cid in self.cards}
         rank = self.rank_ids[self.rank.get()]
-        weights = deck_drop_weights(self.rules, self.pools, opponent, rank)
+        weights = deck_drop_weights(self.rules, self.pools, opponent, rank, effects=effects)
         self.deck_drop_table.ps1_projection = bool(self.project and ps1_supports_god24(self.project))
         self.deck_drop_table.load(cards, weights)
         label = DROP_GROUPS.get(RANK_GROUPS.get(rank, rank), rank)
@@ -777,7 +812,7 @@ class ModEditor(ttk.Frame):
         opponent = self._duel_id()
         group = RANK_GROUPS.get(self.rank_ids[self.rank.get()],
                                self.rank_ids[self.rank.get()])
-        candidates = deck_drop_candidates(self.rules, self.pools, opponent)
+        candidates = deck_drop_candidates(self.rules, self.pools, opponent, effects=self.project.effects)
         if not candidates:
             raise ModError('Salve primeiro o deck do oponente para editar seus drops.')
         if not weights:
@@ -794,7 +829,7 @@ class ModEditor(ttk.Frame):
     def _reset_deck_drop(self):
         try:
             opponent = self._duel_id()
-            candidates = deck_drop_candidates(self.rules, self.pools, opponent)
+            candidates = deck_drop_candidates(self.rules, self.pools, opponent, effects=self.project.effects)
             weights = {cid: 1 for cid in sorted(candidates)}
             self._save_deck_drop(weights)
             self._render_deck_drops()
@@ -808,7 +843,7 @@ class ModEditor(ttk.Frame):
             active = self.use_deck_drops.get()
             duel = self._selected_duelist(rules)
             if active:
-                ids = deck_drop_candidates(rules, self.pools, opponent)
+                ids = deck_drop_candidates(rules, self.pools, opponent, effects=self.project.effects)
                 if not ids:
                     raise ModError('Salve primeiro um deck de oponente com cartas para ativar os drops.')
                 custom = duel.setdefault(DECK_DROP_WEIGHTS, {})
@@ -939,11 +974,11 @@ class ModEditor(ttk.Frame):
         try:
             rules = self._edit()
             opponent = self._duel_id()
-            old_candidates = deck_drop_candidates(rules, self.pools, opponent)
+            old_candidates = deck_drop_candidates(rules, self.pools, opponent, effects=self.project.effects)
             duel = self._selected_duelist(rules)
             duel['deck'] = self.opponent_deck.profile()
             if duel.get(DROP_FROM_DECK):
-                new_candidates = deck_drop_candidates(rules, self.pools, opponent)
+                new_candidates = deck_drop_candidates(rules, self.pools, opponent, effects=self.project.effects)
                 if not new_candidates:
                     raise ModError('O deck deve conter cartas para manter drops ponderados.')
                 store = duel.setdefault(DECK_DROP_WEIGHTS, {})

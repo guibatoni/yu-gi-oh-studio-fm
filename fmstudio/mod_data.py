@@ -320,20 +320,21 @@ def drops_from_deck(config, opponent):
     return config.get('duelistas', {}).get(str(opponent), {}).get(DROP_FROM_DECK, False)
 
 
-def deck_drop_candidates(config, pools, opponent):
+def deck_drop_candidates(config, pools, opponent, *, effects=None):
     """IDs permitidos para drops ponderados, retirados do deck configurado.
 
     Num deck com pools a seleção é dos candidatos possíveis, não apenas
     das cartas sorteadas no duelo atual. Num deck fixo é exatamente o deck.
     """
     profile = duelist_profile(config, pools, opponent)
-    return set(profile.get('cartas', ())) | {
+    candidates = set(map(int, profile.get('cartas', ()))) | {
         int(cid) for pool in profile.get('pools', ())
         for cid, weight in pool['pesos'].items() if int(weight) > 0
     }
+    return {cid for cid in candidates if deck_copy_limit(effects or {}, cid)}
 
 
-def deck_drop_weights(config, pools, opponent, rank):
+def deck_drop_weights(config, pools, opponent, rank, *, effects=None):
     """Pesos por grupo de rank, restritos ao deck do próprio duelista.
 
     Projetos antigos com a opção booleana têm migração automática para
@@ -342,7 +343,7 @@ def deck_drop_weights(config, pools, opponent, rank):
     group = RANK_GROUPS.get(rank, rank)
     if group not in DROP_GROUPS:
         raise ModError(f'Grupo de rank de drop inválido: {rank}')
-    candidates = deck_drop_candidates(config, pools, opponent)
+    candidates = deck_drop_candidates(config, pools, opponent, effects=effects)
     custom = config.get('duelistas', {}).get(str(opponent), {}).get(DECK_DROP_WEIGHTS, {})
     if group not in custom:
         return {cid: 1 for cid in sorted(candidates)}
@@ -350,9 +351,9 @@ def deck_drop_weights(config, pools, opponent, rank):
             if int(cid) in candidates and int(weight) > 0}
 
 
-def drop_weights(config, pools, opponent, rank, *, dealt_deck=()):
+def drop_weights(config, pools, opponent, rank, *, dealt_deck=(), effects=None):
     if drops_from_deck(config, opponent):
-        return deck_drop_weights(config, pools, opponent, rank)
+        return deck_drop_weights(config, pools, opponent, rank, effects=effects)
     rank_group = RANK_GROUPS.get(rank, rank)
     custom = config.get('duelistas', {}).get(str(opponent), {}).get('drops', {})
     weights = custom.get(rank, custom.get(rank_group, pools.get((opponent, rank_group), {})))

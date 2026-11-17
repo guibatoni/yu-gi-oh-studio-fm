@@ -1691,6 +1691,8 @@ class Studio(tk.Tk):
         if self._extract_running:
             return
         settings={k:v.get() for k,v in self.quick_vars.items()}
+        if settings['limite_copias'] in ('0', '00') and settings['sem_limite_deck']:
+            self.quick_vars['sem_limite_deck'].set(False)
         try:
             self.drafts.set_quick_abilities(self.selected_id, settings, default_copies=None)
         except ModError as exc:

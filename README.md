@@ -10,8 +10,9 @@
 - No simulador, a HUD mostra o rank projetado abaixo dos LP. Ao vencer,
   **Receber recompensa** usa o rank conquistado e os pesos do grupo ou rank.
 - Em **Drops do oponente**, cole IDs separados por vírgula e aplique um
-  peso ao lote. Dê duplo clique na célula **Peso** e pressione Enter para
-  confirmar. Os cabeçalhos alternam ordem ascendente e descendente.
+  peso ao lote. Dê duplo clique em **Peso** ou **Chance** e pressione Enter.
+  Ao digitar uma porcentagem, o editor conserva a proporção entre os demais
+  pesos. Os cabeçalhos alternam ordem ascendente e descendente.
 
 O rank ao vivo, a IA Expert, a Supreme e as cartas #723 em diante funcionam
 no simulador. Veja as regras aplicáveis ao [BIN/CUE](docs/COMPAT_PS1.md).

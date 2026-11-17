@@ -75,6 +75,9 @@ with TemporaryDirectory() as tmp:
             table.query.set('dragao b')
             assert table.tree.get_children() == (str(b),)
             assert table.tree.set(str(b), 'chance') == '5,8823%'
+            table._set_chance(b, '25%')
+            assert table.tree.set(str(b), 'chance') == '25,0000%'
+            assert table.weights == {a: 3, b: 2, d: 3}
             reopened = Project.open(project.folder)
             assert deck_drop_weights(reopened.metadata[CONFIG_KEY], {}, 1, 'S-TEC') == {a:1,b:20,d:1}
             editor.use_deck_drops.set(False)

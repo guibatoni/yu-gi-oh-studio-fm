@@ -57,6 +57,23 @@ class ModProjectionTests(unittest.TestCase):
         self.assertTrue(any('#723' in item for item in plan.pending))
         self.assertFalse(compile_mod(project, profile=False, wa_verified=True).fusions)
 
+    def test_edited_native_pools_skip_banned_ids_and_report_unsupported_limits(self):
+        cards = {cid: {'tipo_id': 0} for cid in range(1, 25)}
+        effects = {cid: [{'evento': 'regra_deck', 'acao': 'limite_copias_deck',
+                          'alvo': 'proprio', 'valor': limit}] for cid, limit in ((1, 0), (24, 1))}
+        pool = {'compras': DECK_SIZE, 'pesos': dict.fromkeys(range(1, 24), 1)}
+        project = SimpleNamespace(cards=cards, get=cards.__getitem__, effects=effects,
+                                  metadata={'edicao_mod': {'duelistas': {
+                                      '1': {'deck': {'pools': [pool]}, 'drops_do_deck': True},
+                                      '2': {'deck': {'pools': [{**pool, 'pesos': {**pool['pesos'], 24: 1}}]}},
+                                  }}})
+        plan = compile_mod(project, profile=True, wa_verified=True)
+        for group in ('deck', 'pow', 'tec', 'bcd'):
+            self.assertEqual(plan.groups[(1, group)][0], 0)
+            self.assertEqual(sum(plan.groups[(1, group)]), POOL_TOTAL)
+        self.assertNotIn((2, 'deck'), plan.groups)
+        self.assertTrue(any('limites de 1–2' in line for line in plan.pending))
+
     def test_global_20000_lp_applies_to_every_opponent_in_native_table(self):
         cards = {1: {'tipo_id': 0}}
         project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={

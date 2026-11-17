@@ -51,13 +51,13 @@ def project_rank(match, side='jogador') -> DuelRank:
                 counts['ataques_efetivos'] += (
                     event.get('posicao') == 'ataque' and target in destroyed
                     and event['dano_lp_oponente'] > 0)
-                counts['dano_sofrido'] += event['dano_lp_jogador']
+                counts['dano_batalha_sofrido'] += event['dano_lp_jogador']
             elif target[0] == side and event.get('posicao') == 'defesa':
                 counts['vitorias_defensivas'] += (
                     target not in destroyed and event['atributos_alvo'][1] > event['atributos_atacante'][0])
-                counts['dano_sofrido'] += event['dano_lp_oponente']
-            elif target[0] == side or target == ('LP', side):
-                counts['dano_sofrido'] += event['dano_lp_oponente']
+                counts['dano_batalha_sofrido'] += event['dano_lp_oponente']
+            elif target == ('LP', side) or target[0] == side:
+                counts['dano_batalha_sofrido'] += event['dano_lp_oponente']
         elif event.get('lado') == side:
             if action in PLAY_COUNTERS:
                 counts[PLAY_COUNTERS[action]] += 1

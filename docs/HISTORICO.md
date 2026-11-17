@@ -4,7 +4,7 @@
 - Limite de 0 a 40 cópias por carta. O zero bane a inclusão nos decks. O editor, os pools e o gerador do Studio aplicam o mesmo limite.
 - Fusões de duas a cinco cartas, incluindo um monstro do próprio campo. A IA testa sequências de ataques e calcula o combate com os atributos efetivos.
 - Presets temáticos para os duelistas da campanha, tetos opcionais para cartas base e decks iniciais de três tipos com até 2.450 ATK + DEF por monstro.
-- Pesos editáveis na linha, vários IDs por vez e porcentagens por rank. As listas de cartas, decks, drops e passwords têm busca textual e cabeçalhos ordenáveis.
+- Peso e chance editáveis na linha, vários IDs por vez e porcentagens por rank. As listas de cartas, decks, drops e passwords têm busca textual e cabeçalhos ordenáveis.
 - Carta #723 verificada em reabertura de projeto, exportação do Studio, arte, fusão, equipamento, password e recompensa.
 
 ## v1.7.10 — Drops ponderados do próprio deck

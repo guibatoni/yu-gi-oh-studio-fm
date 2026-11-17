@@ -292,7 +292,8 @@ def choose_play(match, side='adversario'):
             score += 350 * (branch.swords[enemy] - view.swords[enemy])
         elif action.position == 'defesa' and not action.face_up and stance == 'defensiva':
             score += 50
-        win = bool(pressure and pressure[0][0] == 3)
+        win = bool(pressure and (pressure[0][0] == 3 or
+                   pressure[0][0] == 2 and _winning_attack(branch, side, stance, budget=12)))
         attack_value = pressure[0][2] if pressure else 0
         if pressure and not baseline and not win:
             score += max(0, attack_value)
