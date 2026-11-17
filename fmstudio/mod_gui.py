@@ -788,7 +788,13 @@ class ModEditor(ttk.Frame):
         self.ps1_ai_choice = tk.StringVar(value='Normal — IA original')
         self.opponent_first = tk.BooleanVar()
         self.status = tk.StringVar(value='Abra um projeto para editar as tabelas.')
-        self.duelist_ids = {f'{i:02d} · {name}': i for i, name in enumerate(DUELIST_NAMES_REFERENCE) if i}
+        from .campaign_generator import campaign_label
+        self.duelist_ids = {
+            f'{i:02d} · {name}  [{campaign_label(i)}]': i
+            for i, name in enumerate(DUELIST_NAMES_REFERENCE) if i
+        }
+        self.duelist.set(next(iter(self.duelist_ids)))
+        self.campaign_badge_text = tk.StringVar()
         self.rank_ids = {f'{label} (grupo PS1)': key for key, label in DROP_GROUPS.items()}
         self.rank_ids.update({rank: rank for rank in RANK_GROUPS if rank != 'B/C/D'})
         head = ttk.Frame(self)
@@ -797,6 +803,10 @@ class ModEditor(ttk.Frame):
         chooser = ttk.Combobox(head, textvariable=self.duelist, state='readonly', values=list(self.duelist_ids), width=24)
         chooser.pack(side='left')
         chooser.bind('<<ComboboxSelected>>', lambda _e: self._load_duelist())
+        self.campaign_badge = tk.Label(
+            head, textvariable=self.campaign_badge_text, bg='#1D3945',
+            fg=ACCENT, padx=9, pady=5, font=('Segoe UI', 9, 'bold'))
+        self.campaign_badge.pack(side='left', padx=5)
         self.password_button = ttk.Button(head, text='Passwords e baú', command=self.open_passwords)
         self.password_button.pack(side='left', padx=6)
         self.duel_button = ttk.Button(head, text='Jogar duelo', style='Accent.TButton', command=self.start_match)
@@ -854,8 +864,8 @@ class ModEditor(ttk.Frame):
                                                command=self.save_opponent)
         self.save_opponent_button.pack(side='right')
         self.preset_39_button = ttk.Button(
-            opponent_actions, text='Aplicar 39 decks (3/5–5/5)',
-            command=self.apply_39_opponent_presets)
+            opponent_actions, text='Gerar Decks Difíceis (3/5 → 5/5)',
+            style='Accent.TButton', command=self.generate_hard_campaign)
         self.preset_39_button.pack(side='right', padx=(0, 8))
         self.opponent_deck.pack(fill='both', expand=True)
 
@@ -910,7 +920,7 @@ class ModEditor(ttk.Frame):
     def _update_available(self):
         state = 'normal' if self.project else 'disabled'
         for button in (self.password_button, self.duel_button, self.drop_toggle, self.save_opponent_button,
-                       self.generate_button, self.blank_deck_button):
+                       self.generate_button, self.blank_deck_button, self.preset_39_button):
             button.configure(state=state)
 
     def refresh(self):
@@ -975,6 +985,7 @@ class ModEditor(ttk.Frame):
         else:
             self.opponent_deck.restore(draft)
         self._loaded_opponent = opponent if self.project else None
+        self._refresh_campaign_badge()
         self._load_drop()
  
     def _load_drop(self):
@@ -1188,55 +1199,134 @@ class ModEditor(ttk.Frame):
         self.status.set('Deck gerado no editor. Salve quando terminar os ajustes.')
         self.studio.notify(f'Deck gerado com {len(ids)} cartas.')
 
-    def apply_39_opponent_presets(self):
-        """Aplicar presets de 39 rivais, preservando outras edições do MOD."""
+    def _refresh_campaign_badge(self):
+        from .campaign_generator import campaign_label
+        opponent = self._duel_id()
+        saved = (self.rules.get('duelistas', {}).get(str(opponent), {})
+                 .get('campanha_dificil', {}))
+        caption = campaign_label(opponent)
+        if saved:
+            caption = f"{saved.get('nivel', caption.split('/5')[0])}/5 · {saved.get('foco', 'Fusão')}"
+        self.campaign_badge_text.set(caption)
+
+    def _campaign_options(self):
+        """Escolha explícita entre os 39 rivais ou apenas o rival selecionado."""
+        dialog = tk.Toplevel(self)
+        dialog.title('Campanha difícil — Gerador de decks')
+        dialog.transient(self.winfo_toplevel())
+        dialog.resizable(False, False)
+        dialog.grab_set()
+        body = ttk.Frame(dialog, padding=18)
+        body.pack(fill='both', expand=True)
+        ttk.Label(body, text='Gerar Decks Difíceis (3/5 → 5/5)',
+                  font=('Segoe UI', 12, 'bold')).pack(anchor='w', pady=(0, 8))
+        mode = tk.StringVar(value='all')
+        custom = tk.BooleanVar(value=False)
+        ttk.Radiobutton(body, text='Gerar todos os 39 oponentes', variable=mode,
+                        value='all').pack(anchor='w', pady=4)
+        ttk.Radiobutton(body, text=f'Regenerar apenas {self.duelist.get().split("[")[0].strip()}',
+                        variable=mode, value='one').pack(anchor='w', pady=4)
+        ttk.Checkbutton(body, text='Usar também cartas customizadas #723+ (somente Studio)',
+                        variable=custom).pack(anchor='w', pady=(10, 5))
+        ttk.Label(body, text='Padrão: cartas PS1 originais e compatibilidade BIN/CUE.\n'
+                  'ATK/DEF dos materiais: até 1500; fusões podem superar 3000.\n'
+                  'Os efeitos, fusões e equipamentos vêm do projeto carregado.',
+                  foreground=MUTED, justify='left').pack(anchor='w', pady=8)
+        choice = []
+        commands = ttk.Frame(body)
+        commands.pack(fill='x', pady=(12, 0))
+        def complete():
+            choice.append((mode.get(), custom.get()))
+            dialog.destroy()
+        ttk.Button(commands, text='Cancelar', command=dialog.destroy).pack(side='right')
+        ttk.Button(commands, text='Gerar', style='Accent.TButton',
+                   command=complete).pack(side='right', padx=6)
+        dialog.protocol('WM_DELETE_WINDOW', dialog.destroy)
+        dialog.wait_window()
+        return choice[0] if choice else None
+
+    def generate_hard_campaign(self):
+        """Geração atômica: valida todos os decks antes de salvar o projeto."""
+        if self.project is None or self.studio._extract_running:
+            return
+        options = self._campaign_options()
+        if options is None:
+            return
+        mode, allow_custom = options
         try:
-            from .opponent_presets_39 import opponent_presets
-
-            rules = self._edit()
-            presets = opponent_presets()
-            # Validar IDs, pesos e viabilidade de 40 compras antes de qualquer gravação.
+            from .campaign_generator import generate_campaign_deck
+            self.refresh_catalog()
+            _, _, equips, rituals = base_tables(self.project)
+            fusions, equips, _ = match_recipes(self.project, equips, rituals)
             copies = int(self.project.metadata.get('ps1_deck_global_limit', 3))
-            for opponent, profile in presets.items():
-                normalized = normalize_rules(
-                    {'duelistas': {opponent: {'deck': profile}}}, self.cards
-                )['duelistas'][opponent]['deck']
-                deal_deck(normalized, self.cards, self.project.effects,
+            trap_thresholds = {int(cid): int(value) for cid, value
+                               in self.project.metadata.get('ps1_trap_thresholds', {}).items()}
+            opponents = list(range(1, 40)) if mode == 'all' else [self._duel_id()]
+            results = {}
+            self.configure(cursor='watch')
+            for opponent in opponents:
+                self.status.set(f'Planejando e validando {opponent:02d}/39...')
+                self.update_idletasks()
+                generated = generate_campaign_deck(
+                    self.cards, self.project.effects, fusions, equips, opponent,
+                    default_copies=copies, ps1_only=not allow_custom,
+                    trap_thresholds=trap_thresholds)
+                profile = normalize_rules(
+                    {'duelistas': {str(opponent): {'deck': generated.profile}}},
+                    self.cards)['duelistas'][str(opponent)]['deck']
+                deal_deck(profile, self.cards, self.project.effects,
                           default_copies=copies)
-                presets[opponent] = normalized
-
-            if not messagebox.askyesno(
-                'Aplicar 39 decks ponderados',
-                'Substituir APENAS os decks dos 39 oponentes neste projeto?\\n\\n'
-                'As 39 tabelas de decks receberão 40 compras ponderadas, '
-                'com soma de pesos 2048 por rival.\\n'
-                'Drops, cartas personalizadas, fusões e outras configurações '
-                'serão preservados.\\n\\n'
-                'Recomendamos salvar um backup do projeto antes de continuar.',
-                parent=self,
-            ):
+                results[opponent] = (generated, profile)
+            self.configure(cursor='')
+            warnings = list(dict.fromkeys(
+                note for generated, _ in results.values() for note in generated.notes
+            ))
+            effects_count = sum(generated.effect_monsters for generated, _ in results.values())
+            lines = [
+                f'{len(results)} deck(s), todos com 40 posições ponderadas e peso total 2048.',
+                f'{effects_count} posições de monstros com efeito (na composição projetada).',
+                'O Studio só usará IDs customizados #723+ quando essa opção for marcada.',
+                'A ação substitui os decks escolhidos, NÃO altera cartas, efeitos ou fusões.',
+                'Um backup do projeto será feito ao salvar.',
+            ]
+            if warnings:
+                lines.append('\nAvisos: ' + ' | '.join(warnings[:4]))
+            lines.append('\nConfirmar gravação dos novos decks no projeto aberto?')
+            if not messagebox.askyesno('Validar campanha difícil',
+                                       '\n'.join(lines), parent=self):
+                self.status.set('Geração cancelada; nenhum deck foi substituído.')
                 return
-
+            rules = self._edit()
             duelists = rules.setdefault('duelistas', {})
-            for opponent, deck in presets.items():
-                duelist = duelists.setdefault(opponent, {})
-                duelist['deck'] = deck
+            for opponent, (generated, profile) in results.items():
+                duelist = duelists.setdefault(str(opponent), {})
+                duelist['deck'] = profile
+                duelist['campanha_dificil'] = {
+                    'nivel': f'{generated.difficulty:.1f}',
+                    'foco': generated.focus,
+                    'efeitos': generated.effect_monsters,
+                    'fusao_max_atk': generated.max_fusion_atk,
+                    'customizadas': allow_custom,
+                }
                 if duelist.get(DROP_FROM_DECK):
-                    candidates = set(deck['pools'][0]['pesos'])
-                    existing = duelist.setdefault(DECK_DROP_WEIGHTS, {})
+                    candidates = set(profile['pools'][0]['pesos'])
+                    current = duelist.setdefault(DECK_DROP_WEIGHTS, {})
                     for group in DROP_GROUPS:
-                        old = existing.get(group, {})
-                        existing[group] = {
-                            cid: int(old.get(cid, 1)) for cid in sorted(candidates)
-                            if int(old.get(cid, 1)) > 0
+                        original = current.get(group, {})
+                        current[group] = {
+                            cid: original.get(cid, 1) for cid in sorted(candidates)
+                            if original.get(cid, 1) > 0
                         } or {cid: 1 for cid in sorted(candidates)}
-
-            self._commit(rules, '39 decks de oponentes aplicados (níveis 3/5 a 5/5).')
+            # Descarte de prévias antigas ANTES da atualização dos controles.
             self._opponent_drafts.clear()
             self._loaded_opponent = None
+            self._commit(rules, f'{len(results)} deck(s) difícil(is) gerado(s) com sucesso.')
             self._load_duelist()
         except (ModError, ValueError, OSError, KeyError) as exc:
-            messagebox.showerror('39 decks de oponentes', str(exc), parent=self)
+            messagebox.showerror('Campanha difícil', str(exc), parent=self)
+            self.status.set('Falha ao gerar campanha: ' + str(exc))
+        finally:
+            self.configure(cursor='')
 
     def save_opponent(self):
         try:
