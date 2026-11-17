@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS
 from .core import ModError, check_effect
-from .mod_data import CONFIG_KEY, drops_from_deck
+from .mod_data import CONFIG_KEY
 from .passwords import PS1_ID_PREFIX
 from .rarities import RARITIES, TYPE_OVERRIDES, name_style
 from .ps1_god24_chest import SOURCE_SHA256
@@ -133,7 +133,10 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
 
     accepted, pending = [], []
     config = metadata.get(CONFIG_KEY, {})
-    deck_drops = tuple(opponent for opponent in range(DUELIST_COUNT) if drops_from_deck(config, opponent))
+    # Desde a v1.7.10 os drops do próprio deck usam tabelas ponderadas
+    # POW/TEC/BCD de WA_MRG, compiladas em ps1_mod.compile_mod.
+    # Não instalar o antigo hook SelectDeckDrop que sorteava sem pesos.
+    deck_drops = ()
     prefix = metadata.get(PS1_ID_PREFIX)
     if prefix is not None and (type(prefix) is not int or not 0 <= prefix <= CARD_COUNT):
         raise ModError('Prefixo dos passwords por ID inválido. Releia os códigos de origem.')
