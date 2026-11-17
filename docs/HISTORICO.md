@@ -1,3 +1,12 @@
+## v1.8.7 — Corrigir Ao atacar → Causar dano LP → Próprio / Controlador
+
+- **Causa corrigida:** o compilador do Drop x15 aceitava `dano_lp` apenas com evento `invocar`, então o efeito `atacar` configurado na carta era marcado como pendente e não entrava no BIN/CUE. Ele passa a preencher o campo nativo `attack_cost` da carta, cobrado pela rotina MIPS `Battle()` a cada ataque declarado, em ambos os duelistas.
+- O efeito `dano_lp` para `atacar` e `alvo=proprio` é compatível com a habilidade antiga `perder_lp_por_ataque`: valores se somam e são descontados **uma única vez por ataque**, sem se transformar em dano de invocação. O PS1 só comporta 9.999 de custo por ataque; valores maiores continuam no simulador e são informados como pendentes na exportação.
+- No **simulador**, o custo é contabilizado na prévia e no resultado do ataque, inclusive em monstros em defesa, contra ambos os lados e com habilidades de múltiplos ataques; a função de evento não o aplica novamente. Dano de ataque ao oponente (alvo inimigo) continua disponível no simulador, mas ainda é pendente no PS1.
+- A janela do editor explica quando essa combinação é compatível com o PS1, sem exigir substituir o efeito previamente cadastrado.
+- O projeto antigo mantém a regra; **Salvar projeto** e **gerar um BIN/CUE novo** são necessários para aplicar o patch já compatível. Não muda o SLUS fonte nem os LP configurados em Config. MOD.
+- Backup: `backup/studio-v1.8.6-before-attack-self-lp`.
+
 ## v1.8.6 — Bônus por tipo ou atributo
 
 - Auras, bônus por contagem e marcadores de entrada aceitam tipo, atributo
