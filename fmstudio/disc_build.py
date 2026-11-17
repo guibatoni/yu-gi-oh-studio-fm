@@ -235,7 +235,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             patched_exe, metadata.get('ps1_deck_global_limit'))
 
     from .ps1_effects_lab import patch_initial_duel_lp
-    patched_exe, lp_written = patch_initial_duel_lp(patched_exe,metadata.get('ps1_starting_lp'))
+    # A configuração global da aba Config. MOD é a única fonte quando presente.
+    # Não permitir que o patch legado de teste altere novamente os mesmos LP.
+    patched_exe, lp_written = patch_initial_duel_lp(
+        patched_exe, None if mod_plan.has_lp else metadata.get('ps1_starting_lp'))
 
     written_arts=[]
     patched_wa=None
