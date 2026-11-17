@@ -245,12 +245,14 @@ class StableDiscOutputTests(DiscBuildTests):
         import struct
         from unittest.mock import patch
         from fmstudio.ps1_lp_hud import LP_HUD_PATCHES, DECK_COUNT_WORDS
-        from fmstudio.ps1_mod import FIRST_TURN_PC, FIRST_TURN_SOURCE, LP_BANK_END
+        from fmstudio.ps1_mod import (FIRST_TURN_PC, FIRST_TURN_SOURCE,
+                                       LP_BANK_END, INIT_CALL, _LP_INIT)
         from fmstudio.tables import EXE_DELTA
 
         # A imagem fake reserva todo o banco nativo de LP, não contém ROM real.
         source = bytearray(LP_BANK_END-EXE_DELTA+0x800)
         source[:8] = b'PS-X EXE'
+        struct.pack_into('<I', source, INIT_CALL-EXE_DELTA, _LP_INIT)
         struct.pack_into('<I', source, FIRST_TURN_PC-EXE_DELTA, FIRST_TURN_SOURCE)
         for pc, original, _, _ in LP_HUD_PATCHES:
             struct.pack_into('<I', source, pc-EXE_DELTA, original)
