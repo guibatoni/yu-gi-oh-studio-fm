@@ -1,3 +1,13 @@
+## v1.8.1 — Seleção múltipla de cartas em drops, decks e catálogo
+
+- **Drops normais, drops ponderados do deck e pools**: use Ctrl+clique ou Shift+clique para selecionar várias cartas e aplicar um mesmo peso; **Remover selecionadas** zera os pesos de todas em uma operação e **Selecionar visíveis** facilita filtros e lotes.
+- Em drops ponderados do deck, pesos zero continuam visíveis. Não é permitido excluir a última carta de peso positivo.
+- **Deck fixo do oponente e decks iniciais**: múltipla seleção nas listas **Catálogo** e **Deck atual**. Adicionar N cópias a cada carta, Ajustar a quantidade total de cada carta ou Remover todas as cópias selecionadas, de uma vez. Botões de seleção do catálogo/deck. Erros de capacidade 40 ou limites de cópias rejeitam o lote inteiro, sem edição parcial.
+- **Biblioteca principal**: Ctrl/Shift e Ctrl+A selecionam múltiplas cartas. Clique direito → **Adicionar selecionadas ao deck do oponente** transfere o lote para a edição do mod.
+- Mantém ordenação, filtros e seleção ao redesenhar tabelas, inclusive depois de alteração de pesos. Preserva o formato de projeto salvo e a exportação PS1; não há alteração nas regras de drop/IA/LP deste release.
+- Testes gráficos automatizados incluem operações em lote, limites de cópias, exclusão com peso 0, edição de pools e envio pela biblioteca.
+- Backup: `backup/studio-v1.7.10-before-multiselect`.
+
 ## v1.8.0 — Rank em duelo, banlist e decks temáticos
 
 - Rank POW/TEC abaixo dos LP, com pontuação de 0 a 99 e uso do rank final para a recompensa no simulador.
