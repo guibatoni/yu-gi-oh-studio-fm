@@ -969,6 +969,7 @@ class Studio(tk.Tk):
         buttons.pack(fill='x',pady=(12,0))
         ttk.Button(buttons,text='Salvar projeto (todas as cartas)',style='Accent.TButton',command=self.save_project).pack(side='left')
         ttk.Button(buttons,text='Restaurar os valores originais',command=self.reset_card).pack(side='left',padx=9)
+        ttk.Button(buttons,text='Conferir descrições no BIN/CUE',command=self.verify_ps1_description_bin).pack(side='left',padx=9)
         tk.Label(buttons,text='Troque de carta livremente • Ctrl+S salva tudo',bg=BG,fg=MUTED,font=('Segoe UI',9)).pack(side='right')
         for variable in self.vars.values():
             variable.trace_add('write',lambda *_: self._on_card_field_input())
@@ -2445,6 +2446,70 @@ class Studio(tk.Tk):
         for name,code in NATIVE_ICONS.items():
             ttk.Button(body,text=f'{name}   •   {{f8 0B {code:02X}}}',
                 command=lambda code=code:(self.insert_description_token(f'{{f8 0B {code:02X}}}'),popup.destroy())).pack(fill='x',padx=12,pady=2)
+
+    def verify_ps1_description_bin(self):
+        """Confere diretamente o texto da imagem selecionada, não apenas o JSON."""
+        if not self.project or not self.selected_id:
+            return
+        if self.drafts and self.drafts.is_dirty:
+            messagebox.showinfo(
+                'Salve antes de conferir',
+                'Clique em Salvar projeto antes de comparar as descrições '
+                'com o BIN/CUE. A análise utiliza os textos salvos.',
+                parent=self)
+            return
+        folder = self.project.folder / 'exportacao' / 'teste_ps1'
+        filepath = filedialog.askopenfilename(
+            title='Selecione a cópia BIN/CUE executada no ePSXe',
+            initialdir=str(folder if folder.is_dir() else self.project.folder),
+            filetypes=[('PlayStation BIN/CUE', '*.cue *.bin'),
+                       ('Todos arquivos', '*.*')], parent=self)
+        if not filepath:
+            return
+        try:
+            import json
+            from .ps1_description_verify import scan_disc_descriptions
+            ids = {int(cid) for cid, fields in self.project.edits.items()
+                   if 'descricao' in fields}
+            ids.add(int(self.selected_id))
+            result = scan_disc_descriptions(self.project, Path(filepath), ids=ids)
+            output = self.project.folder / 'exportacao'
+            output.mkdir(parents=True, exist_ok=True)
+            target = output / 'diagnostico_descricoes_ps1.json'
+            staging = output / '.diagnostico_descricoes_ps1.tmp'
+            staging.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+            staging.replace(target)
+        except (OSError, ValueError, ModError, DiscError) as exc:
+            messagebox.showerror('Falha na conferência do BIN/CUE', str(exc), parent=self)
+            return
+        counts = result['contagens']
+        chosen = next((row for row in result['cartas']
+                       if row['id'] == self.selected_id), None)
+        summary = (
+            f'BIN escolhido: {result["imagem_analisada"]}\n'
+            f'SHA-256 do SLUS: {result["sha256_slus_bin"][:20]}...\n\n'
+            f'Descrições confirmadas: {counts["aplicada"]}\n'
+            f'Ainda originais: {counts["original"]}\n'
+            f'Diferentes do Studio: {counts["divergente"]}\n'
+            f'Incompatíveis: {counts["incompativel"]}\n'
+            f'Somente Studio (ID > 722): {counts["somente_studio"]}\n\n'
+        )
+        if chosen:
+            summary += (f'Carta #{chosen["id"]}: {chosen["status"].upper()}\n'
+                        f'{chosen["motivo"]}\n\n')
+        problems = [row for row in result['cartas']
+                    if row['status'] != 'aplicada']
+        if problems:
+            summary += 'Primeiras cartas não confirmadas:\n'
+            summary += '\n'.join(f'#{row["id"]}: {row["status"]}'
+                                 for row in problems[:10]) + '\n\n'
+        else:
+            summary += ('Os textos esperados estão gravados neste BIN. '
+                        'Se não aparecem no ePSXe, confirme que este mesmo '
+                        'arquivo foi aberto e que a tela de informações '
+                        'está acessível no mod.\n\n')
+        summary += f'Relatório completo: {target}'
+        messagebox.showinfo('Conferência de descrições no PS1', summary, parent=self)
 
     def choose_description_color(self):
         if not self.project:return
