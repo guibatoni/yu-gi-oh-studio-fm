@@ -28,7 +28,7 @@ with TemporaryDirectory() as tmp:
             table.weight.set('3')
             table._apply()
             assert table.weights[a] == table.weights[b] == 3
-            assert table.tree.cget('selectmode') == 'extended'
+            assert table.tree.cget('selectmode').__str__() == 'extended'
             table.tree.selection_set([str(a), str(b)])
             table._select(None)
             table.weight.set('7')
@@ -62,8 +62,8 @@ with TemporaryDirectory() as tmp:
 
             # Deck: adicionar dois IDs de uma vez, ajustar cópias e remover em lote.
             deck = ed.opponent_deck
-            assert deck.catalog.cget('selectmode') == 'extended'
-            assert deck.deck.cget('selectmode') == 'extended'
+            assert deck.catalog.cget('selectmode').__str__() == 'extended'
+            assert deck.deck.cget('selectmode').__str__() == 'extended'
             deck.catalog.selection_set([str(d), str(e)])
             deck.add_quantity.set('1')
             deck.change_card('add')
