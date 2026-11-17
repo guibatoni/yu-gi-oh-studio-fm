@@ -88,7 +88,8 @@ class WeightTable(ttk.Frame):
             WEIGHT_COLUMNS, ('ID', 'Carta', 'ATK', 'DEF', 'Peso', 'Chance', 'Chance PS1'), widths
         ):
             self.tree.heading(key, text=label)
-            self.tree.column(key, width=width, minwidth=55, stretch=key == 'nome')
+            self.tree.column(key, width=width, minwidth=55, stretch=key == 'nome',
+                             anchor='e' if key in ('atk', 'def', 'peso', 'chance', 'chance_ps1') else 'w')
         self.sort_rows = sortable_columns(self.tree, raw_values=self._sort_value)
         hscroll = ttk.Scrollbar(holder, orient='horizontal', command=self.tree.xview)
         hscroll.pack(side='bottom', fill='x')
