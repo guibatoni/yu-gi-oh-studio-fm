@@ -408,6 +408,15 @@ class DeckProfileEditor(ttk.Frame):
                    command=self.remove_pool).pack(side='left', padx=3)
         ttk.Label(actions, text='Compras').pack(side='left', padx=(9, 5))
         ttk.Spinbox(actions, from_=0, to=MAX_DECK, width=4, textvariable=self.draws).pack(side='left')
+        pool_guide = ttk.Frame(self.pool_pane)
+        pool_guide.pack(fill='x', pady=(0, 7))
+        ttk.Label(
+            pool_guide,
+            text='Compras = cartas sorteadas desta pool. Para PS1: 1 pool com 40 compras e 0 fixas.',
+            foreground=MUTED, wraplength=420, justify='left',
+        ).pack(side='left', fill='x', expand=True)
+        ttk.Button(pool_guide, text='Completar vagas',
+                   command=self._complete_pool_draws).pack(side='right', padx=(8, 0))
         self.table = WeightTable(self.pool_pane)
         self.table.pack(fill='both', expand=True)
 
@@ -494,10 +503,51 @@ class DeckProfileEditor(ttk.Frame):
         ])
         self._update_buttons()
 
+    def _remaining_pool_slots(self):
+        fixed = len(parse_card_ids(self.fixed.get(), maximum=MAX_DECK))
+        other = sum(
+            simulation_nonnegative_int(row['compras'], 'Compras do pool')
+            for index, row in enumerate(self.rows) if index != self.current
+        )
+        available = MAX_DECK - fixed - other
+        if available <= 0:
+            raise ModError('Não há vagas livres: reduza as cartas fixas ou as compras de outros pools.')
+        return available
+
+    def _current_pool_draws(self):
+        """Evita perder as compras quando o Spinbox fica vazio na edição.
+
+        Um pool já salvo conserva sua última quantidade válida. Se a linha
+        ainda não tinha quantidade, preenche exatamente as vagas restantes.
+        Valores não vazios inválidos continuam gerando erro explícito.
+        """
+        typed = self.draws.get().strip()
+        if typed:
+            return simulation_nonnegative_int(typed, 'Compras do pool')
+        if self.current is not None:
+            previous = self.rows[self.current].get('compras', '')
+            if str(previous).strip():
+                return simulation_nonnegative_int(previous, 'Compras do pool')
+        return self._remaining_pool_slots()
+
+    def _complete_pool_draws(self):
+        try:
+            value = self._remaining_pool_slots()
+            self.draws.set(str(value))
+            self.feedback.set(
+                f'Compras do pool: {value}. Para exportar ao PS1, use 40 compras '
+                'em uma única pool, sem cartas fixas.'
+            )
+        except (ModError, ValueError) as exc:
+            self.feedback.set(str(exc))
+
     def _pool_slots(self):
-        amounts = [self.draws.get() if i == self.current else row['compras']
-                   for i, row in enumerate(self.rows)]
-        return sum(simulation_nonnegative_int(amount, 'Compras do pool') for amount in amounts)
+        amounts = [
+            self._current_pool_draws() if i == self.current else
+            simulation_nonnegative_int(row['compras'], 'Compras do pool')
+            for i, row in enumerate(self.rows)
+        ]
+        return sum(amounts)
 
     def _focus_result(self):
         results = self.catalog.get_children()
@@ -670,15 +720,28 @@ class DeckProfileEditor(ttk.Frame):
 
     def _stage(self):
         if self.current is not None:
-            self.rows[self.current] = {'compras': self.draws.get(), 'pesos': dict(self.table.weights)}
+            count = self._current_pool_draws()
+            self.rows[self.current] = {'compras': count, 'pesos': dict(self.table.weights)}
+            if not self.draws.get().strip():
+                self.draws.set(str(count))
 
     def _select_pool(self, _event):
         current = self.pool_combo.current()
-        self._stage()
+        try:
+            self._stage()
+        except (ModError, ValueError) as exc:
+            self.feedback.set(f'{exc} Corrija as compras antes de trocar de pool.')
+            if self.current is not None:
+                self.pool_combo.current(self.current)
+            return
         self._show(current)
 
     def add_pool(self):
-        self._stage()
+        try:
+            self._stage()
+        except (ModError, ValueError) as exc:
+            self.feedback.set(f'{exc} Corrija as compras antes de criar outro pool.')
+            return
         if self.current is None and not self.rows and not self.table.weights:
             weights = {}
         else:
@@ -693,8 +756,9 @@ class DeckProfileEditor(ttk.Frame):
 
     def profile(self):
         if self.current is None and (self.table.weights or self.draws.get().strip()):
-            self.rows.append({'compras': self.draws.get() or '40', 'pesos': dict(self.table.weights)})
-            self.current = len(self.rows) - 1
+            count = self._current_pool_draws()
+            self.rows.append({'compras': count, 'pesos': dict(self.table.weights)})
+            self._show(len(self.rows) - 1)
         self._stage()
         return {'cartas': parse_card_ids(self.fixed.get(), maximum=MAX_DECK),
                 'pools': deepcopy(self.rows)}
