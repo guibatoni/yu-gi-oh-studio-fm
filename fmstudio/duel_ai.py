@@ -165,6 +165,42 @@ def choose_attack(match, side='adversario'):
     return candidate[1] if candidate else None
 
 
+
+def _prefer_safe_guardian_stars(actions, visible_rivals):
+    """Compare only alternatives for the *same* move, using public Guardian Stars.
+
+    No star can be completely safe against every visible monster in some
+    multi-monster boards. In those cases, minimize the number of matchups
+    where the rival receives the Guardian bonus, then favor more advantages.
+    Never inspect face-down enemies: their identities and stars are private.
+    """
+    stars = tuple(int(unit['guardian_id']) for unit in visible_rivals
+                  if unit.get('face_up', True))
+    if not stars:
+        return actions
+
+    def identity(action):
+        return (action.kind, action.hand, action.card_id, action.slot,
+                action.position, action.target, action.tribute, action.face_up)
+
+    def risk(action):
+        matchups = [guardian_bonuses(action.star, rival_star) for rival_star in stars]
+        return (sum(enemy_bonus > 0 for _, enemy_bonus in matchups),
+                sum(enemy_bonus for _, enemy_bonus in matchups),
+                -sum(own_bonus for own_bonus, _ in matchups))
+
+    best_risk = {}
+    for action in actions:
+        if action.kind not in ('monstro', 'fusao', 'ritual'):
+            continue
+        key, value = identity(action), risk(action)
+        if key not in best_risk or value < best_risk[key]:
+            best_risk[key] = value
+    return [action for action in actions
+            if action.kind not in ('monstro', 'fusao', 'ritual')
+            or risk(action) == best_risk[identity(action)]]
+
+
 def choose_play(match, side='adversario'):
     options = match.legal_plays(side)
     if not options:
@@ -172,6 +208,9 @@ def choose_play(match, side='adversario'):
     stance = posture(match, side)
     enemy = opposite(side)
     view = _public_view(match, side)
+    # Refuse a losing Guardian Star when this move offers a safer star.
+    # The public view masks face-down monsters before evaluating the choice.
+    options = _prefer_safe_guardian_stars(options, view._field(enemy))
     base = view.resolve()[0]
     field_score = _field_value(view, base, side, stance) - _field_value(view, base, enemy, 'estratégica')
     held_fusion = _fusion_potential(view, side)
