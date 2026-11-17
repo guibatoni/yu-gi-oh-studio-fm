@@ -38,6 +38,11 @@ def audit(project) -> dict:
     counts['decks_fixos_ps1'] = len(native_plan.fixed_decks)
     counts['fusoes_personalizadas_ps1'] = len(native_plan.fusions)
     blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
+    if mod_plan.player_lp > 9999:
+        if native_profile:
+            supported.append('Contador LP de cinco dígitos para ambos no BIN/CUE PS1 (teste visual ePSXe pendente)')
+        else:
+            blocked.append('Contador LP de cinco dígitos exige imagem Drop x15 com SLUS reconhecido')
     from .ps1_ai import mode_for
     ai_mode=mode_for(project)
     if ai_mode=='dificil':
