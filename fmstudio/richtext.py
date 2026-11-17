@@ -20,7 +20,9 @@ CUSTOM_ICONS={'perfurar':'Perfurante','ataque_2x':'2x ataque',
     'ataque_3x':'3x ataque','nao_bloqueavel':'Não bloqueável',
     'infinito':'Sem limite no deck','anti_trap':'Imune a trap',
     'anti_magia':'Imune a mágicas','indestrutivel':'Indestrutível',
-    'god':'God', 'ataque_primeiro_turno':'Ataca no primeiro turno'}
+    'god':'God', 'ataque_primeiro_turno':'Ataca no primeiro turno',
+    'vinculo_vida':'Vínculo com Vida (coração e espada)',
+    'restaurar_lp':'Restaurar LP (coração)'}
 TOKEN = re.compile(r'(\{f8 0[AB] [0-9A-Fa-f]{2}\}|\{icon:[a-z0-9_]+\}|\{color:[a-z]+\}|\{/color\}|\{card:[0-9]+\})')
 
 def tokens(value: str, cards=None):
