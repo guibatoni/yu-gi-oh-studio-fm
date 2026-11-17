@@ -22,6 +22,7 @@ ENTRIES = (
     'DescriptionIcon', 'SpellUsed', 'CollectTargets', 'SelectDeckDrop', 'UpdatePasswordShop',
     'DealConfiguredDecks', 'RetailCardDrop', 'InsertTierName', 'EndTierName',
     'SortTierGlyph', 'SortTierPolygon', 'CheckEditedFusion', 'summon_damage', 'protection',
+    'DeckAllowsCopies',
 )
 FLAGS = ('-march=r3000', '-mabi=32', '-msoft-float', '-mno-abicalls', '-fno-pic',
          '-G0', '-ffreestanding', '-fno-builtin', '-fno-stack-protector',

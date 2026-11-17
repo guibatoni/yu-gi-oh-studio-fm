@@ -6,6 +6,7 @@ import queue
 import threading
 import os
 import tkinter as tk
+from decimal import Decimal
 from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from pathlib import Path
 from .core import (Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR,
@@ -18,7 +19,7 @@ from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS, SCALING_ACTIONS
 from .abilities import QUICK_ACTIONS, BOOLEAN_ACTIONS, quick_settings
 from . import __version__
 from .rarities import RARITIES, DEFAULT_RARITY, name_style, rarity_options
-from .expanded import GOD_TYPE_ID, display_name, bonus_description, resolve_references
+from .expanded import GOD_TYPE_ID, card_matches, display_name, bonus_description, resolve_references, search_text
 from .richtext import NATIVE_ICONS, CUSTOM_ICONS, TEXT_COLORS, tokens
 from .updates import read_latest, start_updater, UpdateError
 from .guardian import SUPREME_COLOR, guardian_name
@@ -59,6 +60,44 @@ def card_row_tags(tree, card, index):
     shade = '#EAF0FA' if kind == 'deus' else (ROW_ALT if index % 2 else SURFACE)
     tree.tag_configure(tag, foreground=color, background=shade)
     return (tag,)
+
+
+def sortable_columns(tree, *, raw_values=None):
+    """Bind each heading and return the function that reapplies the active order."""
+    columns = tuple(tree['columns'])
+    labels = {column: tree.heading(column, 'text') for column in columns}
+    ordered_by = None
+    reverse = False
+
+    def apply():
+        if ordered_by is None:
+            return
+        rows = []
+        for item in tree.get_children():
+            value = raw_values(item, ordered_by) if raw_values else tree.set(item, ordered_by)
+            raw = str(value)
+            number = raw.removeprefix('#').removesuffix('%').strip().replace(',', '.')
+            if re.fullmatch(r'-?[0-9]+(?:\.[0-9]+)?', number):
+                key = (0, Decimal(number))
+            else:
+                key = (1, search_text(raw))
+            rows.append((key, item))
+        rows.sort(key=lambda row: row[0], reverse=reverse)
+        for index, (_, item) in enumerate(rows):
+            tree.move(item, '', index)
+
+    def sort(column):
+        nonlocal ordered_by, reverse
+        reverse = not reverse if ordered_by == column else False
+        ordered_by = column
+        for field, caption in labels.items():
+            suffix = (' ▼' if reverse else ' ▲') if field == column else ''
+            tree.heading(field, text=caption + suffix)
+        apply()
+
+    for column in columns:
+        tree.heading(column, command=lambda key=column: sort(key))
+    return apply
 
 
 class EffectDialog(tk.Toplevel):
@@ -585,7 +624,7 @@ class Studio(tk.Tk):
         self.new_card_button = ttk.Button(sidebar, text='＋ Nova carta', style='Accent.TButton',
                                           command=self.add_new_card, state='disabled')
         self.new_card_button.pack(fill='x',padx=12,pady=(0,7))
-        tk.Label(sidebar,text='Buscar por ID ou nome   ·   Ctrl+F',bg=SURFACE,fg=MUTED).pack(anchor='w',padx=12)
+        tk.Label(sidebar,text='ID, nome, tipo ou descrição · Ctrl+F',bg=SURFACE,fg=MUTED).pack(anchor='w',padx=12)
         self.card_search = ttk.Entry(sidebar,textvariable=self.filter)
         self.card_search.pack(fill='x',padx=12,pady=(3,8))
         filters = tk.Frame(sidebar,bg=SURFACE)
@@ -609,6 +648,7 @@ class Studio(tk.Tk):
         for col,text,width,anchor in [('id','ID',48,'w'),('nome','Nome / identificação',146,'w'),('atk','ATK',56,'e'),('def','DEF',56,'e')]:
             self.tree.heading(col,text=text)
             self.tree.column(col,width=width,anchor=anchor,stretch=(col=='nome'))
+        self.sort_cards = sortable_columns(self.tree, raw_values=self._card_sort_value)
         scroll = ttk.Scrollbar(treeholder,orient='vertical',command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side='left',fill='both',expand=True)
@@ -839,13 +879,13 @@ class Studio(tk.Tk):
         self.quick_vars['custo_lp'].trace_add('write',lambda *_:self._on_quick_changed())
         copies=tk.Frame(quick,bg=SURFACE)
         copies.pack(fill='x',pady=4)
-        tk.Label(copies,text='Cópias da carta no deck (1–40):',bg=SURFACE,fg=TEXT).pack(side='left')
+        tk.Label(copies,text='Limite de cópias no deck',bg=SURFACE,fg=TEXT).pack(side='left')
         self.quick_vars['limite_copias']=tk.StringVar()
         check_copies=(self.register(lambda value: value=='' or (value.isdigit() and len(value)<=2)))
         ttk.Entry(copies,width=5,textvariable=self.quick_vars['limite_copias'],
                   validate='key',validatecommand=(check_copies,'%P')).pack(side='left',padx=7)
         self.quick_vars['limite_copias'].trace_add('write',lambda *_:self._on_quick_changed())
-        tk.Label(copies,text='Vazio usa o limite padrão. ∞ permite até 40 cópias.',
+        tk.Label(copies,text='0 bane a carta. Vazio usa o limite padrão. ∞ permite 40.',
                  bg=SURFACE,fg=MUTED).pack(side='left',padx=(10,0))
         rows=[tk.Frame(quick,bg=SURFACE) for _ in range(3)]
         for quick_row in rows: quick_row.pack(fill='x',pady=2)
@@ -872,6 +912,7 @@ class Studio(tk.Tk):
                                 ('tipo','Tipo',75),('atk','ATK',70),('def','DEF',70)]:
             self.effect_tree.heading(key,text=label)
             self.effect_tree.column(key,width=w,stretch=True)
+        self.sort_effects = sortable_columns(self.effect_tree)
         effects_scroll=ttk.Scrollbar(holder,orient='vertical',command=self.effect_tree.yview)
         self.effect_tree.configure(yscrollcommand=effects_scroll.set)
         effects_scroll.pack(side='right',fill='y')
@@ -937,6 +978,7 @@ class Studio(tk.Tk):
         for key,label,width in [('a','Material 1',160),('b','Material 2',160),('result','Resultado',160),('glitch','Leitura excedente?',170)]:
             self.fusion_tree.heading(key,text=label)
             self.fusion_tree.column(key,width=width)
+        self.sort_fusions = sortable_columns(self.fusion_tree)
         self.fusion_tree.pack(fill='both',expand=True)
         self.fusion_footer=tk.Label(body,text='Base não importada.',bg=BG,fg=MUTED,font=('Segoe UI',9))
         self.fusion_footer.pack(anchor='w',pady=10)
@@ -1358,6 +1400,13 @@ class Studio(tk.Tk):
                 data[key]=self.vars[key].get()
         return data
 
+    def _card_sort_value(self, item, field):
+        cid = int(item)
+        if field == 'id':
+            return cid
+        row = self.drafts.get_card(cid) if self.drafts else self.project.get(cid)
+        return row[{'atk': 'ataque', 'def': 'defesa', 'nome': 'nome'}[field]]
+
     def _refresh_cards(self):
         keep = str(self.selected_id) if self.selected_id else None
         top = self.tree.yview()[0]
@@ -1365,7 +1414,7 @@ class Studio(tk.Tk):
         if not self.project or not self.project.cards:
             self.count_label.configure(text='Nenhuma carta importada')
             return
-        q=self.filter.get().casefold().strip()
+        q=search_text(self.filter.get()).strip()
         type_filter=self.filter_type.get()
         star_filter=self.filter_star.get()
         try:
@@ -1382,7 +1431,7 @@ class Studio(tk.Tk):
                 continue
             c=self.drafts.get_card(cid) if self.drafts else self.project.get(cid)
             title=c.get('nome') or '(nome não extraído)'
-            if q and q not in title.casefold() and q not in f'#{cid:03d}' and q not in f'#{cid}':
+            if not card_matches(q, cid, c):
                 continue
             typ=int(c['tipo_id'])
             if type_filter=='Monstros' and not (typ<20 or typ==24):
@@ -1396,6 +1445,7 @@ class Studio(tk.Tk):
             self.tree.insert('','end',iid=str(cid),values=(compact_number(f'{cid:03d}', 7),title+flag,
                 compact_number(c['ataque'],8),compact_number(c['defesa'],8)),tags=card_row_tags(self.tree, c, count))
             count+=1
+        self.sort_cards()
         self.count_label.configure(text=f'{count} cartas exibidas  •  {len(self.project.cards)} carregadas')
         if keep and self.tree.exists(keep):
             self.tree.selection_set(keep)
@@ -1465,13 +1515,9 @@ class Studio(tk.Tk):
         self.preview.itemconfigure(self.art_placeholder,state='normal')
         if not self.project or not self.selected_id:
             return
-        rel = self.project.arts.get(str(self.selected_id))
-        if not rel:
-            candidate = self.project.folder / 'base' / 'extracao_completa' / 'visuais' / 'cartas' / f'{self.selected_id:03d}.png'
-            if not candidate.is_file():return
-            path=candidate
-        else:
-            path = self.project.folder / rel
+        path = self.project.art_path(self.selected_id)
+        if path is None:
+            return
         try:
             img = tk.PhotoImage(file=str(path))
             factor = max(1, (img.width()+207)//208, (img.height()+131)//132)
@@ -1645,6 +1691,8 @@ class Studio(tk.Tk):
         if self._extract_running:
             return
         settings={k:v.get() for k,v in self.quick_vars.items()}
+        if settings['limite_copias'] in ('0', '00') and settings['sem_limite_deck']:
+            self.quick_vars['sem_limite_deck'].set(False)
         try:
             self.drafts.set_quick_abilities(self.selected_id, settings, default_copies=None)
         except ModError as exc:
@@ -1680,6 +1728,7 @@ class Studio(tk.Tk):
                 label,effect_target_label(eff['acao'], eff['alvo']),
                 ('Todos' if eff.get('tipo_id') == -1 else TYPE_NAMES[eff['tipo_id']] if 'tipo_id' in eff and 0 <= eff['tipo_id'] < len(TYPE_NAMES) else '—'),
                 eff['valor'],eff.get('valor_def','—')))
+        self.sort_effects()
         if select_index is not None and 0 <= select_index < len(effects):
             self.effect_tree.selection_set(str(select_index))
             self.effect_tree.focus(str(select_index))
@@ -2322,6 +2371,7 @@ class Studio(tk.Tk):
             self.fusion_tree.insert('','end',iid=str(i),values=(format_id(int(row['material_1'])),
                 format_id(int(row['material_2'])),format_id(int(row['resultado'])),
                 'Possível glitch' if str(row['possivel_glitch'])=='1' else 'Não'))
+        self.sort_fusions()
         self.fusion_footer.configure(text=(f'{len(self.project.fusions):,} receitas importadas. Tabela protegida por SHA-256. '
             f'Exibindo até 1.600 relacionadas.').replace(',','.'))
 

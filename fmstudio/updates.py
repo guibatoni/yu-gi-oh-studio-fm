@@ -45,7 +45,7 @@ SOURCE_FILES = frozenset({
     'fmstudio/gui.py', 'fmstudio/updates.py',
     'fmstudio/ps1_god24_play.py', 'fmstudio/ps1_god24_display.py',
     'fmstudio/ps1_runtime.py', 'fmstudio/ps1_runtime_blob.py', 'fmstudio/ps1_text.py',
-    'fmstudio/duel_match.py', 'fmstudio/duel_ai.py', 'fmstudio/duel_gui.py', 'fmstudio/guardian.py',
+    'fmstudio/duel_match.py', 'fmstudio/duel_ai.py', 'fmstudio/duel_gui.py', 'fmstudio/duel_rank.py', 'fmstudio/guardian.py',
     'fmstudio/mod_data.py', 'fmstudio/mod_gui.py', 'fmstudio/ps1_mod.py', 'fmstudio/ps1_ai.py', 'fmstudio/ps1_lp_hud.py',
     'fmstudio/deck_generator.py', 'fmstudio/mod_tools_gui.py', 'fmstudio/passwords.py',
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
@@ -57,7 +57,7 @@ SOURCE_FILES = frozenset({
 SOURCE_REQUIRED = frozenset({
     'fmstudio/ps1_god24_play.py', 'fmstudio/ps1_god24_display.py',
     'fmstudio/ps1_runtime.py', 'fmstudio/ps1_runtime_blob.py', 'fmstudio/ps1_text.py',
-    'fmstudio/duel_match.py', 'fmstudio/duel_ai.py', 'fmstudio/duel_gui.py', 'fmstudio/guardian.py',
+    'fmstudio/duel_match.py', 'fmstudio/duel_ai.py', 'fmstudio/duel_gui.py', 'fmstudio/duel_rank.py', 'fmstudio/guardian.py',
     'fmstudio/mod_data.py', 'fmstudio/mod_gui.py', 'fmstudio/ps1_mod.py', 'fmstudio/ps1_ai.py', 'fmstudio/ps1_lp_hud.py',
     'fmstudio/deck_generator.py', 'fmstudio/mod_tools_gui.py', 'fmstudio/passwords.py',
     'app.py', 'updater_main.py', 'fmstudio/__init__.py', 'fmstudio/gui.py',

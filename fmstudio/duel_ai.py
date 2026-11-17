@@ -41,7 +41,8 @@ def _public_view(match, side):
                         modificador_atk=0, modificador_def=0)
     # A unit's displayed ATK/DEF is public even when one of its effects
     # depends on a hidden zone. Preserve those displayed values in forecasts.
-    real_board = {(m['lado'], m['slot']): m for m in match.resolve()[0] if m['face_up']}
+    real_board = {(m['lado'], m['slot']): m for m in match.resolve()[0]
+                  if m['lado'] == side or m['face_up']}
     for unit in view.resolve()[0]:
         key = unit['lado'], unit['slot']
         if key in real_board:
@@ -101,19 +102,25 @@ def _fusion_potential(game, side):
 
 
 def _direct_followup(game, side):
-    if game._field(opposite(side)) or game.winner:
+    if game.winner:
         return 0
-    points = 0
+    budget = game.lp[side] - 1
+    totals = {0: 0}
     board = game.resolve()[0]
     for action in game.legal_attacks(side, board):
         if action.target is not None:
             continue
         preview = game.preview_attack(side, action.slot, against=None, board=board)
         remaining = preview['ataques_max'] - preview['ataques_usados'] + 1
-        if preview['custo_lp'] and preview['custo_lp'] * remaining >= game.lp[side]:
-            remaining = (game.lp[side] - 1) // preview['custo_lp']
-        points += preview['atributos_atacante'][0] * remaining
-    return points
+        cost, power = preview['custo_lp'], preview['atributos_atacante'][0]
+        candidates = dict(totals)
+        for spent, damage in totals.items():
+            for count in range(1, remaining + 1):
+                next_cost = spent + count * cost
+                if next_cost <= budget:
+                    candidates[next_cost] = max(candidates.get(next_cost, 0), damage + count * power)
+        totals = candidates
+    return max(totals.values())
 
 
 def _rank_attack(view, side, action, stance):
@@ -135,7 +142,7 @@ def _rank_attack(view, side, action, stance):
     follow = _direct_followup(branch, side)
     trade = (own_loss == enemy_loss == 1 and result.get('posicao') == 'ataque'
              and result.get('atributos_alvo') and result['atributos_atacante'][0] == result['atributos_alvo'][0])
-    if trade and len(ours) == 2 and len(theirs) == 1 and follow > 0:
+    if trade and len(ours) > len(theirs) and len(theirs) == 1 and follow > 0:
         return (2, follow, -paid), action
     if trade and len(ours) == len(theirs) == 1:
         parity = len(branch.hands[side]) >= len(branch.hands[enemy])
@@ -160,8 +167,42 @@ def _preferred_attack(view, side, stance):
     return max(options, key=lambda option: option[0], default=None)
 
 
+def _winning_attack(view, side, stance, *, budget=96):
+    """Look for lethal by executing candidate attacks in independent public states."""
+    seen = set()
+
+    def search(game):
+        nonlocal budget
+        if budget <= 0:
+            return None
+        state = (tuple(game.lp.values()), tuple(game.attacks_used.items()),
+                 tuple(tuple(zone) for zone in game.graveyards.values()),
+                 tuple(tuple(sorted(unit.items())) for unit in game.monsters))
+        if state in seen:
+            return None
+        seen.add(state)
+        budget -= 1
+        options = sorted((rank for action in game.legal_attacks(side)
+                          if (rank := _rank_attack(game, side, action, stance)) is not None),
+                         key=lambda rank: rank[0], reverse=True)
+        for score, action in options:
+            if score[0] == 3:
+                return action
+            branch = game.fork()
+            branch._execute_attack(side, action)
+            if search(branch) is not None:
+                return action
+        return None
+
+    return search(view)
+
+
 def choose_attack(match, side='adversario'):
-    candidate = _preferred_attack(_public_view(match, side), side, posture(match, side))
+    view, stance = _public_view(match, side), posture(match, side)
+    winning = _winning_attack(view, side, stance)
+    if winning is not None:
+        return winning
+    candidate = _preferred_attack(view, side, stance)
     return candidate[1] if candidate else None
 
 
@@ -246,8 +287,13 @@ def choose_play(match, side='adversario'):
                      any(e['evento'] in ('atacar', 'defender') for e in branch.effects.get(card, branch.effects.get(str(card), ())))
                      or branch.stock_rules and card in (687, 688, 689, 690))
             if known:
-                score += 1300 if stance == 'defensiva' else 550
-        win = bool(pressure and pressure[0][0] == 3)
+                score += 1500 if stance == 'defensiva' else 550
+        elif action.kind == 'magia' and stance == 'defensiva':
+            score += 350 * (branch.swords[enemy] - view.swords[enemy])
+        elif action.position == 'defesa' and not action.face_up and stance == 'defensiva':
+            score += 50
+        win = bool(pressure and (pressure[0][0] == 3 or
+                   pressure[0][0] == 2 and _winning_attack(branch, side, stance, budget=12)))
         attack_value = pressure[0][2] if pressure else 0
         if pressure and not baseline and not win:
             score += max(0, attack_value)
@@ -299,7 +345,13 @@ def play_ai_turn(match, side='adversario'):
     """Use the same public actions available to a human and hand off the turn."""
     match._require_turn(side)
     start = len(match.logs)
-    opening = _preferred_attack(_public_view(match, side), side, posture(match, side))
+    view, stance = _public_view(match, side), posture(match, side)
+    lethal = _winning_attack(view, side, stance)
+    while lethal is not None and not match.winner:
+        match.attack(side, lethal.slot, target_slot=lethal.target)
+        view = _public_view(match, side)
+        lethal = _winning_attack(view, side, stance) if not match.winner else None
+    opening = _preferred_attack(view, side, stance) if not match.winner else None
     if opening and opening[0][0] >= 2:
         _, action = opening
         match.attack(side, action.slot, target_slot=action.target)

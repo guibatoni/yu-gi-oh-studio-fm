@@ -1,0 +1,48 @@
+name: Validar rank, cartas expandidas e decks
+on:
+  push:
+    branches: [feature/studio-rank-decks-expert]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  validation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Preparar Python, Tk e MIPS
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb xauth python3-tk gcc-mipsel-linux-gnu binutils-mipsel-linux-gnu
+          python -m pip install pillow unicorn==2.1.4
+      - name: Recompilar runtime PS1
+        run: python tools/compile_ps1_runtime.py
+      - name: Verificar código e testes
+        run: |
+          python -m compileall -q app.py fmstudio tools tests
+          python -m unittest discover -s tests -v
+      - name: Verificar interface
+        run: |
+          for test in tests/gui*_smoke.py; do
+            PYTHONPATH=. xvfb-run -a python "$test"
+          done
+      - name: Executar regressões MIPS
+        run: |
+          for test in tests/verify_*_mips.py; do
+            PYTHONPATH=. python "$test"
+          done
+      - name: Montar pacote Python
+        run: python tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip
+      - name: Registrar runtime validado
+        if: github.ref == 'refs/heads/feature/studio-rank-decks-expert'
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add fmstudio/ps1_runtime_blob.py
+          if ! git diff --cached --quiet; then
+            git commit -m "build: recompilar runtime MIPS da banlist"
+            git push origin HEAD:feature/studio-rank-decks-expert
+          fi

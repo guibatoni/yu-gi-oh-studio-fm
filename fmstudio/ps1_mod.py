@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from .core import ModError, _write_csv
 from .disc import DiscError, DiscReader
 from .mod_data import (
-    CONFIG_KEY, DROP_GROUPS, base_tables, deck_drop_weights, drops_from_deck,
+    CONFIG_KEY, DROP_GROUPS, base_tables, deck_copy_limit, deck_drop_weights, drops_from_deck,
     normalize_rules, validate_deck,
 )
 from .tables import (
@@ -89,7 +89,7 @@ def import_starter_tables(project, source):
     _write_csv(project.folder/'base'/'decks_iniciais.csv', rows)
 
 
-def _retail_weights(weights, last_id):
+def quantize_weights(weights, last_id):
     if not weights or any(not 1 <= cid <= last_id for cid in weights):
         raise ModError(f'O PS1 exige pesos positivos para cartas de 1 a {last_id}.')
     total = sum(weights.values())
@@ -117,6 +117,8 @@ def compile_mod(project, *, profile, wa_verified):
         return plan
     cards = {cid: project.get(cid) for cid in project.cards}
     config = normalize_rules(raw, cards)
+    effects = getattr(project, 'effects', {})
+    copies = int(project.metadata.get('ps1_deck_global_limit') or 3)
     tables_ok = profile and wa_verified
     legacy_pools = base_tables(project)[0] if hasattr(project, 'folder') else {}
 
@@ -134,12 +136,15 @@ def compile_mod(project, *, profile, wa_verified):
             plan.pending.append(f'{name}: exige a imagem Drop x15 vinculada ao projeto.')
             return
         try:
-            data = _retail_weights(weights, last_id)
+            data = quantize_weights(weights, last_id)
         except ModError as exc:
             plan.pending.append(f'{name}: {exc}')
             return
         plan.groups[opponent, kind] = data
         plan.applied.append(name)
+
+    def deck_weights(weights):
+        return {cid: weight for cid, weight in weights.items() if deck_copy_limit(effects, cid, copies)}
 
     # Um valor para ambos, inclusive todos os 39 duelistas, não só o
     # oponente selecionado no editor. 0 no banco significa "use retail 8000".
@@ -164,8 +169,7 @@ def compile_mod(project, *, profile, wa_verified):
                         raise ModError(f'complete as {DECK_SIZE} vagas ({len(fixed)}/{DECK_SIZE}).')
                     if any(cid > CARD_COUNT or cards[cid].get('virtual') for cid in fixed):
                         raise ModError('o BIN/CUE aceita os IDs originais #001–#722.')
-                    copies = int(project.metadata.get('ps1_deck_global_limit', 3))
-                    validate_deck(cards, getattr(project, 'effects', {}), fixed, copies)
+                    validate_deck(cards, effects, fixed, copies)
                 except ModError as exc:
                     plan.pending.append(f'{name}: {exc}')
                 else:
@@ -173,17 +177,22 @@ def compile_mod(project, *, profile, wa_verified):
                     plan.applied.append(name)
             else:
                 name = f'Pool do duelista #{opponent}'
-                if (fixed or len(pools) != 1 or pools[0]['compras'] != DECK_SIZE
-                        or len(pools[0]['pesos']) * 3 < DECK_SIZE):
+                if fixed or len(pools) != 1 or pools[0]['compras'] != DECK_SIZE:
                     plan.pending.append(f'{name}: use um pool de 40 compras ou 40 cartas fixas para o BIN/CUE.')
                 else:
-                    group(opponent, 'deck', pools[0]['pesos'], name, LEGACY_SCAN_COUNT)
+                    weights = deck_weights(pools[0]['pesos'])
+                    if len(weights) * 3 < DECK_SIZE:
+                        plan.pending.append(f'{name}: o pool precisa de cartas elegíveis para 40 vagas.')
+                    elif any(deck_copy_limit(effects, cid, copies) < 3 for cid in weights):
+                        plan.pending.append(f'{name}: use um deck fixo para aplicar limites de 1–2 no sorteio PS1.')
+                    else:
+                        group(opponent, 'deck', weights, name, LEGACY_SCAN_COUNT)
         if drops_from_deck(config, opponent):
             # Em vez do antigo hook que dava uma carta do deck efetivamente
             # sorteado com probabilidade fixa por cópia, escrever as tabelas
             # de drop de cada rank com os pesos escolhidos no editor.
             for kind in DROP_GROUPS:
-                weights = deck_drop_weights(config, legacy_pools, opponent, kind)
+                weights = deck_drop_weights(config, legacy_pools, opponent, kind, effects=effects)
                 group(opponent, kind, weights,
                       f'Drops ponderados do próprio deck #{opponent} ({kind})',
                       CARD_COUNT)
@@ -196,17 +205,24 @@ def compile_mod(project, *, profile, wa_verified):
                     group(opponent,kind,weights,name,CARD_COUNT)
 
     if 'pools_iniciais_ps1' in config:
-        rows = config['pools_iniciais_ps1']
+        rows = [{**row, 'pesos': deck_weights(row['pesos'])} for row in config['pools_iniciais_ps1']]
         try:
             if not tables_ok or len(rows) > STARTER_POOLS or sum(row['compras'] for row in rows) != DECK_SIZE:
                 raise ModError('O Drop x15 usa até sete pools com 40 compras ao todo.')
             staged = []
+            possible_copies = {}
+            for row in rows:
+                for cid in row['pesos']:
+                    possible_copies[cid] = possible_copies.get(cid, 0) + row['compras']
+            if any(min(3, available) > deck_copy_limit(effects, cid, copies)
+                   for cid, available in possible_copies.items()):
+                raise ModError('Os pools originais do PS1 podem ultrapassar os limites individuais de 1–2.')
             for i, row in enumerate(rows):
                 ids, draws = row['pesos'].keys(), row['compras']
                 used = sum(min(older['compras'], 3 * len(ids & older['pesos'].keys())) for older in rows[:i])
                 if 3 * len(ids) - used < draws:
                     raise ModError('O limite original de três cópias pode impedir o sorteio de um dos pools.')
-                staged.append((draws, _retail_weights(row['pesos'], LEGACY_SCAN_COUNT)))
+                staged.append((draws, quantize_weights(row['pesos'], LEGACY_SCAN_COUNT)))
             plan.starters = staged
             plan.applied.append('Pools do deck inicial')
         except ModError as exc:

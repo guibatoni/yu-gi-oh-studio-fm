@@ -75,7 +75,7 @@ with TemporaryDirectory() as temp:
         assert 'Dano' in dialog.output.get('1.0','end')
         dialog.game.lp['adversario'] = 0
         dialog.render()
-        dialog.rank.set('S-POW')
+        assert dialog.rank.get().startswith('S-POW ')
         dialog._roll_drop()
         assert 'Rival' in dialog.reward.cget('text')
         assert chest_cards(Project.open(project.folder)) == {str(enemy): 1, str(secret): 1}

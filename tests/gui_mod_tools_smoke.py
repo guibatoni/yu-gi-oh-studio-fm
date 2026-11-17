@@ -17,6 +17,9 @@ with TemporaryDirectory() as temp:
     project = Project.create(Path(temp), 'Teste Edição do Mod')
     for index in range(15):
         project.add_card(name=f'Dragão {index}', type_id=0)
+    for index in range(6):
+        project.add_card(name=f'Mago {index}', type_id=1)
+        project.add_card(name=f'Zumbi {index}', type_id=2)
     root = Studio()
     root.project, root.drafts = project, DraftSession(project)
     root._refresh_all()
@@ -80,6 +83,8 @@ with TemporaryDirectory() as temp:
     editor.save_opponent()
     assert len(editor.rules['duelistas']['1']['deck']['cartas']) == 40
 
+    deck_editor.query.set('')
+    deck_editor.kind.set('Todos os tipos')
     almost_full = [nid for nid in sorted(project.cards)[:13] for _ in range(3)]
     deck_editor.fixed.set(', '.join(map(str, almost_full)))
     deck_editor.deck.selection_set(str(almost_full[0]))

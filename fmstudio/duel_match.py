@@ -90,7 +90,7 @@ class DuelMatch(DuelLab):
         if self.reward_card is not None:
             return self.reward_card
         if self._pending_reward is None:
-            weights = drop_weights(config, pools, opponent, rank, dealt_deck=self.initial_decks['adversario'])
+            weights = drop_weights(config, pools, opponent, rank, effects=self.effects)
             self._pending_reward = weighted_choice(weights, rng or SystemRandom())
         grant(self._pending_reward)
         self.reward_card = self._pending_reward
@@ -161,6 +161,28 @@ class DuelMatch(DuelLab):
             return result
         return None
 
+    def _fusion_chains(self, hand, material=None):
+        """Explore ordered chains with at most five materials, including a field card."""
+        limit = MAX_HAND - int(material is not None)
+        pending = [((index,), cid) for index, cid in hand] if material is None else [((), material)]
+        seen = {(frozenset(indices), result) for indices, result in pending}
+        for indices, current in pending:
+            if len(indices) >= limit:
+                continue
+            for index, cid in hand:
+                if index in indices:
+                    continue
+                result = self._fusion_result(current, cid)
+                if result is None:
+                    continue
+                chain = (*indices, index)
+                key = frozenset(chain), result
+                if key in seen:
+                    continue
+                seen.add(key)
+                pending.append((chain, result))
+                yield chain, result
+
     def legal_plays(self, side):
         if self.winner or self.active != side or self.played:
             return []
@@ -169,18 +191,14 @@ class DuelMatch(DuelLab):
         free = [slot for slot in range(1, 6) if slot not in occupied]
         destinations = free[:1] or sorted(occupied)
         hand = self.hands[side]
+        monsters = [(index, cid) for index, cid in enumerate(hand)
+                    if int(self.card(cid)['tipo_id']) in MONSTER_TYPES]
         available = []
         for index, cid in enumerate(hand):
             kind = int(self.card(cid)['tipo_id'])
             cost = (index,)
             if kind in MONSTER_TYPES:
                 available.extend(self._monsters_for('monstro', cost, cid, destinations))
-                for unit in own:
-                    result = self._fusion_result(cid, unit['card_id'])
-                    if result:
-                        material = (side, unit['slot'])
-                        available.extend(self._monsters_for('fusao', cost, result, [unit['slot']],
-                                                            field_material=material))
             elif kind == 20:
                 available.extend(Play('magia', cost, cid, target=target) for target in self._spell_targets(cid, side))
             elif kind == 21 and len(self.traps[side]) < 5:
@@ -199,12 +217,13 @@ class DuelMatch(DuelLab):
                     targets = {unit['card_id'] for unit in own}
                 available.extend(Play('equip', cost, cid, slot=unit['slot']) for unit in own
                                  if unit['card_id'] in (targets or ()))
-        for left, right in combinations(range(len(hand)), 2):
-            if int(self.card(hand[left])['tipo_id']) not in MONSTER_TYPES or int(self.card(hand[right])['tipo_id']) not in MONSTER_TYPES:
-                continue
-            result = self._fusion_result(hand[left], hand[right])
-            if result:
-                available.extend(self._monsters_for('fusao', (left, right), result, destinations))
+        for indices, result in self._fusion_chains(monsters):
+            available.extend(self._monsters_for('fusao', indices, result, destinations))
+        for unit in own:
+            slot = unit['slot']
+            for indices, result in self._fusion_chains(monsters, unit['card_id']):
+                available.extend(self._monsters_for('fusao', indices, result, [slot],
+                                                    field_material=(side, slot)))
         return available
 
     def set_position(self, side, slot, position):
@@ -238,6 +257,8 @@ class DuelMatch(DuelLab):
         cid = action.card_id
         log = {'acao': action.kind, 'lado': side, 'carta': cid, 'slot': action.slot,
                'face_up': action.face_up and action.kind != 'armadilha'}
+        if action.kind == 'fusao':
+            log['etapas'] = len(spent) - int(action.target is None)
         self.logs.append(log)
         if action.kind == 'armadilha':
             self.traps[side].append(cid)

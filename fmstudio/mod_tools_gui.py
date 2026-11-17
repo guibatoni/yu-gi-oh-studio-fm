@@ -3,14 +3,16 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
+from random import SystemRandom
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from .core import ModError, ps1_supports_god24
-from .deck_generator import DIFFICULTIES, SUPPORT_TYPES, generate_deck
-from .expanded import display_name
-from .gui import ACCENT, ROW_ALT, card_row_tags, compact_number
-from .mod_data import CONFIG_KEY, MONSTER_TYPES, STOCK_STARTER, deck_copy_limit
+from .core import ModError, ps1_supports_god24, simulation_nonnegative_int
+from .deck_generator import (DIFFICULTIES, STARTER_MAX_POWER, SUPPORT_TYPES, duelist_preset,
+                             generate_deck, suggest_quantities)
+from .expanded import card_matches, display_name, search_text
+from .gui import ACCENT, ROW_ALT, card_row_tags, compact_number, sortable_columns
+from .mod_data import CONFIG_KEY, MONSTER_TYPES, STOCK_STARTER
 from .passwords import (
     PS1_ID_PREFIX, chest_cards, grant_card, id_code, import_original_passwords, ps1_id_code,
     redeem_id, redeem_original, set_ps1_id_passwords,
@@ -18,7 +20,7 @@ from .passwords import (
 from .tables import CARD_COUNT, DECK_SIZE, TYPE_NAMES
 
 
-def _tree(parent, columns, *, height=6):
+def _tree(parent, columns, *, height=6, raw_values=None):
     holder = ttk.Frame(parent)
     holder.pack(fill='both', expand=True, pady=(6, 0))
     tree = ttk.Treeview(holder, columns=[row[0] for row in columns], show='headings',
@@ -31,6 +33,7 @@ def _tree(parent, columns, *, height=6):
     for field, label, width in columns:
         tree.heading(field, text=label)
         tree.column(field, width=width, stretch=field == 'nome')
+    tree.sort_rows = sortable_columns(tree, raw_values=raw_values)
     return tree
 
 
@@ -47,7 +50,7 @@ class PasswordPanel(ttk.Frame):
         self.records = {}
         self.query = tk.StringVar()
         self.status = tk.StringVar()
-        ttk.Label(self, text='Nome, ID ou código FM' if by_id else 'Nome ou password de oito dígitos').pack(anchor='w')
+        ttk.Label(self, text='ID, nome, tipo, descrição ou código').pack(anchor='w')
         bar = ttk.Frame(self)
         bar.pack(fill='x', pady=(3, 0))
         self.entry = ttk.Entry(bar, textvariable=self.query, width=24)
@@ -57,7 +60,7 @@ class PasswordPanel(ttk.Frame):
                    command=self.redeem).pack(side='left', padx=(5, 0))
         columns = [('id', 'ID', 65), ('nome', 'Carta', 230), ('codigo', 'Código', 136)]
         columns.append(('ps1', 'Código PS1', 96) if by_id else ('custo', 'Star Chips no PS1', 130))
-        self.tree = _tree(self, columns)
+        self.tree = _tree(self, columns, raw_values=self._sort_value)
         self.tree.bind('<Double-1>', lambda _event: self._open())
         actions = ttk.Frame(self)
         actions.pack(fill='x', pady=(7, 0))
@@ -78,21 +81,25 @@ class PasswordPanel(ttk.Frame):
             return ps1_id_code(prefix, cid)
         return '—'
 
+    def _sort_value(self, item, field):
+        return int(item) if field == 'id' else self.tree.set(item, field)
+
     def render(self, results=None):
         self.tree.delete(*self.tree.get_children())
-        query = self.query.get().strip().casefold()
+        query = search_text(self.query.get())
         ids = sorted(self.cards if self.by_id else self.records) if results is None else results
         index = 0
         for cid in ids:
             name = display_name(cid, self.cards)
             code = id_code(cid) if self.by_id else self.records[cid].code
             extra = self._ps1_code(cid) if self.by_id else self.records[cid].cost
-            if results is None and query and not any(query in item.casefold() for item in (f'#{cid}', name, code)):
+            if results is None and not card_matches(query, cid, self.cards[cid], code, str(extra or '')):
                 continue
             self.tree.insert('', 'end', iid=str(cid),
                              values=(compact_number(cid), name, code, '—' if extra is None else extra),
                              tags=card_row_tags(self.tree, self.cards.get(cid), index))
             index += 1
+        self.tree.sort_rows()
         if self.by_id:
             prefix = self.project.metadata.get(PS1_ID_PREFIX)
             self.copy_ps1.configure(state='disabled' if prefix is None else 'normal')
@@ -197,7 +204,12 @@ class PasswordsDialog(tk.Toplevel):
         self.ids = PasswordPanel(tabs, cards, by_id=True, open_card=reveal,
                                  grant=self._grant, project=project)
         chest = ttk.Frame(tabs, padding=9)
-        self.chest = _tree(chest, [('id', 'ID', 70), ('nome', 'Carta', 290), ('qtd', 'Cópias', 90)])
+        self.chest_search = tk.StringVar()
+        ttk.Label(chest, text='ID, nome, tipo ou descrição').pack(anchor='w')
+        ttk.Entry(chest, textvariable=self.chest_search).pack(fill='x')
+        self.chest = _tree(chest, [('id', 'ID', 70), ('nome', 'Carta', 290), ('qtd', 'Cópias', 90)],
+                           raw_values=lambda item, field: int(item) if field == 'id' else self.chest.set(item, field))
+        self.chest_search.trace_add('write', lambda *_: self._refresh_chest())
         self.chest.bind('<Double-1>', lambda _e: reveal(int(self.chest.selection()[0]))
                         if self.chest.selection() else None)
         tabs.add(self.original, text='Códigos originais')
@@ -233,10 +245,14 @@ class PasswordsDialog(tk.Toplevel):
 
     def _refresh_chest(self):
         self.chest.delete(*self.chest.get_children())
+        query = search_text(self.chest_search.get())
         for index, (key, count) in enumerate(sorted(chest_cards(self.project).items(), key=lambda item: int(item[0]))):
             cid = int(key)
+            if not card_matches(query, cid, self.cards.get(cid, {})):
+                continue
             self.chest.insert('', 'end', iid=key, values=(compact_number(cid), display_name(cid, self.cards), count),
                               tags=card_row_tags(self.chest, self.cards.get(cid), index))
+        self.chest.sort_rows()
         self.profile.configure(values=list(self.project.metadata.get(CONFIG_KEY, {}).get('iniciais', {})))
 
     def _grant(self, cid):
@@ -265,27 +281,9 @@ class PasswordsDialog(tk.Toplevel):
         self.studio.notify(caption)
 
 
-def _suggest_quantities(cards, effects, default_copies, fixed):
-    types = {cid: int(card['tipo_id']) for cid, card in cards.items()}
-    counts = Counter(types.get(cid) for cid in fixed)
-    if len(fixed) == DECK_SIZE and all(typ in MONSTER_TYPES.union(SUPPORT_TYPES) for typ in counts):
-        return counts
-    capacity = Counter()
-    for cid, typ in types.items():
-        capacity[typ] += deck_copy_limit(effects, cid, default_copies)
-    counts = Counter({typ: min(capacity[typ], target) for typ, target in ((20, 4), (21, 3), (23, 2))})
-    available = sorted((typ for typ in MONSTER_TYPES if capacity[typ]), key=lambda typ: (-capacity[typ], typ))
-    for _ in range(DECK_SIZE - sum(counts.values())):
-        candidates = [typ for typ in available if counts[typ] < capacity[typ]]
-        if not candidates:
-            break
-        counts[min(candidates[:3], key=counts.__getitem__)] += 1
-    return counts
-
-
 class DeckGeneratorDialog(tk.Toplevel):
     def __init__(self, editor, cards, effects, fusions, equips, *, default_copies,
-                 trap_thresholds, fixed, use_deck, new_starter=False):
+                 trap_thresholds, fixed, use_deck, new_starter=False, starter=False, opponent=None):
         super().__init__(editor.winfo_toplevel())
         self.title('Gerar Deck Aleatório')
         self.transient(editor.winfo_toplevel())
@@ -294,17 +292,18 @@ class DeckGeneratorDialog(tk.Toplevel):
         self.cards, self.effects, self.fusions, self.equips = cards, effects, fusions, equips
         self.default_copies, self.trap_thresholds = default_copies, trap_thresholds
         self.on_use = use_deck
+        self.starter = starter or new_starter
+        self.opponent = opponent
         self.deck = None
         self.difficulty = tk.StringVar(value='Difícil')
+        self.max_atk = tk.StringVar()
+        self.max_def = tk.StringVar()
         self.ps1_only = tk.BooleanVar(value=bool(getattr(editor.winfo_toplevel(), 'project', None)
                                                   and ps1_supports_god24(editor.winfo_toplevel().project)))
         self.status = tk.StringVar()
         self.summary = tk.StringVar()
-        eligible = ({cid: card for cid, card in cards.items()
-                     if 1 <= cid <= CARD_COUNT and not card.get('virtual')}
-                    if self.ps1_only.get() else cards)
-        suggestions = _suggest_quantities(eligible, effects, default_copies, fixed)
-        self.quantities = {typ: tk.StringVar(value=str(suggestions[typ]))
+        current = Counter(int(cards[cid]['tipo_id']) for cid in fixed if cid in cards)
+        self.quantities = {typ: tk.StringVar(value=str(current[typ]))
                            for typ in sorted(MONSTER_TYPES.union(SUPPORT_TYPES))}
 
         self.tabs = ttk.Notebook(self)
@@ -313,8 +312,11 @@ class DeckGeneratorDialog(tk.Toplevel):
         for pane, name in ((setup, 'Composição'), (monsters, 'Tipos de Monstro'), (preview, 'Prévia')):
             self.tabs.add(pane, text=name)
         self.preview = preview
-        ttk.Label(setup, text='Sem limite de ATK ou DEF no Studio. A geração combina '
-                  'força, fusões, equipamentos e proporções escolhidas.',
+        description = (
+            f'Deck inicial com três tipos. ATK + DEF de cada monstro até {STARTER_MAX_POWER}.'
+            if self.starter else 'Os tetos são opcionais e se aplicam às cartas incluídas no deck.'
+        )
+        ttk.Label(setup, text=description,
                   wraplength=570).grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 10))
         for row, (typ, label) in enumerate(((20, 'Magias'), (21, 'Armadilhas'), (23, 'Equipamentos')), 1):
             self._quantity(setup, typ, label, row, 0)
@@ -323,14 +325,21 @@ class DeckGeneratorDialog(tk.Toplevel):
         ttk.Label(setup, text='Dificuldade').grid(row=5, column=0, sticky='w', pady=5)
         ttk.Combobox(setup, textvariable=self.difficulty, values=list(DIFFICULTIES),
                      state='readonly', width=15).grid(row=5, column=1, sticky='w', padx=10)
+        for row, (caption, variable) in enumerate((('ATK máximo', self.max_atk), ('DEF máxima', self.max_def)), 6):
+            ttk.Label(setup, text=caption).grid(row=row, column=0, sticky='w', pady=3)
+            ttk.Entry(setup, textvariable=variable, width=17).grid(row=row, column=1, sticky='w', padx=10)
+        ttk.Button(setup, text='Sortear trio inicial' if self.starter else 'Aplicar tema do duelista',
+                   command=lambda: self._suggest(randomize=self.starter, apply_theme=True)).grid(
+                       row=8, column=0, columnspan=2, sticky='w', pady=8)
         if new_starter:
             ttk.Label(setup, text='O deck escolhido será salvo em um novo perfil inicial.',
-                      wraplength=550).grid(row=6, column=0, columnspan=2, sticky='w', pady=5)
+                      wraplength=550).grid(row=9, column=0, columnspan=2, sticky='w', pady=5)
         for i, typ in enumerate(sorted(MONSTER_TYPES)):
             row, column = divmod(i, 2)
             self._quantity(monsters, typ, TYPE_NAMES[typ], row, column * 2)
         self.list = _tree(preview, [('qtd', 'Qtd.', 55), ('id', 'ID', 70), ('nome', 'Carta', 265),
-                                    ('tipo', 'Tipo', 125)])
+                                    ('tipo', 'Tipo', 125)],
+                          raw_values=lambda item, key: int(item) if key == 'id' else self.list.set(item, key))
         ttk.Label(preview, textvariable=self.summary, wraplength=620, justify='left').pack(anchor='w', pady=(8, 0))
 
         footer = ttk.Frame(self, padding=(12, 2, 12, 10))
@@ -343,9 +352,11 @@ class DeckGeneratorDialog(tk.Toplevel):
                                      state='disabled', style='Accent.TButton')
         self.use_button.pack(side='right')
         ttk.Button(controls, text='Gerar prévia', command=self._generate).pack(side='right', padx=(0, 6))
-        for var in (self.difficulty, self.ps1_only, *self.quantities.values()):
+        for var in (self.difficulty, self.ps1_only, self.max_atk, self.max_def, *self.quantities.values()):
             var.trace_add('write', self._invalidate)
         self._invalidate()
+        if self.starter or sum(int(var.get()) for var in self.quantities.values()) != DECK_SIZE:
+            self._suggest(apply_theme=True)
         self.bind('<Escape>', lambda _event: self.destroy())
         self.grab_set()
 
@@ -363,6 +374,33 @@ class DeckGeneratorDialog(tk.Toplevel):
         except ValueError:
             self.status.set('Informe quantidades inteiras por tipo.')
 
+    def _power_limits(self):
+        return {key: simulation_nonnegative_int(var.get(), label) if var.get().strip() else None
+                for key, var, label in (('max_atk', self.max_atk, 'ATK máximo'),
+                                        ('max_def', self.max_def, 'DEF máxima'))}
+
+    def _suggest(self, *, randomize=False, apply_theme=False):
+        theme = ()
+        if not self.starter and self.opponent is not None:
+            theme, power, difficulty = duelist_preset(self.opponent)
+            if apply_theme:
+                self.max_atk.set(str(power))
+                self.max_def.set(str(power))
+                self.difficulty.set(difficulty)
+        try:
+            counts = suggest_quantities(
+                self.cards, self.effects, self.fusions, self.equips, default_copies=self.default_copies,
+                theme=theme, starter=self.starter, ps1_only=self.ps1_only.get(),
+                rng=SystemRandom() if randomize else None, **self._power_limits(),
+            )
+        except ModError as exc:
+            self.status.set(str(exc))
+            return
+        for typ, variable in self.quantities.items():
+            variable.set(str(counts[typ]))
+        selected = ', '.join(TYPE_NAMES[typ] for typ in sorted(MONSTER_TYPES) if counts[typ])
+        self.status.set(f'{DECK_SIZE} vagas preenchidas · {selected}.')
+
     def _generate(self):
         try:
             result = generate_deck(
@@ -370,6 +408,7 @@ class DeckGeneratorDialog(tk.Toplevel):
                 {typ: var.get() or '0' for typ, var in self.quantities.items()},
                 difficulty=self.difficulty.get(), default_copies=self.default_copies,
                 trap_thresholds=self.trap_thresholds, ps1_only=self.ps1_only.get(),
+                starter=self.starter, **self._power_limits(),
             )
         except (ModError, ValueError) as exc:
             self.status.set(str(exc))
@@ -377,9 +416,10 @@ class DeckGeneratorDialog(tk.Toplevel):
         self.deck = result
         self.list.delete(*self.list.get_children())
         for index, (cid, amount) in enumerate(sorted(Counter(result.cards).items())):
-            self.list.insert('', 'end', values=(amount, compact_number(cid), display_name(cid, self.cards),
+            self.list.insert('', 'end', iid=str(cid), values=(amount, compact_number(cid), display_name(cid, self.cards),
                                                 TYPE_NAMES[int(self.cards[cid]['tipo_id'])]),
                              tags=card_row_tags(self.list, self.cards[cid], index))
+        self.list.sort_rows()
         routes = [
             f'{display_name(a, self.cards)} + {display_name(b, self.cards)} → {display_name(result, self.cards)}'
             for a, b, result in result.fusions[:3]

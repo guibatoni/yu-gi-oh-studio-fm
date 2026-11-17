@@ -62,6 +62,22 @@ with TemporaryDirectory() as tmp:
             assert drop_weights(settings, {}, 1, 'S-POW') == {a:9,b:1,d:1}
             editor._reset_deck_drop()
             assert editor.deck_drop_table.weights == {a:1,b:1,d:1}
+            table = editor.deck_drop_table
+            table.selected.set(f'{a}, #{d}')
+            table.weight.set('8')
+            table._apply()
+            assert table.weights == {a: 8, b: 1, d: 8}
+            assert table.tree.set(str(a), 'chance') == '47,0588%'
+            table.tree.tk.call(table.tree.heading('peso', 'command'))
+            assert table.tree.get_children()[0] == str(b)
+            table.tree.tk.call(table.tree.heading('peso', 'command'))
+            assert table.tree.get_children()[-1] == str(b)
+            table.query.set('dragao b')
+            assert table.tree.get_children() == (str(b),)
+            assert table.tree.set(str(b), 'chance') == '5,8823%'
+            table._set_chance(b, '25%')
+            assert table.tree.set(str(b), 'chance') == '25,0000%'
+            assert table.weights == {a: 3, b: 2, d: 3}
             reopened = Project.open(project.folder)
             assert deck_drop_weights(reopened.metadata[CONFIG_KEY], {}, 1, 'S-TEC') == {a:1,b:20,d:1}
             editor.use_deck_drops.set(False)
