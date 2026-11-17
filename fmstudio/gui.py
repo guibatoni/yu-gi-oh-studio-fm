@@ -2875,6 +2875,7 @@ class Studio(tk.Tk):
             f'Setores modificados: {manifest["setores_modificados"]}\n\n'
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
+            f'Descrições confirmadas por bytes e ponteiros do BIN: {len(manifest.get("descricoes_confirmadas_no_bin", []))}.\n'
             + (f'ATENÇÃO: {len(manifest["descricoes_nao_gravadas"])} descrição(ões) '
                'não exportada(s); o jogo mantém seus textos originais nessas cartas.\n'
                'Os textos completos continuam no Studio.\n'
