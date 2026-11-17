@@ -96,6 +96,26 @@ class CampaignDeckTests(unittest.TestCase):
             generate_campaign_deck(cards, effects, {}, equips, 1,
                                    rng=random.Random(0))
 
+    def test_all_39_opponents_generate_from_real_fixture(self):
+        cards, effects, fusions, equips = fixture()
+        results = [generate_campaign_deck(cards, effects, fusions, equips, i,
+                                          rng=random.Random(i))
+                   for i in range(1, 40)]
+        self.assertEqual(len(results), 39)
+        self.assertTrue(all(len(x.cards) == 40 and sum(x.weights.values()) == 2048
+                            for x in results))
+
+    def test_special_copy_limits_export_as_fixed_deck(self):
+        cards, effects, fusions, equips = fixture()
+        result = generate_campaign_deck(cards, effects, fusions, equips, 39,
+                                        default_copies=2, rng=random.Random(8))
+        self.assertTrue(result.fixed_for_ps1)
+        self.assertEqual(len(result.profile['cartas']), 40)
+        self.assertEqual(result.profile['pools'], [])
+        self.assertLessEqual(max(Counter(result.cards).values()), 2)
+        self.assertEqual(len(deal_deck(result.profile, cards, effects,
+                                       rng=random.Random(9), default_copies=2)), 40)
+
     def test_weighted_profile_2048_and_no_too_strong_base_monsters(self):
         cards, effects, fusions, equips = fixture()
         deck = generate_campaign_deck(cards, effects, fusions, equips, 39,
