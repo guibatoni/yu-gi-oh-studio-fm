@@ -324,15 +324,19 @@ class DeckProfileEditor(ttk.Frame):
         fixed.grid(row=0, column=1, sticky='nsew', padx=(3, 0))
         from .mod_tools_gui import _tree
         self.catalog = _tree(catalog, [('id', 'ID', 50), ('nome', 'Carta', 120),
-                                       ('tipo', 'Tipo', 80)], height=5, raw_values=self._catalog_sort_value)
+                                       ('tipo', 'Tipo', 80)], height=5, raw_values=self._catalog_sort_value,
+                             selectmode='extended')
         self.deck = _tree(fixed, [('id', 'ID', 50), ('nome', 'Carta', 126),
-                                  ('qtd', 'Cópias', 58)], height=5, raw_values=self._deck_sort_value)
+                                  ('qtd', 'Cópias', 58)], height=5, raw_values=self._deck_sort_value,
+                          selectmode='extended')
         self.catalog.bind('<Double-1>', lambda _event: self.change_card('add'))
         self.catalog.bind('<Return>', lambda _event: self.change_card('add'))
         self.catalog.bind('<<TreeviewSelect>>', self._update_buttons)
         self.deck.bind('<<TreeviewSelect>>', self._select_copy)
         self.deck.bind('<Delete>', lambda _event: self.change_card('remove'))
         search.bind('<Return>', lambda _event: self._focus_result())
+        ttk.Label(self.fixed_pane, text='Ctrl/Shift: selecione várias cartas; as ações valem para todas.',
+                  foreground=MUTED).pack(anchor='w', pady=(3, 0))
 
         controls = ttk.Frame(self.fixed_pane)
         controls.pack(fill='x', pady=2)
@@ -341,8 +345,10 @@ class DeckProfileEditor(ttk.Frame):
         self.add_count.pack(side='left', padx=(0, 4))
         self.add_btn = ttk.Button(controls, text='＋ Adicionar', style='Accent.TButton',
                                   command=lambda: self.change_card('add'))
-        self.add_btn.pack(side='left', padx=(0, 10))
-        ttk.Label(controls, text='Total da carta').pack(side='left', padx=(0, 4))
+        self.add_btn.pack(side='left', padx=(0, 6))
+        ttk.Button(controls, text='Selecionar catálogo', command=self._select_all_catalog).pack(
+            side='left', padx=(0, 10))
+        ttk.Label(controls, text='Total por carta').pack(side='left', padx=(0, 4))
         ttk.Spinbox(controls, from_=1, to=MAX_DECK, width=3,
                     textvariable=self.quantity).pack(side='left', padx=(0, 4))
         self.set_btn = ttk.Button(controls, text='Ajustar', command=lambda: self.change_card('set'))
@@ -350,6 +356,8 @@ class DeckProfileEditor(ttk.Frame):
                                      command=lambda: self.change_card('remove'))
         for button in (self.set_btn, self.remove_btn):
             button.pack(side='left', padx=(0, 4))
+        ttk.Button(controls, text='Selecionar deck', command=self._select_all_deck).pack(
+            side='left', padx=(6, 0))
         ttk.Label(self.fixed_pane, text='IDs (ex. 16x2, 723)').pack(anchor='w', pady=(3, 0))
         ttk.Entry(self.fixed_pane, textvariable=self.fixed).pack(fill='x')
 
@@ -410,8 +418,9 @@ class DeckProfileEditor(ttk.Frame):
             tree.insert('', 'end', iid=str(cid), values=values,
                         tags=card_row_tags(tree, self.cards.get(cid), index))
         tree.sort_rows()
-        if selected and tree.exists(selected[0]):
-            tree.selection_set(selected[0])
+        valid = [item for item in selected if tree.exists(item)]
+        if valid:
+            tree.selection_set(valid)
         tree.yview_moveto(top)
 
     def _render_deck(self):
@@ -454,8 +463,24 @@ class DeckProfileEditor(ttk.Frame):
 
     def _select_copy(self, _event=None):
         selection = self.deck.selection()
-        if selection:
+        if len(selection) == 1:
             self.quantity.set(self.deck.set(selection[0], 'qtd'))
+        self._update_buttons()
+
+    def _select_all_catalog(self):
+        visible = self.catalog.get_children()
+        self.catalog.selection_set(visible)
+        if visible:
+            self.catalog.focus(visible[0])
+            self.catalog.focus_set()
+        self._update_buttons()
+
+    def _select_all_deck(self):
+        visible = self.deck.get_children()
+        self.deck.selection_set(visible)
+        if visible:
+            self.deck.focus(visible[0])
+            self.deck.focus_set()
         self._update_buttons()
 
     def start_fixed_deck(self):
@@ -464,40 +489,65 @@ class DeckProfileEditor(ttk.Frame):
         self.feedback.set('Deck em branco. Adicione cartas e salve.')
 
     def change_card(self, action, cid=None, *, copies=None):
-        selection = self.catalog.selection() if action == 'add' else self.deck.selection()
-        if cid is None and not selection:
+        """Edite várias cartas atomicamente, sem ultrapassar 40 slots ou cópias.
+
+        Adicionar soma N cópias a cada ID selecionado; Ajustar define o total
+        de cópias de cada ID; Remover elimina todas as cópias selecionadas.
+        """
+        if action not in ('add', 'set', 'remove'):
+            raise ValueError(f'Ação de deck desconhecida: {action}')
+        widget = self.catalog if action == 'add' else self.deck
+        selected = (int(cid),) if cid is not None else tuple(int(item) for item in widget.selection())
+        if not selected:
             return
-        cid = cid if cid is not None else int(selection[0])
+        selected = tuple(dict.fromkeys(selected))
         try:
             ids = parse_card_ids(self.fixed.get(), maximum=MAX_DECK)
+            old_counts = Counter(ids)
+            counts = old_counts.copy()
             if action == 'add':
-                amount = positive_int(self.add_quantity.get() if copies is None else copies, 'Cópias a inserir')
+                amount = positive_int(self.add_quantity.get() if copies is None else copies,
+                                      'Cópias por carta')
+                for card_id in selected:
+                    counts[card_id] += amount
+            elif action == 'set':
+                amount = simulation_nonnegative_int(self.quantity.get(), 'Total por carta')
+                for card_id in selected:
+                    counts[card_id] = amount
             else:
-                ids = [other for other in ids if other != cid]
-                amount = positive_int(self.quantity.get(), 'Total de cópias') if action == 'set' else 0
-            space = MAX_DECK - len(ids) - self._pool_slots()
-            if amount > space:
-                if space == 1:
-                    raise ModError('Há uma vaga no deck. Informe uma cópia.')
-                if space <= 0:
-                    raise ModError('Deck cheio. Libere uma vaga nas cartas fixas ou nos pools.')
-                raise ModError(f'Há {space} vagas neste deck. Informe até {space} cópias.')
-            ids.extend([cid] * amount)
+                for card_id in selected:
+                    counts.pop(card_id, None)
+            fixed_total = sum(counts.values())
+            pools = self._pool_slots()
+            if fixed_total + pools > MAX_DECK:
+                raise ModError(f'Deck excederia {MAX_DECK} cartas: {fixed_total} fixas '
+                               f'+ {pools} de pools. Nada foi alterado.')
+            updated = []
+            # Manter ordem existente, sem embaralhar os IDs originais.
+            already = set()
+            for card_id in ids:
+                if card_id not in already:
+                    updated.extend([card_id] * counts[card_id])
+                    already.add(card_id)
+            for card_id in selected:
+                if card_id not in already:
+                    updated.extend([card_id] * counts[card_id])
+                    already.add(card_id)
             meta = getattr(self.project, 'metadata', {})
             effects = getattr(self.project, 'effects', {})
-            if amount:
-                validate_deck(self.cards, effects, [cid] * ids.count(cid),
-                              int(meta.get('ps1_deck_global_limit', 3)))
+            validate_deck(self.cards, effects, updated,
+                          int(meta.get('ps1_deck_global_limit', 3)))
         except (ModError, ValueError) as exc:
             self.feedback.set(str(exc))
             return
-        self.fixed.set(', '.join(map(str, ids)))
+        self.fixed.set(', '.join(map(str, updated)))
         if action == 'add':
             self.add_quantity.set('1')
-        if self.deck.exists(str(cid)):
-            self.deck.selection_set(str(cid))
-            self.deck.see(str(cid))
-        self.feedback.set(f'#{cid} atualizado. Salve o deck.')
+        if action != 'add':
+            keep = [str(card_id) for card_id in selected if self.deck.exists(str(card_id))]
+            if keep:
+                self.deck.selection_set(keep)
+        self.feedback.set(f'{len(selected)} carta(s) atualizada(s) no deck. Salve o deck.')
 
     def load(self, cards, profile, *, show_fixed=True):
         self.cards = cards
