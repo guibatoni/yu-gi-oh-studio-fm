@@ -47,7 +47,7 @@ class WeightTable(ttk.Frame):
         search.pack(fill='x', pady=(0, 5))
         ttk.Label(search, text='Filtrar lista').pack(side='left', padx=(0, 5))
         ttk.Entry(search, textvariable=self.query).pack(side='left', fill='x', expand=True)
-        ttk.Label(self, text='Adicionar por nome ou IDs separados por vírgula',
+        ttk.Label(self, text='Selecione várias cartas com Ctrl/Shift ou informe IDs separados por vírgula.',
                   foreground=MUTED).pack(anchor='w')
         edit = ttk.Frame(self)
         edit.pack(fill='x', pady=(0, 5))
@@ -62,12 +62,14 @@ class WeightTable(ttk.Frame):
         weight.pack(side='left', padx=(0, 4))
         weight.bind('<Return>', lambda _event: self._apply())
         ttk.Button(edit, text='Aplicar peso', command=self._apply).pack(side='left')
-        ttk.Button(edit, text='Remover', style='Danger.TButton',
+        ttk.Button(edit, text='Remover selecionadas', style='Danger.TButton',
                    command=self._remove).pack(side='left', padx=(4, 0))
+        ttk.Button(edit, text='Selecionar visíveis',
+                   command=self._select_visible).pack(side='left', padx=(6, 0))
         holder = ttk.Frame(self)
         holder.pack(fill='both', expand=True)
         self.tree = ttk.Treeview(holder, columns=WEIGHT_COLUMNS, displaycolumns=WEIGHT_COLUMNS[:-1],
-                                 show='headings', height=6)
+                                 show='headings', selectmode='extended', height=6)
         widths = (58, 195, 70, 105, 100)
         for key, label, width in zip(WEIGHT_COLUMNS, ('ID', 'Carta', 'Peso', 'Chance', 'Chance PS1'), widths):
             self.tree.heading(key, text=label)
@@ -79,6 +81,7 @@ class WeightTable(ttk.Frame):
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind('<<TreeviewSelect>>', self._select)
         self.tree.bind('<Double-1>', self._edit_weight)
+        self.tree.bind('<Delete>', lambda _event: self._remove())
         self.summary = ttk.Label(self, foreground=MUTED)
         self.summary.pack(anchor='w', pady=(3, 0))
         self.query.trace_add('write', lambda *_: self.render())
@@ -130,10 +133,14 @@ class WeightTable(ttk.Frame):
                 _probability(self._ps1_weight(cid), POOL_TOTAL) if self.ps1_weights else '—'),
                 tags=card_row_tags(self.tree, self.cards.get(cid), index))
         self.sort_rows()
-        if keep and self.tree.exists(keep[0]):
-            self.tree.selection_set(keep[0])
+        valid = [item for item in keep if self.tree.exists(item)]
+        if valid:
+            self.tree.selection_set(valid)
         self.tree.yview_moveto(top)
-        self.summary.configure(text=f'{len(self.weights)} cartas · peso total {compact_number(total)}')
+        count = len(self.tree.selection())
+        suffix = f' · {count} selecionadas' if count > 1 else ''
+        self.summary.configure(text=(
+            f'{len(self.weights)} cartas com peso · peso total {compact_number(total)}{suffix}'))
 
     def _search(self, _event=None):
         query = search_text(self.selected.get()).strip()
@@ -142,16 +149,31 @@ class WeightTable(ttk.Frame):
 
     def _select(self, _event):
         selection = self.tree.selection()
-        if selection and int(selection[0]) in self.cards:
+        if len(selection) == 1 and int(selection[0]) in self.cards:
             cid = int(selection[0])
             self.selected.set(f'#{cid} — {display_name(cid, self.cards)}')
             self.weight.set(str(self.weights.get(cid, 0)))
+        elif len(selection) > 1:
+            self.selected.set('')
+        self.summary.configure(text=(
+            f'{len(self.weights)} cartas com peso · peso total {compact_number(sum(self.weights.values()))}'
+            + (f' · {len(selection)} selecionadas' if len(selection) > 1 else '')))
+
+    def _select_visible(self):
+        visible = self.tree.get_children()
+        self.tree.selection_set(visible)
+        self._select(None)
+        if visible:
+            self.tree.focus(visible[0])
+            self.tree.focus_set()
 
     def _apply(self):
         try:
             raw = self.selected.get().strip()
             amount = simulation_nonnegative_int(self.weight.get(), 'Peso')
-            if raw in self.labels:
+            if len(self.tree.selection()) > 1:
+                ids = [int(cid) for cid in self.tree.selection()]
+            elif raw in self.labels:
                 ids = [self.labels[raw]]
             elif re.fullmatch(r'#?[0-9]+(?:[\s,]+#?[0-9]+)*', raw):
                 ids = [positive_int(part.removeprefix('#'), 'Carta') for part in re.split(r'[\s,]+', raw)]
@@ -167,9 +189,10 @@ class WeightTable(ttk.Frame):
             messagebox.showerror('Tabela de pesos', str(exc), parent=self)
 
     def _remove(self):
-        if self.tree.selection():
+        selection = tuple(int(cid) for cid in self.tree.selection())
+        if selection:
             try:
-                self._set(int(self.tree.selection()[0]), 0)
+                self._update_weights(dict.fromkeys(selection, 0))
             except (ModError, OSError, ValueError) as exc:
                 messagebox.showerror('Tabela de pesos', str(exc), parent=self)
 
