@@ -10,7 +10,7 @@ from fmstudio.core import ModError
 from fmstudio.ps1_god24_display import SPRITE_ORIGINAL, SPRITE_RAM, extended_sprite_words
 from fmstudio.ps1_runtime import (
     CONFIG_ADDRESS, DROP_ENTRY, DUEL_STATE, FIXED_DECK_CONFIG, FUSION_CONFIG, NAME_COLOR_CONFIG, RUNTIME_EXT_BASE,
-    RUNTIME_MOD_BASE, SUMMON_DAMAGE,
+    RUNTIME_MOD_BASE, SUMMON_DAMAGE, SUMMON_HEAL,
     _jump, _option_calls, _rule_patches, _valid_original_drop_entry, compile_effects, install_runtime, verify_effects,
 )
 from fmstudio.ps1_text import ICON_CODES, patch_descriptions
@@ -41,26 +41,29 @@ class TestNativeRules(unittest.TestCase):
 
     def test_rule_table_uses_individual_limit_and_bonus_scope(self):
         plan = compile_effects(self.project, True)
-        self.assertEqual(len(plan.accepted), 5)
-        self.assertEqual(len(plan.pending), 1)
-        self.assertIn('cura_lp', plan.pending[0])
+        self.assertEqual(len(plan.accepted), 6)
+        self.assertEqual(len(plan.pending), 0)
         self.assertEqual(plan.data[0], 6)
         offset = struct.unpack_from('<H', plan.data, 2 + 2*9)[0]
-        self.assertEqual(struct.unpack_from('<BBBBHH', plan.data, offset), (1, 3, 40, 1, 0, 0))
+        self.assertEqual(struct.unpack_from('<BBBBHH', plan.data, offset), (1, 3, 40, 2, 0, 0))
         self.assertEqual(struct.unpack_from('<BBHHH', plan.data, offset+8), (5, 1, 16, 100, 50))
+        self.assertEqual(struct.unpack_from('<BBHHH', plan.data, offset+16), (SUMMON_HEAL, 0, 0, 20, 0))
 
     def test_summon_damage_and_attribute_aura_compile_for_monsters(self):
         self.project.effects = {'9': [
             effect('dano_lp', 600, event='invocar', target='inimigo'),
+            effect('cura_lp', 2000, event='invocar', target='proprio'),
+            effect('cura_lp', 750, event='atacar', target='proprio'),
             effect('dano_lp', 500, event='atacar', target='inimigo'),
             effect('aura_tipo', 250, target='aliados_tipo', tipo_id=2, atributo_id=3, valor_def=50),
         ]}
         plan = compile_effects(self.project, True)
         start = struct.unpack_from('<H', plan.data, 2 + 2*9)[0]
-        self.assertEqual(plan.accepted, ((9, 'dano_lp'), (9, 'aura_tipo')))
-        self.assertEqual(len(plan.pending), 1)
+        self.assertEqual(plan.accepted, ((9, 'dano_lp'), (9, 'cura_lp'), (9, 'aura_tipo')))
+        self.assertEqual(len(plan.pending), 2)
         self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+8), (SUMMON_DAMAGE, 1, 0, 600, 0))
-        self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+16), (1, 16, 2, 250, 50))
+        self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+16), (SUMMON_HEAL, 0, 0, 2000, 0))
+        self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+24), (1, 16, 2, 250, 50))
 
     def test_three_copies_can_override_the_profile_default(self):
         effects = replace_quick_effects([], {'limite_copias': '3'}, default_copies=None)
@@ -85,7 +88,7 @@ class TestNativeRules(unittest.TestCase):
         source = bytes(source)
         with patch('fmstudio.ps1_runtime.SOURCE_SHA256', hashlib.sha256(source).hexdigest()):
             result, _ = install_runtime(source, source, plan, description_icons=True)
-            self.assertEqual(verify_effects(result, plan)['quantidade'], 5)
+            self.assertEqual(verify_effects(result, plan)['quantidade'], 6)
             self.assertEqual(struct.unpack_from('<28I', result, where(SPRITE_RAM)), extended_sprite_words())
             for address, key in ((CONFIG_ADDRESS, 'tabela_confere'),
                                  (RUNTIME_EXT_BASE, 'rotina_presente'),
