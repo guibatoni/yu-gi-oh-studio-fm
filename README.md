@@ -1,3 +1,9 @@
+# Studio FM v1.8.12 — 39 decks ponderados de oponentes
+
+Na aba **Edição do Mod → Deck do oponente**, use **Aplicar 39 decks (3/5–5/5)** para instalar as 39 pools ponderadas (40 compras, 2048 pontos cada). A aplicação exige confirmação e mantém outros ajustes do projeto. Os materiais de fusão respeitam o limite base de 1500 ATK/DEF; fusões e equipamentos podem superá-lo. O botão não altera o projeto até o usuário confirmar. Faça backup antes de aplicar; dados de cartas customizadas, receitas e drops que não dependem do deck continuam preservados.
+
+---
+
 # Studio FM v1.8.11 — Conferência de descrições no jogo
 
 As descrições salvas no projeto somente são gravadas no PlayStation ao usar
