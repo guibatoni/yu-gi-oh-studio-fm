@@ -297,10 +297,12 @@ class EffectDialog(tk.Toplevel):
 
 class SpecificCardEffectDialog(tk.Toplevel):
     """Adicionar bônus por carta selecionada sem digitar IDs na descrição."""
-    def __init__(self, master, cards, on_save):
+    def __init__(self, master, cards, on_save, *, initial_effect=None):
         super().__init__(master)
-        self.title('Efeito por carta específica')
-        self.geometry('590x520')
+        self.initial_effect = dict(initial_effect) if initial_effect else None
+        self.title('Editar bônus por carta específica' if self.initial_effect
+                   else 'Efeito por carta específica')
+        self.geometry('590x560')
         self.configure(bg=BG)
         self.transient(master)
         self.grab_set()
@@ -313,25 +315,43 @@ class SpecificCardEffectDialog(tk.Toplevel):
         self.combo=ttk.Combobox(pane,textvariable=self.selected,values=list(self.labels),width=62)
         self.combo.pack(fill='x',pady=(0,12))
         if self.labels:self.combo.current(0)
+        if self.initial_effect:
+            old_ref = int(self.initial_effect.get('carta_referencia_id', 0))
+            old_label = next((name for name, cid in self.labels.items() if cid == old_ref), None)
+            if old_label is not None:
+                self.selected.set(old_label)
         ttk.Label(pane,text='Contar cartas em:').pack(anchor='w')
-        self.origin=tk.StringVar(value='campo')
+        self.origin=tk.StringVar(value=self.initial_effect.get('origem_contagem', 'campo')
+                                 if self.initial_effect else 'campo')
         for label,val in [('Campo (inclusive cartas viradas para baixo)','campo'),('Monte de compra','deck'),
                           ('Mão','mao'),('Cemitério','cemiterio')]:
             ttk.Radiobutton(pane,text=label,value=val,variable=self.origin).pack(anchor='w',pady=3)
         ttk.Label(pane,text='Escopo:').pack(anchor='w',pady=(7,3))
-        self.scope=tk.StringVar(value='aliados')
+        self.scope=tk.StringVar(value=self.initial_effect.get('escopo', 'aliados')
+                                if self.initial_effect else 'aliados')
         scope=ttk.Combobox(pane,textvariable=self.scope,values=['aliados','inimigos','todos'],state='readonly')
         scope.pack(fill='x',pady=(0,12))
         row=ttk.Frame(pane);row.pack(fill='x')
-        self.attack=tk.StringVar(value='200');self.defense=tk.StringVar(value='0')
+        self.attack=tk.StringVar(value=str(self.initial_effect.get('valor', 200))
+                                 if self.initial_effect else '200')
+        self.defense=tk.StringVar(value=str(self.initial_effect.get('valor_def', 0))
+                                  if self.initial_effect else '0')
         for key,v in [('ATK por cópia',self.attack),('DEF por cópia',self.defense)]:
             block=ttk.Frame(row);block.pack(side='left',padx=(0,16))
             ttk.Label(block,text=key).pack(anchor='w');ttk.Entry(block,width=15,textvariable=v).pack()
-        ttk.Label(pane,text='O nome da carta é inserido na descrição do efeito.',
-                  foreground='#edc47e').pack(anchor='w',pady=14)
+        ttk.Label(pane,text='Observação (opcional)').pack(anchor='w',pady=(10,3))
+        self.note=tk.StringVar(value=self.initial_effect.get('observacao', '')
+                               if self.initial_effect else '')
+        ttk.Entry(pane,textvariable=self.note).pack(fill='x')
+        ttk.Label(pane,text=('A edição mantém o texto da descrição intacto.'
+                             if self.initial_effect else
+                             'Ao adicionar, o nome da carta será inserido na descrição.'),
+                  foreground='#edc47e').pack(anchor='w',pady=12)
         buttons=ttk.Frame(pane);buttons.pack(fill='x')
         ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left')
-        ttk.Button(buttons,text='Adicionar efeito + texto',style='Accent.TButton',command=self.submit).pack(side='right')
+        ttk.Button(buttons,text='Salvar alterações' if self.initial_effect
+                   else 'Adicionar efeito + texto',style='Accent.TButton',
+                   command=self.submit).pack(side='right')
     def submit(self):
         value=self.selected.get().strip()
         ref=self.labels.get(value)
@@ -344,7 +364,7 @@ class SpecificCardEffectDialog(tk.Toplevel):
             entry={'evento':'continuo','acao':'bonus_por_carta_id','alvo':'proprio',
                    'carta_referencia_id':ref,'origem_contagem':self.origin.get(),
                    'escopo':self.scope.get(),'valor':int(self.attack.get()),
-                   'valor_def':int(self.defense.get())}
+                   'valor_def':int(self.defense.get()), 'observacao':self.note.get()}
             self.on_save(entry)
         except (ValueError,ModError) as exc:
             messagebox.showerror('Efeito inválido',str(exc),parent=self);return
