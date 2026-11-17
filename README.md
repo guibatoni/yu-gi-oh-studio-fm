@@ -1,3 +1,13 @@
+# Studio FM v1.8.10 — Efeitos de vida e editor de descrições
+
+Esta atualização reúne o Vínculo com Vida (no simulador), a seleção de carta
+específica para bônus por deck, os ícones de coração e espada/coração na prévia,
+e o editor de descrição com altura ajustável, rolagem própria e janela de
+ícones redimensionável. Os dois ícones novos e o efeito Vínculo com Vida ainda
+não são exportáveis para o motor PS1; a exportação preserva essa limitação.
+
+---
+
 # Studio FM v1.8.9 — Vínculo com Vida e seleção de carta no deck
 
 No Studio, em **Cartas → Efeitos e bônus → Adicionar efeito**, escolha
