@@ -834,7 +834,25 @@ class ModEditor(ttk.Frame):
     def save_opponent(self):
         try:
             rules = self._edit()
-            self._selected_duelist(rules)['deck'] = self.opponent_deck.profile()
+            opponent = self._duel_id()
+            old_candidates = deck_drop_candidates(rules, self.pools, opponent)
+            duel = self._selected_duelist(rules)
+            duel['deck'] = self.opponent_deck.profile()
+            if duel.get(DROP_FROM_DECK):
+                new_candidates = deck_drop_candidates(rules, self.pools, opponent)
+                if not new_candidates:
+                    raise ModError('O deck deve conter cartas para manter drops ponderados.')
+                store = duel.setdefault(DECK_DROP_WEIGHTS, {})
+                for group in DROP_GROUPS:
+                    previous = store.get(group, {cid: 1 for cid in old_candidates})
+                    # Preservar pesos dos IDs mantidos e exclusões anteriores.
+                    # Cartas recém-incluídas recebem peso inicial 1.
+                    updated = {cid: weight for cid, weight in previous.items()
+                               if cid in new_candidates}
+                    updated.update({cid: 1 for cid in new_candidates - old_candidates})
+                    if not updated:
+                        updated = {cid: 1 for cid in new_candidates}
+                    store[group] = updated
             rules = normalize_rules(rules, self.cards)
             profile = self._selected_duelist(rules)['deck']
             if profile['cartas'] or profile['pools']:
