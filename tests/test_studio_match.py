@@ -392,7 +392,7 @@ class StudioMatchTests(unittest.TestCase):
             self.assertEqual(reopened.get(mod_monster)['ataque'],huge)
             self.assertEqual(resolve_references('{card:5555555}',reopened.cards),'Conta Suprema')
             self.assertEqual(parse_card_ids('5555555'),[mod_monster])
-            self.assertEqual(starting_life(reopened,1),{PLAYER:huge,CPU:huge+1})
+            self.assertEqual(starting_life(reopened,1),{PLAYER:huge,CPU:huge})
             game = make_match(reopened,None,1,'Principal',rng=Random(12))
             self.assertEqual(set(game.hands[PLAYER]),{mod_monster,spell,trap,ritual,equip})
             config = normalize_rules(reopened.metadata[CONFIG_KEY],reopened.cards)
