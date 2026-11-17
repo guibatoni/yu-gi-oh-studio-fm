@@ -95,12 +95,9 @@ class EffectDialog(tk.Toplevel):
         # Os atalhos já cadastrados também podem ser editados pela tabela,
         # sem habilitar novos atalhos duplicados no formulário de criação.
         if self.initial_effect:
-            action = self.initial_effect.get('acao')
-            event = self.initial_effect.get('evento')
-            if action in QUICK_ACTIONS:
-                self.sources['acao'][action] = ACTIONS[action]
-            if event == 'regra_deck':
-                self.sources['evento']['regra_deck'] = EVENTS['regra_deck']
+            self.sources['acao'].update((action, ACTIONS[action])
+                                       for action in QUICK_ACTIONS)
+            self.sources['evento']['regra_deck'] = EVENTS['regra_deck']
         row=0
         for key,label in [('evento','Quando ativa'),('acao','O que acontece'),('alvo','Alvo do efeito')]:
             self.labels[key]=ttk.Label(form,text=label)
@@ -196,14 +193,17 @@ class EffectDialog(tk.Toplevel):
         self.vars[key].set(value)
         action=self.vars['acao'].get()
         if key=='evento':
-            if value=='continuo' and action not in EFFECT_ACTIONS and action not in QUICK_ACTIONS:
+            if value=='continuo' and action not in EFFECT_ACTIONS and action not in (
+                    QUICK_ACTIONS - {'sem_limite_deck', 'limite_copias_deck', 'perder_lp_por_ataque'}):
                 self._set('acao','aura_tipo')
             elif value=='equipado' and action not in EQUIPMENT_ACTIONS:
                 self._set('acao','equip_atk')
-            elif value not in ('continuo','equipado','regra_deck') and action in EFFECT_ACTIONS|EQUIPMENT_ACTIONS:
-                self._set('acao','aumentar_atk')
             elif value=='regra_deck' and action not in ('sem_limite_deck','limite_copias_deck'):
                 self._set('acao','limite_copias_deck')
+            elif value not in ('continuo','equipado','regra_deck') and (
+                    action in EFFECT_ACTIONS|EQUIPMENT_ACTIONS or
+                    action in QUICK_ACTIONS and not (value=='atacar' and action=='perder_lp_por_ataque')):
+                self._set('acao','aumentar_atk')
         if key=='acao':
             if value in EFFECT_ACTIONS or value in QUICK_ACTIONS - {'sem_limite_deck', 'limite_copias_deck', 'perder_lp_por_ataque'}:
                 self._set('evento','continuo')
