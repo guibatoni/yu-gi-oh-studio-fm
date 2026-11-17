@@ -196,8 +196,8 @@ class DuelLab:
         if side not in SIDES or (against is not None and against not in POSITIONS):
             raise ModError('Combate: lado ou posição alvo inválidos')
         source=self.get(side,slot)
-        if source is None or not source.get('face_up',True) or source.get('posicao', 'ataque') != 'ataque':
-            raise ModError('Escolha um monstro virado para cima em posição de ataque.')
+        if source is None or source.get('posicao', 'ataque') != 'ataque':
+            raise ModError('Escolha um monstro em posição de ataque.')
         enemy = opposite(side)
         if board is None:
             board = self.resolve()[0]

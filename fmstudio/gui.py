@@ -753,7 +753,7 @@ class Studio(tk.Tk):
             lambda e: canvas.yview_scroll(-1 if e.delta>0 else 1,'units')))
         canvas.bind('<Leave>',lambda event:canvas.unbind_all('<MouseWheel>'))
         tk.Label(body,text='EFEITOS DAS CARTAS',bg=BG,fg=TEXT,font=('Segoe UI',16,'bold')).pack(anchor='w')
-        tk.Label(body,text='Efeitos inéditos: simulação e diagnóstico MIPS do PS1. Equip está validado; outros efeitos exigem hooks no duelo.',
+        tk.Label(body,text='Drop x15: bônus, habilidades rápidas e recuperação/dano de LP ao entrar em campo são exportáveis. Outros gatilhos podem funcionar só no simulador.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),wraplength=780,justify='left').pack(anchor='w',pady=(8,12))
         self.effect_caption=tk.Label(body,text='Escolha uma carta',bg=BG,fg=ACCENT,font=('Segoe UI',12,'bold'))
         self.effect_caption.pack(anchor='w',pady=(0,8))
@@ -885,8 +885,8 @@ class Studio(tk.Tk):
         diagnostic=ttk.Frame(body)
         diagnostic.pack(fill='x',pady=(0,6))
         ttk.Button(diagnostic,text='Diagnosticar Equip no BIN/CUE',command=self.diagnose_equip).pack(side='left')
-        tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Efeitos inéditos ainda não são interpretados pelo jogo.\n'
-                 'A cópia de teste permite atributos, textos, artes e alvos de Equip stock. Efeitos inéditos NÃO funcionam no PS1.',
+        tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Gere um BIN/CUE novo depois de salvar efeitos.\n'
+                 'No perfil Drop x15, apenas os efeitos suportados pelo relatório são aplicados ao PS1. Verifique o BIN/CUE e teste no ePSXe.',
                  bg=BG,fg='#edc47e',font=('Segoe UI',10),justify='left',wraplength=750).pack(anchor='w',pady=(8,0))
 
     def _extract_tab(self):

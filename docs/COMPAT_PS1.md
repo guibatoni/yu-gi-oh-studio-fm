@@ -1,3 +1,18 @@
+## v1.7.5 — Gatilho de cura e ataque inicial com carta setada
+
+**Cura LP ao entrar em campo** é compilada em uma ação nativa para o perfil
+Drop x15; assim como dano LP na invocação, é disparada ao colocar o monstro,
+mesmo virado para baixo, uma vez por entrada em campo. O valor deve caber no
+pacote do efeito (até 9999 por efeito). O LP total usa a capacidade de 16 bits
+e não estoura ao se aproximar de 65535.
+
+**Ataca no 1º turno** pode ser usado com o monstro inicialmente virado para
+baixo **em ataque**: o simulador revela o atacante e a checagem inicial do
+PS1 passa a reconhecer a habilidade da carta oculta sem ativar outras
+proteções escondidas. Não habilita ataque em defesa e não concede ataque
+adicional. O BIN/CUE deve ser gerado novamente e ainda requer teste visual
+no ePSXe.
+
 ## v1.7.4 — Guardian Stars da IA do simulador
 
 O Studio evita escolher uma Guardian Star perdedora diante de monstros já

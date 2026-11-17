@@ -10,7 +10,7 @@ enum {
     MAGIC = 1, TRAP = 2, INDESTRUCTIBLE = 4, PIERCING = 8, DIRECT = 16, FIRST_TURN = 32,
     FIELD = 5, PLACING = 7, BATTLE = 9,
     CARD_COUNT = 722, DECK_SIZE = 40, RECORD_COUNT = 30, DUELIST_COUNT = 40,
-    AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE
+    AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE, SUMMON_HEAL
 };
 
 typedef struct {
@@ -127,9 +127,11 @@ static unsigned protection(unsigned slot)
 {
     const Rules *rule;
     unsigned flags;
-    if (!monster_zone(slot) || !field_monster(slot, 0)) return 0;
+    if (!monster_zone(slot) || !field_monster(slot, 1)) return 0;
     rule = rules(CARDS[slot].id);
     flags = rule ? rule->protection : 0;
+    /* A single hidden permission: first-turn attack, never an immunity. */
+    if (CARDS[slot].flags & FACE_DOWN) return flags & FIRST_TURN;
     if (duel.field[slot].id == CARDS[slot].id) flags |= duel.field[slot].equip_protection;
     return flags;
 }
@@ -181,7 +183,7 @@ ENTRY u32 CalculateStats(const Card *card)
             for (unsigned j = 0; j < rule->bonus_count; j++) {
                 const Bonus *bonus = &rule->bonuses[j];
                 int count;
-                if (bonus->action == SUMMON_DAMAGE) continue;
+                if (bonus->action >= SUMMON_DAMAGE) continue;
                 if (bonus->action == AURA) {
                     unsigned scope = bonus->scope & 3;
                     if ((scope < 2 && side != (owner(i) ^ scope)) ||
@@ -282,6 +284,12 @@ static EXTENSION void summon_damage(unsigned slot)
         const Bonus *effect = &rule->bonuses[i];
         if (effect->action == SUMMON_DAMAGE)
             lose_lp(owner(slot) ^ effect->scope, effect->attack);
+        else if (effect->action == SUMMON_HEAL) {
+            unsigned side = owner(slot) ^ effect->scope;
+            u16 current = AT(u16, SIDE(side) + 0x14);
+            u32 total = (u32)current + effect->attack;
+            AT(u16, SIDE(side) + 0x14) = total > 65535u ? 65535u : total;
+        }
     }
 }
 

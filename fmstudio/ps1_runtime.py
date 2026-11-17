@@ -31,12 +31,13 @@ PROTECTIONS = {
     'equip_imune_armadilha': 2, 'equip_imune_magia_armadilha': 3, 'equip_indestrutivel': 4,
 }
 PLAY_ACTIONS = ((EFFECT_ACTIONS - {'bonus_mao_tipo'}) | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
-                {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp'})
+                {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp', 'cura_lp'})
 SUPPORTED = PLAY_ACTIONS | COPY_ACTIONS
 BONUS_CODES = {'aura_tipo': 1, 'bonus_por_tipo': 2, 'bonus_deck_tipo': 3,
                'bonus_cemiterio_tipo': 6}
 SCOPES = {'aliados': 0, 'inimigos': 1, 'todos': 2}
 SUMMON_DAMAGE = 7
+SUMMON_HEAL = 8
 DROP_ENTRY = 0x80021810
 DECK_INIT = (0x800179F4, 0x80017DB4, 0x800245A0)
 TEXT_DRAW = (0x80035E20, 0x80036BCC)
@@ -187,8 +188,8 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                 pending.append(f'#{cid}: {action} requer outra rotina de duelo no PS1.')
                 continue
             effect = check_effect(raw)
-            if action == 'dano_lp' and effect['evento'] != 'invocar':
-                pending.append(f'#{cid}: dano direto PS1 exige gatilho de entrada em campo.')
+            if action in ('dano_lp', 'cura_lp') and effect['evento'] != 'invocar':
+                pending.append(f'#{cid}: {action} no PS1 exige gatilho de entrada em campo.')
                 continue
             attribute = effect.get('atributo_id', -1)
             if ((attribute != -1 and action == 'bonus_cemiterio_tipo')
@@ -218,9 +219,10 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                 scope = SCOPES[effect['escopo']] | ((attribute + 1) << 2)
                 bonuses.append(struct.pack('<BBHHH', code, scope, match,
                                            effect['valor'], effect.get('valor_def', 0)))
-            elif action == 'dano_lp':
+            elif action in ('dano_lp', 'cura_lp'):
                 receiver = int(effect['alvo'] == 'inimigo')
-                bonuses.append(struct.pack('<BBHHH', SUMMON_DAMAGE, receiver, 0, effect['valor'], 0))
+                code = SUMMON_HEAL if action == 'cura_lp' else SUMMON_DAMAGE
+                bonuses.append(struct.pack('<BBHHH', code, receiver, 0, effect['valor'], 0))
             elif action in PROTECTIONS:
                 protections |= PROTECTIONS[action]
             elif action == 'ataques_multiplos':

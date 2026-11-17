@@ -136,8 +136,8 @@ class DuelMatch(DuelLab):
     def _monsters_for(self, kind, hand, cid, slots, tribute=(), field_material=None):
         for slot, star, pose in product(slots, guardian_options(self.card(cid)), POSITIONS):
             yield Play(kind, hand, cid, slot, star, pose, field_material, tribute)
-            if pose == 'defesa':
-                yield Play(kind, hand, cid, slot, star, pose, field_material, tribute, face_up=False)
+            # The original PS1 supports setting monsters face-down in attack or defense.
+            yield Play(kind, hand, cid, slot, star, pose, field_material, tribute, face_up=False)
 
     def _spell_targets(self, cid, side):
         enemy = opposite(side)
@@ -324,7 +324,7 @@ class DuelMatch(DuelLab):
         if unit is None:
             return False
         key = (side, slot, unit['card_id'])
-        return (unit['face_up'] and unit['posicao'] == 'ataque'
+        return (unit['posicao'] == 'ataque'
                 and not self._attack_timing_error(unit)
                 and self.attacks_used.get(key, 0) < unit['ataques_max']
                 and (not self.swords[side] or unit['imune_magia']))
@@ -380,6 +380,9 @@ class DuelMatch(DuelLab):
         enemy = opposite(side)
         source = self.get(side, action.slot)
         target = self.get(enemy, action.target) if action.target else None
+        # An attacking set monster reveals itself before attack triggers/combat.
+        # This also enables Ataca no 1º turno while initially face-down in ATK.
+        source['face_up'] = True
         starting = self.preview_attack(side, action.slot, target_slot=action.target, against=None)
         old_lp = dict(self.lp)
         self.apply_event(source['card_id'], side, 'atacar', source_slot=action.slot, target_side=enemy,

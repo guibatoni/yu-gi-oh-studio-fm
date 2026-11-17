@@ -1,3 +1,11 @@
+## v1.7.5 — Recuperação de LP no PS1 e ataque inicial virado para baixo
+
+- **Recuperar LP ao entrar em campo** passa a ser exportado para o motor nativo do Drop x15, além de funcionar no simulador. O controlador recebe o valor configurado uma vez por entrada em campo, inclusive com a carta setada; o LP nativo é limitado à capacidade do campo de 16 bits para impedir estouro.
+- **Ataca no 1º turno** pode ser ativado por um monstro virado para baixo **em posição de ataque**. No simulador o monstro revela-se ao atacar. O hook PS1 preserva a habilidade oculta na checagem de bloqueio do primeiro turno; a rotina original ainda exige posição de ataque.
+- Em **posição de defesa**, a carta não pode atacar, mesmo com a habilidade.
+- Testes PS1 compilam o novo blob MIPS e executam a rotina de cura/dano no Unicorn. **Teste prático no ePSXe permanece necessário.**
+- Para obter o novo comportamento no PS1, gere outro BIN/CUE a partir do original: atualizar o editor não altera uma imagem gerada anteriormente.
+
 ## v1.7.4 — IA: escolha inteligente de Guardian Stars no Studio
 
 - O oponente nunca escolhe uma estrela que perde para um monstro **visível** no campo quando a mesma jogada oferece uma alternativa segura.

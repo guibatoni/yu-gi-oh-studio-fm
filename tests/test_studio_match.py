@@ -80,6 +80,63 @@ class StudioMatchTests(unittest.TestCase):
                         with self.assertRaises(ModError):
                             game.attack(side, action.slot)
 
+    def test_life_gain_on_summon_works_once_and_keeps_2000_lp(self):
+        cards = {2: card(1100, 800), 35: card(1500, 1100)}
+        effects = {2: [effect('cura_lp', 2000, event='invocar', target='proprio')]}
+        game = DuelMatch(cards, effects, {PLAYER: [2, 35], CPU: [35]},
+                         first=PLAYER, rng=Random(4))
+        game.lp[PLAYER] = 8000
+        play = next(a for a in game.legal_plays(PLAYER)
+                    if a.card_id == 2 and not a.face_up and a.position == 'defesa')
+        game.play(PLAYER, play)
+        self.assertEqual(game.lp[PLAYER], 10000)
+        gained = [entry for entry in game.logs if entry['acao'] == 'cura_lp']
+        self.assertEqual(len(gained), 1)
+        self.assertEqual((gained[0]['valor'], gained[0]['alvo']), (2000, PLAYER))
+        game.end_turn(PLAYER)
+        game.end_turn(CPU)
+        game.set_position(PLAYER, play.slot, 'ataque')
+        self.assertEqual(game.lp[PLAYER], 10000)
+        self.assertEqual(sum(entry['acao'] == 'cura_lp' for entry in game.logs), 1)
+
+    def test_face_down_attack_position_with_first_turn_ability_reveals_on_attack(self):
+        cards = {35: card(1200, 900), 2: card(900, 700)}
+        effects = {35: [effect('ataque_primeiro_turno', 0)]}
+        game = DuelMatch(cards, effects, {PLAYER: [35], CPU: [2]},
+                         first=PLAYER, rng=Random(8))
+        play = next(a for a in game.legal_plays(PLAYER)
+                    if a.card_id == 35 and not a.face_up and a.position == 'ataque')
+        game.play(PLAYER, play)
+        self.assertFalse(game.get(PLAYER, play.slot)['face_up'])
+        self.assertIn(Attack(play.slot, None), game.legal_attacks(PLAYER))
+        result = game.attack(PLAYER, play.slot)
+        self.assertTrue(game.get(PLAYER, play.slot)['face_up'])
+        self.assertEqual(result['dano_lp_oponente'], 1200)
+
+    def test_face_down_without_first_turn_cannot_attack_opening(self):
+        cards = {35: card(1200, 900), 2: card(900, 700)}
+        game = DuelMatch(cards, {}, {PLAYER: [35], CPU: [2]},
+                         first=PLAYER, rng=Random(8))
+        play = next(a for a in game.legal_plays(PLAYER)
+                    if a.card_id == 35 and not a.face_up and a.position == 'ataque')
+        game.play(PLAYER, play)
+        self.assertEqual(game.legal_attacks(PLAYER), [])
+        with self.assertRaises(ModError):
+            game.attack(PLAYER, play.slot)
+        self.assertFalse(game.get(PLAYER, play.slot)['face_up'])
+
+    def test_face_down_defense_remains_unable_to_attack_opening(self):
+        cards = {35: card(1200, 900), 2: card(900, 700)}
+        effects = {35: [effect('ataque_primeiro_turno', 0)]}
+        game = DuelMatch(cards, effects, {PLAYER: [35], CPU: [2]},
+                         first=PLAYER, rng=Random(8))
+        play = next(a for a in game.legal_plays(PLAYER)
+                    if a.card_id == 35 and not a.face_up and a.position == 'defesa')
+        game.play(PLAYER, play)
+        self.assertEqual(game.legal_attacks(PLAYER), [])
+        with self.assertRaises(ModError):
+            game.attack(PLAYER, play.slot)
+
     def test_regular_summon_can_attack_after_the_opening_on_either_side(self):
         for opener, side in ((PLAYER, CPU), (CPU, PLAYER)):
             game = DuelMatch(self.cards, {}, self.decks, rng=Random(42), first=opener)

@@ -138,7 +138,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             if raw.get('evento') != 'continuo':
                 continue
             action = raw.get('acao')
-            if source['face_up'] and action in (
+            if (source['face_up'] or action == 'ataque_primeiro_turno') and action in (
                 'ataques_multiplos', 'ataque_primeiro_turno', 'monstro_indestrutivel', 'monstro_imune_magia',
                 'monstro_imune_armadilha', 'dano_perfurante', 'nao_bloqueavel'):
                 eff = check_effect(raw)

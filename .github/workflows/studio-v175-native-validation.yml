@@ -1,0 +1,43 @@
+name: Validar Studio FM 1.7.5 - Efeitos LP e ataque oculto PS1
+on:
+  push:
+    branches: [feature/studio-v1.7.5-heal-and-hidden-first-attack]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar compilador MIPS
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-mipsel-linux-gnu binutils-mipsel-linux-gnu
+      - name: Dependencias dos testes
+        run: python -m pip install pillow unicorn==2.1.4
+      - name: Gerar código nativo MIPS da versao 1.7.5
+        run: python tools/compile_ps1_runtime.py
+      - name: Testes unitarios
+        run: |
+          python -m compileall -q app.py fmstudio tools tests
+          python -m unittest discover -s tests -v
+      - name: Testes MIPS de campo e de LP
+        run: |
+          PYTHONPATH=. python tests/verify_plant_field_bonus_mips.py
+          PYTHONPATH=. python tests/verify_summon_effect_mips.py
+      - name: Verificar pacote do atualizador
+        run: python tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip
+      - name: Publicar blob MIPS recompilado na branch
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add fmstudio/ps1_runtime_blob.py
+          if ! git diff --cached --quiet; then
+            git commit -m "build: atualizar blob MIPS validado para cura e ataque oculto"
+            git push origin HEAD:feature/studio-v1.7.5-heal-and-hidden-first-attack
+          fi
