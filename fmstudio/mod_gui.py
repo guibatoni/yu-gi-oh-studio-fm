@@ -447,8 +447,7 @@ class ModEditor(ttk.Frame):
         self.starter = tk.StringVar(value=STOCK_STARTER)
         self.starter_weight = tk.StringVar(value='1')
         self.random_starter = tk.BooleanVar()
-        self.player_lp = tk.StringVar()
-        self.opponent_lp = tk.StringVar()
+        self.mod_lp = tk.StringVar(value='8000')
         self.opponent_first = tk.BooleanVar()
         self.status = tk.StringVar(value='Abra um projeto para editar as tabelas.')
         self.duelist_ids = {f'{i:02d} · {name}': i for i, name in enumerate(DUELIST_NAMES_REFERENCE) if i}
@@ -471,7 +470,7 @@ class ModEditor(ttk.Frame):
         drop_pane, deck_pane, start_pane, lp_pane = [ttk.Frame(self.tabs, padding=9) for _ in range(4)]
         self.deck_pane = deck_pane
         for pane, name in zip((deck_pane, drop_pane, start_pane, lp_pane),
-                              ('Deck do oponente', 'Drops do oponente', 'Decks iniciais', 'Life Points')):
+                              ('Deck do oponente', 'Drops do oponente', 'Decks iniciais', 'Config. MOD')):
             self.tabs.add(pane, text=name)
         self.drop_toggle = ttk.Checkbutton(drop_pane, text='Dropar Cartas do Próprio Deck',
                                            variable=self.use_deck_drops, command=self._toggle_deck_drops)
@@ -531,11 +530,14 @@ class ModEditor(ttk.Frame):
         ttk.Button(starter_actions, text='Salvar deck inicial', style='Accent.TButton',
                    command=self.save_starter).pack(side='right')
 
-        for caption, variable in (('LP inicial do jogador', self.player_lp),
-                                  ('LP do duelista selecionado', self.opponent_lp)):
-            ttk.Label(lp_pane, text=caption).pack(anchor='w', pady=(6, 3))
-            ttk.Entry(lp_pane, textvariable=variable, width=34).pack(anchor='w')
-        ttk.Button(lp_pane, text='Salvar LP', style='Accent.TButton', command=self.save_lp).pack(anchor='w', pady=9)
+        ttk.Label(lp_pane, text='Life Points iniciais — jogador e TODOS os oponentes',
+                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(6, 7))
+        ttk.Label(lp_pane, text='Valor global único para cada duelo do mod, inclusive no simulador. '
+                  'O motor PS1 aceita até 65.535 (u16), porém o HUD original mostra quatro dígitos.',
+                  wraplength=630, justify='left').pack(anchor='w', pady=(0, 8))
+        ttk.Entry(lp_pane, textvariable=self.mod_lp, width=25).pack(anchor='w')
+        ttk.Button(lp_pane, text='Salvar LP para ambos', style='Accent.TButton',
+                   command=self.save_lp).pack(anchor='w', pady=9)
         ttk.Label(self, textvariable=self.status, foreground=ACCENT, wraplength=610).pack(anchor='w', pady=(5, 0))
         self._update_available()
 
@@ -557,6 +559,7 @@ class ModEditor(ttk.Frame):
             self.cards = {cid: self.project.get(cid) for cid in self.project.cards}
             self.pools, self.stock, _, _ = base_tables(self.project)
             self.rules = normalize_rules(self.project.metadata.get(CONFIG_KEY, {}), self.cards)
+            self.mod_lp.set(str(starting_life(self.project, self._duel_id())['jogador']))
             self.status.set('')
         else:
             self.cards, self.pools, self.rules, self.stock = {}, {}, {}, []
@@ -604,11 +607,7 @@ class ModEditor(ttk.Frame):
             self.opponent_deck.restore(draft)
         self._loaded_opponent = opponent if self.project else None
         self._load_drop()
-        if self.project:
-            lp = starting_life(self.project, opponent)
-            self.player_lp.set(str(lp['jogador']))
-            self.opponent_lp.set(str(lp['adversario']))
-
+ 
     def _load_drop(self):
         active = drops_from_deck(self.rules, self._duel_id())
         self.use_deck_drops.set(active)
@@ -843,12 +842,21 @@ class ModEditor(ttk.Frame):
 
     def save_lp(self):
         try:
+            from .core import positive_int
+            value = positive_int(self.mod_lp.get(), 'LP inicial do mod')
             rules = self._edit()
-            rules['lp_jogador'] = self.player_lp.get()
-            self._selected_duelist(rules)['lp'] = self.opponent_lp.get()
-            self._commit(rules, 'LP iniciais salvos.')
+            rules['lp_inicial'] = value
+            # Elimina fontes antigas que antes criavam LP diferente para cada oponente.
+            rules.pop('lp_jogador', None)
+            for duelist in rules.get('duelistas', {}).values():
+                duelist.pop('lp', None)
+            self._commit(rules, f'{value} LP iniciais configurados para jogador e todos os oponentes.')
+            # O patch experimental antigo não pode sobrescrever a regra global.
+            self.project.metadata.pop('ps1_starting_lp', None)
+            self.project.metadata.pop('studio_initial_lp', None)
+            self.project.save()
         except (ModError, ValueError, OSError) as exc:
-            messagebox.showerror('Life Points', str(exc), parent=self)
+            messagebox.showerror('Config. MOD — Life Points', str(exc), parent=self)
 
     def start_match(self):
         if not self.project or self.studio._extract_running:
