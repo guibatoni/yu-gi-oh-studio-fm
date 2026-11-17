@@ -1,0 +1,24 @@
+name: Validar Studio FM 1.7.4 - Guardian AI
+on:
+  push:
+    branches:
+      - feature/studio-v1.7.4-guardian-ai
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias de teste
+        run: python -m pip install pillow
+      - name: Sintaxe Python
+        run: python -m compileall -q app.py fmstudio tools tests
+      - name: Testes completos incluindo IA Guardian Star
+        run: python -m unittest discover -s tests -v
+      - name: Verificar pacote de atualização por botão
+        run: python tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip
