@@ -20,12 +20,16 @@ from .passwords import (
 from .tables import CARD_COUNT, DECK_SIZE, TYPE_NAMES
 
 
-def _tree(parent, columns, *, height=6, raw_values=None, selectmode='browse'):
+def _tree(parent, columns, *, height=6, raw_values=None, selectmode='browse', horizontal=False):
     holder = ttk.Frame(parent)
     holder.pack(fill='both', expand=True, pady=(6, 0))
     tree = ttk.Treeview(holder, columns=[row[0] for row in columns], show='headings',
                         selectmode=selectmode, height=height)
     tree.tag_configure('stripe', background=ROW_ALT)
+    if horizontal:
+        hscroll = ttk.Scrollbar(holder, orient='horizontal', command=tree.xview)
+        hscroll.pack(side='bottom', fill='x')
+        tree.configure(xscrollcommand=hscroll.set)
     tree.pack(side='left', fill='both', expand=True)
     scroll = ttk.Scrollbar(holder, command=tree.yview)
     scroll.pack(side='right', fill='y')
