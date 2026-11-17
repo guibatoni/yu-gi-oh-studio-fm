@@ -89,7 +89,7 @@ def import_starter_tables(project, source):
     _write_csv(project.folder/'base'/'decks_iniciais.csv', rows)
 
 
-def _retail_weights(weights, last_id):
+def quantize_weights(weights, last_id):
     if not weights or any(not 1 <= cid <= last_id for cid in weights):
         raise ModError(f'O PS1 exige pesos positivos para cartas de 1 a {last_id}.')
     total = sum(weights.values())
@@ -134,7 +134,7 @@ def compile_mod(project, *, profile, wa_verified):
             plan.pending.append(f'{name}: exige a imagem Drop x15 vinculada ao projeto.')
             return
         try:
-            data = _retail_weights(weights, last_id)
+            data = quantize_weights(weights, last_id)
         except ModError as exc:
             plan.pending.append(f'{name}: {exc}')
             return
@@ -206,7 +206,7 @@ def compile_mod(project, *, profile, wa_verified):
                 used = sum(min(older['compras'], 3 * len(ids & older['pesos'].keys())) for older in rows[:i])
                 if 3 * len(ids) - used < draws:
                     raise ModError('O limite original de três cópias pode impedir o sorteio de um dos pools.')
-                staged.append((draws, _retail_weights(row['pesos'], LEGACY_SCAN_COUNT)))
+                staged.append((draws, quantize_weights(row['pesos'], LEGACY_SCAN_COUNT)))
             plan.starters = staged
             plan.applied.append('Pools do deck inicial')
         except ModError as exc:

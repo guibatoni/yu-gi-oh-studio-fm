@@ -285,7 +285,7 @@ class MipsEffectProbeTests(unittest.TestCase):
 
 class CustomDeckCopiesTests(unittest.TestCase):
     def test_quick_preset_1_2_5_40_and_unlimited(self):
-        for limit in (1,2,5,40):
+        for limit in (0,1,2,5,40):
             effects=replace_quick_effects([],
                           {'ataques':1,'custo_lp':0,'limite_copias':limit})
             self.assertEqual(quick_settings(effects)['limite_copias'],limit)
@@ -309,7 +309,7 @@ class CustomDeckCopiesTests(unittest.TestCase):
         with self.assertRaises(ModError):
             replace_quick_effects([],
                   {'ataques':1,'limite_copias':41})
-        for amount in (0,41,-1):
+        for amount in (41,-1):
             with self.assertRaises(ModError):
                 check_effect({'evento':'regra_deck','acao':'limite_copias_deck',
                               'alvo':'proprio','valor':amount})

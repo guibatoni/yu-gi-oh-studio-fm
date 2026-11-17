@@ -183,7 +183,8 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
             pending.append(f'#{cid}: {len(effects)} efeito(s) requerem carta original e perfil Drop x15.')
             continue
         card_type = int(project.get(cid)['tipo_id'])
-        protections, attacks, copies, equip_attack, cost = 0, 0, 0, 0, 0
+        protections, attacks, equip_attack, cost = 0, 0, 0, 0
+        copies = None
         unlimited, entries, bonuses = False, [], []
         for raw in effects:
             action = raw.get('acao')
@@ -244,13 +245,14 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                 unlimited = True
             else:
                 value = effect['valor']
-                copies = min(copies, value) if copies else value
+                copies = min(copies, value) if copies is not None else value
             entries.append((cid, action))
         if not entries:
             continue
         if len(bonuses) > 255:
             raise ModError(f'#{cid}: o PS1 comporta até 255 condições de bônus por carta.')
-        payload = struct.pack('<BBBBHH', protections, attacks, 40 if unlimited else copies,
+        limit_byte = 0xFF if copies == 0 else (40 if unlimited else copies or 0)
+        payload = struct.pack('<BBBBHH', protections, attacks, limit_byte,
                               len(bonuses), equip_attack, cost) + b''.join(bonuses)
         if payload not in offsets:
             offsets[payload] = len(data)

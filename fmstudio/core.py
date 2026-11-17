@@ -284,7 +284,7 @@ def check_effect(entry: dict):
     if action == 'limite_copias_deck':
         if event != 'regra_deck' or target != 'proprio':
             raise ModError('Limite personalizado exige regra de deck e alvo próprio')
-        amount = _bounded_int(entry.get('valor'), 'limite de cópias', 1, 40)
+        amount = _bounded_int(entry.get('valor'), 'limite de cópias', 0, 40)
         return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
     if event == 'regra_deck':
         raise ModError('Evento de deck exclusivo das regras de cópias')
@@ -781,6 +781,12 @@ class Project:
         except Exception:
             self.edits, self.effects = old_edits, old_effects
             raise
+
+    def art_path(self, cid: int) -> Path | None:
+        relative = self.arts.get(str(cid))
+        path = (self.folder / relative if relative else self.folder /
+                'base' / 'extracao_completa' / 'visuais' / 'cartas' / f'{cid:03d}.png')
+        return path if path.is_file() else None
 
     def attach_art(self, cid: int, path: Path):
         if cid not in self.cards:

@@ -34,5 +34,11 @@ with TemporaryDirectory() as d:
     root._refresh_effects();root.update()
     assert any('Blue-Eyes' in str(root.effect_tree.item(x,'values')) for x in root.effect_tree.get_children())
     root.save_project();root.update()
+    reopened = Project.open(project.folder)
+    assert reopened.get(723)['nome'] == 'Deus do Milênio'
+    assert reopened.get(723)['tipo_id'] == 24
+    root.filter.set('divino god')
+    assert root.tree.get_children() == ('723',)
+    assert root.mod_editor.opponent_deck.catalog.exists('723')
     root.destroy()
 print('GUI expansion: OK')

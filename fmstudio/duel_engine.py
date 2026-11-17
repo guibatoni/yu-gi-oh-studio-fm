@@ -67,8 +67,9 @@ class DuelLab:
         self.attacks_used = {}  # (side,slot,card_id) => ataques neste turno
         self.logs = []
 
-    def _snapshot(self):
-        return {key: deepcopy(getattr(self, key)) for key in self.state_fields}
+    def _snapshot(self, *, include_logs=True):
+        return {key: deepcopy(getattr(self, key)) for key in self.state_fields
+                if include_logs or key != 'logs'}
 
     def _restore(self, snapshot):
         for key, value in snapshot.items():
@@ -76,7 +77,7 @@ class DuelLab:
 
     def fork(self):
         branch = copy(self)
-        branch._restore(self._snapshot())
+        branch._restore(self._snapshot(include_logs=False))
         branch.logs = []
         return branch
 

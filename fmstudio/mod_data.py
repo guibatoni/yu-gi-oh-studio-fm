@@ -31,14 +31,17 @@ def card_effects(effects, cid):
 
 def deck_copy_limit(effects, cid, default=3):
     limits = []
+    unlimited = False
     for effect in card_effects(effects, cid):
         action = effect.get('acao')
         if action == 'sem_limite_deck':
             check_effect(effect)
-            return DECK_SIZE
-        if action == 'limite_copias_deck':
+            unlimited = True
+        elif action == 'limite_copias_deck':
             limits.append(check_effect(effect)['valor'])
-    return min(limits, default=default)
+    if 0 in limits:
+        return 0
+    return DECK_SIZE if unlimited else min(limits, default=default)
 
 
 def validate_deck(cards, effects, ids, default=3):
@@ -48,6 +51,8 @@ def validate_deck(cards, effects, ids, default=3):
         if cid not in cards:
             raise ModError(f'Carta #{cid} não encontrada.')
         limit = deck_copy_limit(effects, cid, default)
+        if not limit:
+            raise ModError(f'Carta #{cid} banida (limite de 0 cópias por deck).')
         if quantity > limit:
             raise ModError(f'Deck: carta #{cid} tem {quantity} cópias (máximo {limit}).')
 
@@ -92,13 +97,16 @@ def deal_deck(profile, cards, effects, rng=None, *, default_copies=3):
     fixed = list(profile.get('cartas', []))
     validate_deck(cards, effects, fixed, default_copies)
     held = Counter(fixed)
-    draws = [pool['pesos'] for pool in profile.get('pools', []) for _ in range(pool['compras'])]
+    draws = [{cid: weight for cid, weight in pool['pesos'].items() if weight > 0}
+             for pool in profile.get('pools', []) for _ in range(pool['compras'])]
     if not fixed and not draws:
         raise ModError('Configure as cartas ou os pesos do deck.')
     if len(fixed) + len(draws) > DECK_SIZE:
         raise ModError(f'Deck comporta até {DECK_SIZE} cartas.')
     limits = {cid: deck_copy_limit(effects, cid, default_copies) - held[cid]
               for draw in draws for cid in draw}
+    if any(cid not in cards for cid in limits):
+        raise ModError('Um dos pools referencia uma carta ausente do catálogo.')
     if not _can_deal(draws, limits):
         raise ModError('Os pools não têm cópias disponíveis para todas as compras configuradas.')
     for offset, draw in enumerate(draws):
@@ -347,4 +355,5 @@ def drop_weights(config, pools, opponent, rank, *, dealt_deck=()):
         return deck_drop_weights(config, pools, opponent, rank)
     rank_group = RANK_GROUPS.get(rank, rank)
     custom = config.get('duelistas', {}).get(str(opponent), {}).get('drops', {})
-    return custom.get(rank, custom.get(rank_group, pools.get((opponent, rank_group), {})))
+    weights = custom.get(rank, custom.get(rank_group, pools.get((opponent, rank_group), {})))
+    return {int(cid): int(weight) for cid, weight in weights.items() if int(weight) > 0}

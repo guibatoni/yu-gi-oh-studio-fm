@@ -8,10 +8,11 @@ from tkinter import messagebox, ttk
 from .continuous import SIDES
 from .core import ModError
 from .duel_ai import play_ai_turn, posture
+from .duel_rank import project_rank
 from .expanded import display_name
 from .guardian import guardian_name
-from .gui import ACCENT, BORDER, ROW_ALT, SURFACE, TEXT, card_row_tags, compact_number
-from .mod_data import RANK_GROUPS, drops_from_deck
+from .gui import ACCENT, BORDER, ROW_ALT, SURFACE, TEXT, card_row_tags, compact_number, sortable_columns
+from .mod_data import drops_from_deck
 from .passwords import grant_card, original_passwords
 from .tables import DUELIST_NAMES_REFERENCE
 
@@ -24,6 +25,8 @@ def zone_tree(parent):
                                  (70, 215, 115, 115, 65)):
         tree.heading(key, text=label)
         tree.column(key, width=width, minwidth=45, stretch=key == 'nome')
+    tree.sort_values = {}
+    tree.sort_rows = sortable_columns(tree, raw_values=lambda item, key: tree.sort_values[item][key])
     tree.pack(side='left', fill='both', expand=True)
     scroll = ttk.Scrollbar(parent, command=tree.yview)
     scroll.pack(side='right', fill='y')
@@ -35,24 +38,36 @@ def fill_zone(tree, game, side, zone):
     old = tree.selection()
     tree.delete(*tree.get_children())
     cards = game.inspect_zone(side, zone)
+    tree.sort_values.clear()
     copies = Counter(card['id'] for card in cards)
     by_id = {card['id']: card for card in cards}
     ids = sorted(by_id) if zone == 'deck' else by_id
     for index, cid in enumerate(ids):
         row = by_id[cid]
+        tree.sort_values[str(cid)] = {'id': cid, 'nome': display_name(cid, game.cards), 'atk': row['ataque'],
+                                      'def': row['defesa'], 'copias': copies[cid]}
         tree.insert('', 'end', iid=str(cid), values=(compact_number(cid),
             display_name(cid, game.cards), compact_number(row['ataque']),
             compact_number(row['defesa']), copies[cid]),
             tags=card_row_tags(tree, game.cards.get(cid), index))
+    tree.sort_rows()
     if old and tree.exists(old[0]):
         tree.selection_set(old[0])
 
 
-def show_exact(parent, title, text):
+def show_exact(parent, title, text, *, art=None):
     window = tk.Toplevel(parent)
     window.title(title)
     window.transient(parent)
     window.geometry('610x350')
+    if art is not None:
+        try:
+            image = tk.PhotoImage(master=window, file=str(art))
+            scale = max(1, (image.width() + 159) // 160, (image.height() + 111) // 112)
+            window.card_image = image.subsample(scale, scale) if scale > 1 else image
+            ttk.Label(window, image=window.card_image).pack(anchor='w', padx=10, pady=7)
+        except tk.TclError:
+            pass
     widget = tk.Text(window, wrap='char', bg=SURFACE, fg=TEXT,
                      highlightthickness=1, highlightbackground=BORDER, padx=10, pady=9)
     scroll = ttk.Scrollbar(window, command=widget.yview)
@@ -77,6 +92,7 @@ class MatchDialog(tk.Toplevel):
         self.rules = rules
         self.pools = pools
         self.result = tk.StringVar()
+        self.rank = tk.StringVar()
         self.lp_text = {}
         self.fields = {}
         self.log_lines = []
@@ -102,12 +118,18 @@ class MatchDialog(tk.Toplevel):
             panel.grid(row=0, column=i, sticky='nsew', padx=(0, 4) if i == 0 else (4, 0))
             lp = self.lp_text[side] = tk.StringVar()
             ttk.Label(panel, textvariable=lp).pack(anchor='w', pady=(0, 4))
+            if i == 0:
+                ttk.Label(panel, textvariable=self.rank, foreground=ACCENT,
+                          font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(0, 4))
+            else:
+                ttk.Label(panel, text='', font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(0, 4))
             cols = ('posição', 'carta', 'atk', 'def', 'estrela')
             tree = ttk.Treeview(panel, columns=cols, show='headings', height=5, selectmode='browse')
             tree.tag_configure('stripe', background=ROW_ALT)
             for key, title, width in zip(cols, ('Slot', 'Carta', 'ATK', 'DEF', 'Guardian'), (62, 165, 75, 75, 95)):
                 tree.heading(key, text=title)
                 tree.column(key, width=width, minwidth=38, stretch=key == 'carta')
+            tree.sort_rows = sortable_columns(tree)
             tree.pack(fill='x')
             tree.bind('<Double-1>', lambda _e, sd=side: self._inspect_field(sd))
             self.fields[side] = tree
@@ -141,14 +163,11 @@ class MatchDialog(tk.Toplevel):
 
         reward = ttk.Frame(pane)
         reward.pack(fill='x', pady=(5, 0))
-        self.rank = tk.StringVar(value='S-POW')
-        ttk.Combobox(reward, textvariable=self.rank, state='readonly',
-                     values=list(RANK_GROUPS), width=11).pack(side='left')
         self.drop_button = ttk.Button(reward, text='Receber recompensa',
                                       style='Accent.TButton', command=self._roll_drop)
         self.drop_button.pack(side='left', padx=5)
         self.reward = ttk.Label(reward, foreground=ACCENT,
-                                text='Selecione o rank e sorteie o drop ponderado do deck.' if self.deck_drops else '')
+                                text='Recompensa ponderada pelo deck do oponente.' if self.deck_drops else '')
         self.reward.pack(side='left')
         self.output = tk.Text(pane, height=4, wrap='word', state='disabled', bg=SURFACE, fg=TEXT)
         self.output.pack(fill='x', pady=(5, 0))
@@ -168,9 +187,8 @@ class MatchDialog(tk.Toplevel):
                 details.append('virada para baixo')
         if action.target:
             target = 'seu campo' if action.target[0] == 'jogador' else 'rival'
-            details.append(f'{target} slot {action.target[1]}')
-            if action.kind == 'magia' and action.slot is None:
-                details.append('alvo')
+            relation = 'material' if action.kind == 'fusao' else 'alvo'
+            details.append(f'{relation} no {target} slot {action.target[1]}')
         text = ' · '.join(details)
         label = {'fusao':'Fusão', 'magia':'Magia', 'monstro':'Invocar', 'ritual':'Ritual',
                  'armadilha':'Preparar armadilha', 'equip':'Equipar'}[action.kind]
@@ -189,7 +207,8 @@ class MatchDialog(tk.Toplevel):
         if side != 'jogador' and not unit['face_up']:
             return
         name = display_name(unit['card_id'], self.game.cards)
-        show_exact(self, name, f'ATK {unit["ataque"]}\nDEF {unit["defesa"]}\n{guardian_name(unit["guardian_id"])}')
+        show_exact(self, name, f'ATK {unit["ataque"]}\nDEF {unit["defesa"]}\n{guardian_name(unit["guardian_id"])}',
+                   art=self.project.art_path(unit['card_id']) if self.project else None)
 
     def _inspect_zone(self, zone):
         selection = self.zones[zone].selection()
@@ -197,7 +216,8 @@ class MatchDialog(tk.Toplevel):
             cid = int(selection[0])
             card = self.game.effective_card('jogador', cid)
             show_exact(self, display_name(cid, self.game.cards),
-                       f'ATK {card["ataque"]}\nDEF {card["defesa"]}\n\n{card.get("descricao", "")}')
+                       f'ATK {card["ataque"]}\nDEF {card["defesa"]}\n\n{card.get("descricao", "")}',
+                       art=self.project.art_path(cid) if self.project else None)
 
     def _write_logs(self, entries):
         for event in entries:
@@ -246,6 +266,8 @@ class MatchDialog(tk.Toplevel):
         else:
             caption = f'Turno {self.game.turns["adversario"]} do oponente · postura {posture(self.game, "adversario")}'
         self.result.set(caption)
+        rank = project_rank(self.game)
+        self.rank.set(f'{rank.grade} {rank.score:02d}')
         board = self.game.resolve()[0]
         for side in SIDES:
             self.lp_text[side].set(f'LP {compact_number(self.game.lp[side],20)}   '
@@ -267,6 +289,7 @@ class MatchDialog(tk.Toplevel):
                     compact_number(unit['defesa'],9) if shown else '—',
                     guardian_name(unit['guardian_id']) if shown else '—'),
                     tags=card_row_tags(tree, card, slot - 1))
+            tree.sort_rows()
             if old and tree.exists(old[0]):
                 tree.selection_set(old[0])
         for zone, tree in self.zones.items():
@@ -284,7 +307,6 @@ class MatchDialog(tk.Toplevel):
         self.play_button.configure(state='normal' if self.built_plays else 'disabled')
         can_claim = self.game.winner == 'jogador' and self.game.reward_card is None
         self.drop_button.configure(state='normal' if can_claim else 'disabled')
-        # O jogador escolhe o rank antes de sortear o drop, também em modo deck.
 
     def _action(self, callback):
         before = len(self.game.logs)
@@ -347,7 +369,7 @@ class MatchDialog(tk.Toplevel):
     def _roll_drop(self):
         try:
             self._check_project()
-            cid = self.game.claim_reward(self.rules, self.pools, self.opponent, self.rank.get(),
+            cid = self.game.claim_reward(self.rules, self.pools, self.opponent, project_rank(self.game).grade,
                                          lambda card: grant_card(self.project, card))
         except (ModError, ValueError, OSError) as exc:
             self.reward.configure(text=str(exc))

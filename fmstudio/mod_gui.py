@@ -4,22 +4,23 @@ from __future__ import annotations
 from collections import Counter
 from copy import deepcopy
 from pathlib import Path
+import re
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .core import ModError, positive_int, ps1_supports_god24, simulation_nonnegative_int
 from .duel_engine import MAX_DECK, parse_card_ids
-from .expanded import display_name
-from .gui import ACCENT, MUTED, ROW_ALT, card_row_tags, compact_number
+from .expanded import card_matches, display_name, search_text
+from .gui import ACCENT, MUTED, ROW_ALT, card_row_tags, compact_number, sortable_columns
 from .mod_data import (
     CONFIG_KEY, DROP_FROM_DECK, DECK_DROP_WEIGHTS, DROP_GROUPS, MONSTER_TYPES,
     RANK_GROUPS, STOCK_STARTER, base_tables, deal_deck, deck_drop_candidates,
     deck_drop_weights, drop_weights, drops_from_deck, duelist_profile, match_recipes,
     normalize_rules, save_rules, starting_life, validate_deck,
 )
-from .tables import DUELIST_NAMES_REFERENCE, TYPE_NAMES
+from .tables import CARD_COUNT, DUELIST_NAMES_REFERENCE, POOL_TOTAL, TYPE_NAMES
 
-WEIGHT_COLUMNS = ('carta', 'nome', 'peso', 'chance')
+WEIGHT_COLUMNS = ('carta', 'nome', 'peso', 'chance', 'chance_ps1')
 
 
 def _probability(weight, total):
@@ -32,36 +33,64 @@ class WeightTable(ttk.Frame):
     def __init__(self, parent, *, show_zero=False):
         super().__init__(parent)
         self.show_zero = show_zero
+        self.ps1_projection = False
+        self.ps1_weights = ()
         self.cards = {}
         self.labels = {}
         self.weights = {}
         self.changed = None
+        self.inline = None
+        self.query = tk.StringVar()
+        search = ttk.Frame(self)
+        search.pack(fill='x', pady=(0, 5))
+        ttk.Label(search, text='Filtrar lista').pack(side='left', padx=(0, 5))
+        ttk.Entry(search, textvariable=self.query).pack(side='left', fill='x', expand=True)
+        ttk.Label(self, text='Adicionar por nome ou IDs separados por vírgula',
+                  foreground=MUTED).pack(anchor='w')
         edit = ttk.Frame(self)
         edit.pack(fill='x', pady=(0, 5))
         self.selected = tk.StringVar()
         self.card = ttk.Combobox(edit, textvariable=self.selected, width=28)
         self.card.pack(side='left', fill='x', expand=True)
         self.card.bind('<KeyRelease>', self._search)
+        self.card.bind('<Return>', lambda _event: self._apply())
         self.weight = tk.StringVar(value='1')
         ttk.Label(edit, text='Peso').pack(side='left', padx=(7, 3))
-        ttk.Entry(edit, textvariable=self.weight, width=8).pack(side='left', padx=(0, 4))
-        ttk.Button(edit, text='Aplicar', command=self._apply).pack(side='left')
+        weight = ttk.Entry(edit, textvariable=self.weight, width=8)
+        weight.pack(side='left', padx=(0, 4))
+        weight.bind('<Return>', lambda _event: self._apply())
+        ttk.Button(edit, text='Aplicar peso', command=self._apply).pack(side='left')
         ttk.Button(edit, text='Remover', style='Danger.TButton',
                    command=self._remove).pack(side='left', padx=(4, 0))
         holder = ttk.Frame(self)
         holder.pack(fill='both', expand=True)
-        self.tree = ttk.Treeview(holder, columns=WEIGHT_COLUMNS, show='headings', height=6)
-        widths = (65, 250, 90, 105)
-        for key, label, width in zip(WEIGHT_COLUMNS, ('ID', 'Carta', 'Peso', 'Probabilidade'), widths):
+        self.tree = ttk.Treeview(holder, columns=WEIGHT_COLUMNS, displaycolumns=WEIGHT_COLUMNS[:-1],
+                                 show='headings', height=6)
+        widths = (58, 195, 70, 105, 100)
+        for key, label, width in zip(WEIGHT_COLUMNS, ('ID', 'Carta', 'Peso', 'Chance', 'Chance PS1'), widths):
             self.tree.heading(key, text=label)
             self.tree.column(key, width=width, minwidth=55, stretch=key == 'nome')
+        self.sort_rows = sortable_columns(self.tree, raw_values=self._sort_value)
         self.tree.pack(side='left', fill='both', expand=True)
         scroll = ttk.Scrollbar(holder, command=self.tree.yview)
         scroll.pack(side='right', fill='y')
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind('<<TreeviewSelect>>', self._select)
+        self.tree.bind('<Double-1>', self._edit_weight)
         self.summary = ttk.Label(self, foreground=MUTED)
         self.summary.pack(anchor='w', pady=(3, 0))
+        self.query.trace_add('write', lambda *_: self.render())
+
+    def _sort_value(self, item, field):
+        cid = int(item)
+        if field in ('peso', 'chance'):
+            return self.weights.get(cid, 0)
+        if field == 'chance_ps1':
+            return self._ps1_weight(cid)
+        return cid if field == 'carta' else display_name(cid, self.cards)
+
+    def _ps1_weight(self, cid):
+        return self.ps1_weights[cid - 1] if 1 <= cid <= len(self.ps1_weights) else 0
 
     def refresh_catalog(self, cards):
         self.cards = cards
@@ -75,24 +104,39 @@ class WeightTable(ttk.Frame):
         self.refresh_catalog(cards)
 
     def render(self):
+        self._close_inline()
         keep = self.tree.selection()
         top = self.tree.yview()[0]
         self.tree.delete(*self.tree.get_children())
         total = sum(self.weights.values())
+        self.ps1_weights = ()
+        if self.ps1_projection and total:
+            from .ps1_mod import quantize_weights
+            try:
+                self.ps1_weights = quantize_weights(self.weights, CARD_COUNT)
+            except ModError:
+                pass
+        self.tree.configure(displaycolumns=WEIGHT_COLUMNS if self.ps1_projection else WEIGHT_COLUMNS[:-1])
         self.tree.tag_configure('stripe', background=ROW_ALT)
         rows = ((cid, self.weights.get(cid, 0)) for cid in sorted(self.cards)) if self.show_zero else sorted(self.weights.items())
+        query = search_text(self.query.get())
+        rows = ((cid, weight) for cid, weight in rows if cid in self.cards and card_matches(query, cid, self.cards[cid]))
         for index, (cid, weight) in enumerate(rows):
             self.tree.insert('', 'end', iid=str(cid), values=(
                 compact_number(cid), display_name(cid, self.cards), compact_number(weight),
-                _probability(weight, total)), tags=card_row_tags(self.tree, self.cards.get(cid), index))
+                _probability(weight, total),
+                _probability(self._ps1_weight(cid), POOL_TOTAL) if self.ps1_weights else '—'),
+                tags=card_row_tags(self.tree, self.cards.get(cid), index))
+        self.sort_rows()
         if keep and self.tree.exists(keep[0]):
             self.tree.selection_set(keep[0])
         self.tree.yview_moveto(top)
         self.summary.configure(text=f'{len(self.weights)} cartas · peso total {compact_number(total)}')
 
     def _search(self, _event=None):
-        query = self.selected.get().strip().casefold()
-        self.card.configure(values=[label for label in self.labels if query in label.casefold()])
+        query = search_text(self.selected.get()).strip()
+        self.card.configure(values=[label for label, cid in self.labels.items()
+                                    if card_matches(query, cid, self.cards[cid])])
 
     def _select(self, _event):
         selection = self.tree.selection()
@@ -104,11 +148,19 @@ class WeightTable(ttk.Frame):
     def _apply(self):
         try:
             raw = self.selected.get().strip()
-            cid = self.labels.get(raw) or positive_int(raw.lstrip('#').split(' — ', 1)[0], 'Carta')
-            if cid not in self.cards:
-                raise ModError('Escolha um ID ou um nome existente no catálogo.')
             amount = simulation_nonnegative_int(self.weight.get(), 'Peso')
-            self._set(cid, amount)
+            if raw in self.labels:
+                ids = [self.labels[raw]]
+            elif re.fullmatch(r'#?[0-9]+(?:[\s,]+#?[0-9]+)*', raw):
+                ids = [positive_int(part.removeprefix('#'), 'Carta') for part in re.split(r'[\s,]+', raw)]
+            else:
+                query = search_text(raw)
+                ids = [cid for cid, card in self.cards.items() if query and card_matches(query, cid, card)]
+                if len(ids) != 1:
+                    raise ModError('Selecione uma carta na busca ou informe IDs separados por vírgula.')
+            if any(cid not in self.cards for cid in ids):
+                raise ModError('O lote contém uma carta fora do catálogo desta tabela.')
+            self._update_weights(dict.fromkeys(ids, amount))
         except (ModError, OSError, ValueError) as exc:
             messagebox.showerror('Tabela de pesos', str(exc), parent=self)
 
@@ -120,15 +172,49 @@ class WeightTable(ttk.Frame):
                 messagebox.showerror('Tabela de pesos', str(exc), parent=self)
 
     def _set(self, cid, amount):
+        self._update_weights({cid: amount})
+
+    def _update_weights(self, changes):
         edited = dict(self.weights)
-        if amount:
-            edited[cid] = amount
-        else:
-            edited.pop(cid, None)
+        for cid, amount in changes.items():
+            if amount:
+                edited[cid] = amount
+            else:
+                edited.pop(cid, None)
         if self.changed is not None:
             self.changed(edited)
         self.weights = edited
         self.render()
+
+    def _close_inline(self):
+        entry, self.inline = self.inline, None
+        if entry is not None:
+            entry.destroy()
+
+    def _edit_weight(self, event):
+        item = self.tree.identify_row(event.y)
+        if not item or self.tree.identify_column(event.x) != '#3':
+            return
+        self._close_inline()
+        cid = int(item)
+        x, y, width, height = self.tree.bbox(item, 'peso')
+        entry = self.inline = ttk.Entry(self.tree)
+        entry.insert(0, str(self.weights.get(cid, 0)))
+        entry.select_range(0, 'end')
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.focus_set()
+
+        def save(_event):
+            try:
+                self._set(cid, simulation_nonnegative_int(entry.get(), 'Peso'))
+            except (ModError, OSError, ValueError) as exc:
+                messagebox.showerror('Tabela de pesos', str(exc), parent=self)
+            return 'break'
+
+        entry.bind('<Return>', save)
+        entry.bind('<Escape>', lambda _event: self._close_inline())
+        entry.bind('<FocusOut>', lambda _event: self._close_inline())
+        return 'break'
 
 
 class DeckProfileEditor(ttk.Frame):
@@ -163,7 +249,7 @@ class DeckProfileEditor(ttk.Frame):
 
         filters = ttk.Frame(self.fixed_pane)
         filters.pack(fill='x')
-        ttk.Label(filters, text='Busca').pack(side='left', padx=(0, 5))
+        ttk.Label(filters, text='ID, nome, tipo ou descrição').pack(side='left', padx=(0, 5))
         search = ttk.Entry(filters, textvariable=self.query, width=17)
         search.pack(side='left', fill='x', expand=True)
         kind = ttk.Combobox(filters, textvariable=self.kind, width=14, state='readonly',
@@ -181,9 +267,9 @@ class DeckProfileEditor(ttk.Frame):
         fixed.grid(row=0, column=1, sticky='nsew', padx=(3, 0))
         from .mod_tools_gui import _tree
         self.catalog = _tree(catalog, [('id', 'ID', 50), ('nome', 'Carta', 120),
-                                       ('tipo', 'Tipo', 80)], height=5)
+                                       ('tipo', 'Tipo', 80)], height=5, raw_values=self._catalog_sort_value)
         self.deck = _tree(fixed, [('id', 'ID', 50), ('nome', 'Carta', 126),
-                                  ('qtd', 'Cópias', 58)], height=5)
+                                  ('qtd', 'Cópias', 58)], height=5, raw_values=self._deck_sort_value)
         self.catalog.bind('<Double-1>', lambda _event: self.change_card('add'))
         self.catalog.bind('<Return>', lambda _event: self.change_card('add'))
         self.catalog.bind('<<TreeviewSelect>>', self._update_buttons)
@@ -236,7 +322,7 @@ class DeckProfileEditor(ttk.Frame):
         self._render_deck()
 
     def _render_catalog(self):
-        query = self.query.get().strip().casefold()
+        query = search_text(self.query.get())
         kind = self.kind.get()
         rows = []
         for cid in sorted(self.cards):
@@ -247,10 +333,17 @@ class DeckProfileEditor(ttk.Frame):
             if kind not in ('Todos os tipos', 'Monstros') and label != kind:
                 continue
             name = display_name(cid, self.cards)
-            if query in name.casefold() or query in f'#{cid:03d}' or query in f'#{cid}':
+            if card_matches(query, cid, self.cards[cid]):
                 rows.append((cid, (compact_number(cid), name, label)))
         self._render_rows(self.catalog, rows)
+        self._render_deck()
         self._update_buttons()
+
+    def _catalog_sort_value(self, item, field):
+        return int(item) if field == 'id' else self.catalog.set(item, field)
+
+    def _deck_sort_value(self, item, field):
+        return int(item) if field == 'id' else self.deck.set(item, field)
 
     def _render_rows(self, tree, rows):
         selected = tree.selection()
@@ -259,6 +352,7 @@ class DeckProfileEditor(ttk.Frame):
         for index, (cid, values) in enumerate(rows):
             tree.insert('', 'end', iid=str(cid), values=values,
                         tags=card_row_tags(tree, self.cards.get(cid), index))
+        tree.sort_rows()
         if selected and tree.exists(selected[0]):
             tree.selection_set(selected[0])
         tree.yview_moveto(top)
@@ -277,8 +371,10 @@ class DeckProfileEditor(ttk.Frame):
         except (ModError, ValueError):
             fixed = []
             self.total.set('Revise os IDs ou as compras dos pools')
+        query = search_text(self.query.get())
         self._render_rows(self.deck, [(cid, (compact_number(cid), display_name(cid, self.cards), amount))
-                                     for cid, amount in sorted(Counter(fixed).items())])
+                                     for cid, amount in sorted(Counter(fixed).items())
+                                     if card_matches(query, cid, self.cards.get(cid, {}))])
         self._update_buttons()
 
     def _pool_slots(self):
@@ -332,7 +428,9 @@ class DeckProfileEditor(ttk.Frame):
             ids.extend([cid] * amount)
             meta = getattr(self.project, 'metadata', {})
             effects = getattr(self.project, 'effects', {})
-            validate_deck(self.cards, effects, ids, int(meta.get('ps1_deck_global_limit', 3)))
+            if amount:
+                validate_deck(self.cards, effects, [cid] * ids.count(cid),
+                              int(meta.get('ps1_deck_global_limit', 3)))
         except (ModError, ValueError) as exc:
             self.feedback.set(str(exc))
             return
@@ -651,7 +749,10 @@ class ModEditor(ttk.Frame):
         else:
             self.deck_drop_panel.pack_forget()
             self.rank_editor.pack(fill='both', expand=True)
-            weights = drop_weights(self.rules, self.pools, self._duel_id(), self.rank_ids[self.rank.get()])
+            rank = self.rank_ids[self.rank.get()]
+            self.drops.ps1_projection = bool(self.project and ps1_supports_god24(self.project)
+                                             and rank in DROP_GROUPS)
+            weights = drop_weights(self.rules, self.pools, self._duel_id(), rank)
             self.drops.load(self.cards, weights)
 
     def _render_deck_drops(self):
@@ -661,6 +762,7 @@ class ModEditor(ttk.Frame):
         cards = {cid: self.cards[cid] for cid in sorted(candidates) if cid in self.cards}
         rank = self.rank_ids[self.rank.get()]
         weights = deck_drop_weights(self.rules, self.pools, opponent, rank)
+        self.deck_drop_table.ps1_projection = bool(self.project and ps1_supports_god24(self.project))
         self.deck_drop_table.load(cards, weights)
         label = DROP_GROUPS.get(RANK_GROUPS.get(rank, rank), rank)
         self.deck_drop_detail.configure(text=(
@@ -803,10 +905,12 @@ class ModEditor(ttk.Frame):
                 fixed = parse_card_ids(editor.fixed.get(), maximum=MAX_DECK)
             except ModError:
                 fixed = []
-            stock = editor is self.starter_deck and self.starter.get() == STOCK_STARTER
+            starter = editor is self.starter_deck
+            stock = starter and self.starter.get() == STOCK_STARTER
             DeckGeneratorDialog(
                 self, self.cards, self.project.effects, fusions, equips, default_copies=copies,
                 trap_thresholds=thresholds, fixed=fixed, new_starter=stock,
+                starter=starter, opponent=None if starter else self._duel_id(),
                 use_deck=lambda ids: self._use_generated_deck(editor, ids, stock),
             )
         except (ModError, ValueError, OSError) as exc:
@@ -903,6 +1007,10 @@ class ModEditor(ttk.Frame):
             rules = self._edit()
             profile = self.starter_deck.profile()
             name = self.starter.get()
+            if profile['cartas'] or profile['pools']:
+                profile = normalize_rules({'iniciais': {name: profile}}, self.cards)['iniciais'][name]
+                copies = int(self.project.metadata.get('ps1_deck_global_limit', 3))
+                deal_deck(profile, self.cards, self.project.effects, default_copies=copies)
             if name == STOCK_STARTER:
                 rules['pools_iniciais_ps1'] = profile['pools']
             else:
@@ -1051,6 +1159,8 @@ class CardRelationsDialog(tk.Toplevel):
         for key, caption in zip(('a','b','result'), ('Material 1','Material 2','Resultado')):
             self.fusion_tree.heading(key, text=caption)
             self.fusion_tree.column(key, width=180)
+        self.sort_fusions = sortable_columns(
+            self.fusion_tree, raw_values=lambda item, key: int(self.fusion_tree.set(item, key).split()[0][1:]))
         self.fusion_tree.pack(fill='both', expand=True)
         self.fusion_tree.bind('<<TreeviewSelect>>', self._select_fusion)
         fusion_edit = ttk.Frame(fusions)
@@ -1100,6 +1210,7 @@ class CardRelationsDialog(tk.Toplevel):
             if self.cid in (a,b,result):
                 self.fusion_tree.insert('', 'end', iid=f'{a},{b},{result}',
                     values=[f'#{n} {display_name(n, cards)}' for n in (a,b,result)])
+        self.sort_fusions()
         if self.cid in rituals:
             tribute, result = rituals[self.cid]
             self.tributes.set(', '.join(map(str, tribute)))

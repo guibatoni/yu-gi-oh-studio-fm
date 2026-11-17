@@ -19,6 +19,7 @@ BOOLEAN_ACTIONS = (
 def quick_settings(effects: list[dict], *, default_copies: int | None = 3) -> dict:
     data = {'ataques': 1, 'custo_lp': 0, 'limite_copias': default_copies,
             **{k:False for k in BOOLEAN_ACTIONS}}
+    limits = []
     for effect in effects:
         action = effect.get('acao')
         if action == 'ataques_multiplos':
@@ -26,9 +27,12 @@ def quick_settings(effects: list[dict], *, default_copies: int | None = 3) -> di
         elif action == 'perder_lp_por_ataque':
             data['custo_lp'] = int(effect.get('valor',0))
         elif action == 'limite_copias_deck':
-            data['limite_copias'] = int(effect.get('valor',3))
+            limits.append(int(effect.get('valor', 3)))
         elif action in BOOLEAN_ACTIONS:
             data[action] = True
+    data['limite_copias'] = min(limits, default=default_copies)
+    if data['limite_copias'] == 0:
+        data['sem_limite_deck'] = False
     return data
 
 
@@ -44,18 +48,20 @@ def replace_quick_effects(existing: list[dict], settings: dict, *,
     except (ValueError, TypeError) as exc:
         raise ModError('Ataques e custo de LP precisam ser números inteiros') from exc
     if (attacks not in (1, 2, 3) or lp < 0
-            or (copy_limit is not None and not 1 <= copy_limit <= 40)):
-        raise ModError('Ataques: 1–3. LP: inteiro não negativo. Cópias por carta: 1–40.')
+            or (copy_limit is not None and not 0 <= copy_limit <= 40)):
+        raise ModError('Ataques: 1–3. LP: inteiro não negativo. Cópias por carta: 0–40.')
     result = [dict(e) for e in existing if e.get('acao') not in QUICK_ACTIONS]
     if attacks > 1:
         result.append(check_effect({'evento':'continuo','acao':'ataques_multiplos',
                                     'alvo':'proprio','valor':attacks}))
+    unlimited = bool(settings.get('sem_limite_deck')) and copy_limit != 0
     for action in BOOLEAN_ACTIONS:
-        if settings.get(action, False):
+        enabled = unlimited if action == 'sem_limite_deck' else settings.get(action)
+        if enabled:
             event = 'regra_deck' if action == 'sem_limite_deck' else 'continuo'
             result.append(check_effect({'evento':event,'acao':action,
                                         'alvo':'proprio','valor':0}))
-    if not settings.get('sem_limite_deck', False) and copy_limit != default_copies:
+    if not unlimited and copy_limit != default_copies:
         result.append(check_effect({'evento':'regra_deck','acao':'limite_copias_deck',
                                     'alvo':'proprio','valor':copy_limit}))
     if lp:

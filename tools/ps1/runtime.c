@@ -500,6 +500,8 @@ ENTRY void ConfirmPlacement(void)
 ENTRY unsigned DeckAllowsCopies(int id, unsigned copies)
 {
     const Rules *rule = rules(id);
+    /* Zero in the rule record inherits the default; 0xFF bans this ID. */
+    if (rule && rule->copies == 0xFF) return 0;
     unsigned limit = rule && rule->copies ? rule->copies :
                      (unsigned)(id - 17) < 5 ? 1 : CONFIG->default_copies;
     return copies < limit;

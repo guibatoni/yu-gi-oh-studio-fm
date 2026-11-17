@@ -1,3 +1,23 @@
+# Studio FM v1.8.0 — Rank, banlist e decks temáticos
+
+- Em **Cartas → Habilidades rápidas**, defina o **Limite de cópias no deck**.
+  Digite **0** para banir, **1–40** para um limite individual ou deixe vazio
+  para herdar o padrão. Salve o projeto para aplicar a regra.
+- Em **Edição do Mod → Gerar Deck Aleatório**, aplique o tema do duelista ou
+  escolha o máximo de ATK/DEF e a composição. O teto vale para cartas base.
+  Nos decks iniciais, **Sortear trio inicial** combina três tipos por suas
+  fusões dentro do máximo original de 2.450 ATK + DEF por monstro.
+- No simulador, a HUD mostra o rank projetado abaixo dos LP. Ao vencer,
+  **Receber recompensa** usa o rank conquistado e os pesos do grupo ou rank.
+- Em **Drops do oponente**, cole IDs separados por vírgula e aplique um
+  peso ao lote. Dê duplo clique na célula **Peso** e pressione Enter para
+  confirmar. Os cabeçalhos alternam ordem ascendente e descendente.
+
+O rank ao vivo, a IA Expert, a Supreme e as cartas #723 em diante funcionam
+no simulador. Veja as regras aplicáveis ao [BIN/CUE](docs/COMPAT_PS1.md).
+
+---
+
 # Studio FM v1.7.2 — Fusões personalizadas no Drop x15
 
 As fusões salvas em **Relações → Fusões** vão para o próximo BIN/CUE do
