@@ -68,15 +68,17 @@ class EffectDialog(tk.Toplevel):
         'aura_tipo': 'aliados_tipo',
         **dict.fromkeys(SCALING_ACTIONS, 'proprio'),
         **dict.fromkeys(EQUIPMENT_ACTIONS, 'monstro_equipado'),
+        **dict.fromkeys(QUICK_ACTIONS, 'proprio'),
         'cura_lp_deck_tipo': 'proprio',
         'dano_lp_deck_tipo': 'inimigo',
         'descartar_alvo': 'inimigo',
         'dano_monstro_alvo': 'monstro_alvo',
     }
-    def __init__(self, master, on_save):
+    def __init__(self, master, on_save, *, initial_effect=None):
         super().__init__(master)
         self.on_save=on_save
-        self.title('Criar efeito — Studio FM')
+        self.initial_effect = dict(initial_effect) if initial_effect is not None else None
+        self.title('Editar efeito — Studio FM' if self.initial_effect else 'Criar efeito — Studio FM')
         self.configure(bg=BG)
         self.geometry('610x755')
         self.minsize(565,650)
@@ -90,6 +92,15 @@ class EffectDialog(tk.Toplevel):
         self.sources={'evento':{k:v for k,v in EVENTS.items() if k != 'regra_deck'},
                       'acao':{k:v for k,v in ACTIONS.items() if k not in QUICK_ACTIONS and k != 'bonus_por_carta_id'},
                       'alvo':{k:TARGETS[k] for k in ('proprio', 'inimigo')},'escopo':SCOPES}
+        # Os atalhos já cadastrados também podem ser editados pela tabela,
+        # sem habilitar novos atalhos duplicados no formulário de criação.
+        if self.initial_effect:
+            action = self.initial_effect.get('acao')
+            event = self.initial_effect.get('evento')
+            if action in QUICK_ACTIONS:
+                self.sources['acao'][action] = ACTIONS[action]
+            if event == 'regra_deck':
+                self.sources['evento']['regra_deck'] = EVENTS['regra_deck']
         row=0
         for key,label in [('evento','Quando ativa'),('acao','O que acontece'),('alvo','Alvo do efeito')]:
             self.labels[key]=ttk.Label(form,text=label)
@@ -146,9 +157,13 @@ class EffectDialog(tk.Toplevel):
         buttons=ttk.Frame(form)
         buttons.grid(row=row,column=0,sticky='e')
         ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left',padx=6)
-        ttk.Button(buttons,text='Adicionar efeito',style='Accent.TButton',command=self._submit).pack(side='left')
+        ttk.Button(buttons,text='Salvar alterações' if self.initial_effect else 'Adicionar efeito',
+                   style='Accent.TButton',command=self._submit).pack(side='left')
         form.columnconfigure(0,weight=1)
-        self._refresh_controls()
+        if self.initial_effect:
+            self._load_effect(self.initial_effect)
+        else:
+            self._refresh_controls()
         self.bind('<Escape>',lambda e:self.destroy())
         self.wait_visibility()
         self.focus_force()
@@ -157,24 +172,50 @@ class EffectDialog(tk.Toplevel):
         self.vars[key].set(value)
         self.combos[key].current(list(self.sources[key]).index(value))
 
+    def _load_effect(self, entry):
+        """Preenche os campos existentes sem transformar a regra em outra ação."""
+        for key in ('evento', 'acao'):
+            self._set(key, entry[key])
+        self.vars['alvo'].set(entry['alvo'])
+        if entry['alvo'] in self.sources['alvo']:
+            self.combos['alvo'].current(list(self.sources['alvo']).index(entry['alvo']))
+        for key in ('valor', 'valor_def', 'observacao'):
+            self.vars[key].set(str(entry.get(key, '' if key == 'observacao' else 0)))
+        typ = int(entry.get('tipo_id', -1))
+        self.vars['tipo_id'].set(typ)
+        self.type_combo.current(self.type_ids.index(typ) if typ in self.type_ids else 0)
+        attr = int(entry.get('atributo_id', -1))
+        self.vars['atributo_id'].set(attr)
+        self.attribute_combo.current(attr + 1 if 0 <= attr < len(ATTR_NAMES) else 0)
+        scope = entry.get('escopo', 'aliados')
+        self.vars['escopo'].set(scope)
+        self.scope_combo.current(list(SCOPES).index(scope) if scope in SCOPES else 0)
+        self._refresh_controls()
+
     def _choice(self,key,value):
         self.vars[key].set(value)
         action=self.vars['acao'].get()
         if key=='evento':
-            if value=='continuo' and action not in EFFECT_ACTIONS:
+            if value=='continuo' and action not in EFFECT_ACTIONS and action not in QUICK_ACTIONS:
                 self._set('acao','aura_tipo')
             elif value=='equipado' and action not in EQUIPMENT_ACTIONS:
                 self._set('acao','equip_atk')
-            elif value not in ('continuo','equipado') and action in EFFECT_ACTIONS|EQUIPMENT_ACTIONS:
+            elif value not in ('continuo','equipado','regra_deck') and action in EFFECT_ACTIONS|EQUIPMENT_ACTIONS:
                 self._set('acao','aumentar_atk')
+            elif value=='regra_deck' and action not in ('sem_limite_deck','limite_copias_deck'):
+                self._set('acao','limite_copias_deck')
         if key=='acao':
-            if value in EFFECT_ACTIONS:
+            if value in EFFECT_ACTIONS or value in QUICK_ACTIONS - {'sem_limite_deck', 'limite_copias_deck', 'perder_lp_por_ataque'}:
                 self._set('evento','continuo')
             elif value in EQUIPMENT_ACTIONS:
                 self._set('evento','equipado')
+            elif value in ('sem_limite_deck','limite_copias_deck'):
+                self._set('evento','regra_deck')
+            elif value == 'perder_lp_por_ataque':
+                self._set('evento','atacar')
             elif value in ONCE_ACTIONS:
                 self._set('evento','invocar')
-            elif self.vars['evento'].get() in ('continuo','equipado'):
+            elif self.vars['evento'].get() in ('continuo','equipado','regra_deck'):
                 self._set('evento','invocar')
         action=self.vars['acao'].get()
         if key=='acao' and action=='descartar_alvo':
@@ -211,7 +252,7 @@ class EffectDialog(tk.Toplevel):
         self.labels['tipo_id'].configure(text=type_label)
         self.labels['escopo'].configure(text='Lados afetados pela aura' if action == 'aura_tipo' else 'Lados que entram na contagem')
         typ=continuous or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo')
-        protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'})
+        protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'}) or action in BOOLEAN_ACTIONS
         self.def_entry.configure(state='normal' if continuous else 'disabled')
         self.type_combo.configure(state='readonly' if typ else 'disabled')
         self.attribute_combo.configure(state='readonly' if continuous else 'disabled')
