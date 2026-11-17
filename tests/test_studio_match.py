@@ -190,7 +190,7 @@ class StudioMatchTests(unittest.TestCase):
         effects = {1: [effect('dano_lp', 500, event='atacar', target='proprio')]}
         game = DuelMatch(self.cards, effects, self.decks, first=PLAYER, rng=Random(11))
         game.set_field([unit(PLAYER, 1, 1, self.cards[1]),
-                        unit(CPU, 1, 3, self.cards[3], position='defesa')])
+                        unit(CPU, 1, 4, self.cards[4], position='defesa')])
         game.end_turn(PLAYER)
         game.end_turn(CPU)
         result = game.attack(PLAYER, 1, target_slot=1)
@@ -199,10 +199,10 @@ class StudioMatchTests(unittest.TestCase):
         self.assertEqual(game.lp, {PLAYER: 7500, CPU: 8000})
         self.assertEqual(game.attacks_used[PLAYER, 1, 1], 1)
 
-    def test_self_attack_lp_zeroes_controller_and_interrupts_trap_only_once(self):
+    def test_self_attack_lp_zeroes_controller_after_declaring_attack(self):
         effects = {1: [effect('dano_lp', 500, event='atacar', target='proprio')]}
         game = DuelMatch(self.cards, effects, self.decks,
-                         first=PLAYER, initial_lp=350, rng=Random(12))
+                         first=PLAYER, initial_lp={PLAYER: 350, CPU: 8000}, rng=Random(12))
         game.set_field([unit(PLAYER, 1, 1, self.cards[1])])
         game.end_turn(PLAYER)
         game.end_turn(CPU)
