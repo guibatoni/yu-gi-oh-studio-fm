@@ -47,6 +47,8 @@ class WeightTable(ttk.Frame):
         search.pack(fill='x', pady=(0, 5))
         ttk.Label(search, text='Filtrar lista').pack(side='left', padx=(0, 5))
         ttk.Entry(search, textvariable=self.query).pack(side='left', fill='x', expand=True)
+        ttk.Button(search, text='Selecionar visíveis',
+                   command=self._select_visible).pack(side='right', padx=(7, 0))
         ttk.Label(self, text='Selecione várias cartas com Ctrl/Shift ou informe IDs separados por vírgula.',
                   foreground=MUTED).pack(anchor='w')
         edit = ttk.Frame(self)
@@ -64,8 +66,6 @@ class WeightTable(ttk.Frame):
         ttk.Button(edit, text='Aplicar peso', command=self._apply).pack(side='left')
         ttk.Button(edit, text='Remover selecionadas', style='Danger.TButton',
                    command=self._remove).pack(side='left', padx=(4, 0))
-        ttk.Button(edit, text='Selecionar visíveis',
-                   command=self._select_visible).pack(side='left', padx=(6, 0))
         holder = ttk.Frame(self)
         holder.pack(fill='both', expand=True)
         self.tree = ttk.Treeview(holder, columns=WEIGHT_COLUMNS, displaycolumns=WEIGHT_COLUMNS[:-1],
@@ -346,8 +346,6 @@ class DeckProfileEditor(ttk.Frame):
         self.add_btn = ttk.Button(controls, text='＋ Adicionar', style='Accent.TButton',
                                   command=lambda: self.change_card('add'))
         self.add_btn.pack(side='left', padx=(0, 6))
-        ttk.Button(controls, text='Selecionar catálogo', command=self._select_all_catalog).pack(
-            side='left', padx=(0, 10))
         ttk.Label(controls, text='Total por carta').pack(side='left', padx=(0, 4))
         ttk.Spinbox(controls, from_=1, to=MAX_DECK, width=3,
                     textvariable=self.quantity).pack(side='left', padx=(0, 4))
@@ -356,8 +354,12 @@ class DeckProfileEditor(ttk.Frame):
                                      command=lambda: self.change_card('remove'))
         for button in (self.set_btn, self.remove_btn):
             button.pack(side='left', padx=(0, 4))
-        ttk.Button(controls, text='Selecionar deck', command=self._select_all_deck).pack(
-            side='left', padx=(6, 0))
+        selection_tools = ttk.Frame(self.fixed_pane)
+        selection_tools.pack(fill='x', pady=(3, 0))
+        ttk.Button(selection_tools, text='Selecionar catálogo visível',
+                   command=self._select_all_catalog).pack(side='left', padx=(0, 6))
+        ttk.Button(selection_tools, text='Selecionar deck visível',
+                   command=self._select_all_deck).pack(side='left')
         ttk.Label(self.fixed_pane, text='IDs (ex. 16x2, 723)').pack(anchor='w', pady=(3, 0))
         ttk.Entry(self.fixed_pane, textvariable=self.fixed).pack(fill='x')
 
