@@ -545,10 +545,12 @@ class DeckProfileEditor(ttk.Frame):
         self.fixed.set(', '.join(map(str, updated)))
         if action == 'add':
             self.add_quantity.set('1')
-        if action != 'add':
-            keep = [str(card_id) for card_id in selected if self.deck.exists(str(card_id))]
-            if keep:
-                self.deck.selection_set(keep)
+        # Depois de adicionar, selecionar as novas cartas também no "Deck atual"
+        # preserva o fluxo legado de ajustar cópias logo na operação seguinte.
+        keep = [str(card_id) for card_id in selected if self.deck.exists(str(card_id))]
+        if keep:
+            self.deck.selection_set(keep)
+            self.deck.see(keep[0])
         self.feedback.set(f'{len(selected)} carta(s) atualizada(s) no deck. Salve o deck.')
 
     def load(self, cards, profile, *, show_fixed=True):
