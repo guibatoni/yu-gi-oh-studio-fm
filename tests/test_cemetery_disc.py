@@ -259,12 +259,12 @@ class StableDiscOutputTests(DiscBuildTests):
         self.original = bytes(source)
         self.patched = self.original
         fake_disc(self.src, self.original)
+        original_disc_hash = hashlib.sha256(self.src.read_bytes()).hexdigest()
         digest = hashlib.sha256(self.original).hexdigest()
         self.project.metadata['base_sha256']['slus'] = digest
         self.project.metadata['edicao_mod'] = {'lp_inicial': 20000}
         self.project.cards = {}
         self.project.get = self.project.cards.__getitem__
-        from fmstudio.ps1_runtime import SOURCE_SHA256 as normal_hash
         with patch('fmstudio.ps1_runtime.SOURCE_SHA256', digest), patch(
                 'fmstudio.ps1_lp_hud.SOURCE_SHA256', digest):
             result = build_test_disc(self.project, self.src)
@@ -283,7 +283,7 @@ class StableDiscOutputTests(DiscBuildTests):
         from fmstudio.ps1_mod import LP_TABLE
         self.assertEqual(struct.unpack_from('<4H', rebuilt, LP_TABLE-EXE_DELTA),
                          (20000, 20000, 20000, 20000))
-        self.assertEqual(self.src.read_bytes(), self.src.read_bytes())
+        self.assertEqual(hashlib.sha256(self.src.read_bytes()).hexdigest(), original_disc_hash)
         self.assertEqual(hashlib.sha256(self.original).hexdigest(), digest)
 
     def test_different_source_filename_creates_distinct_image(self):
