@@ -44,6 +44,12 @@ with TemporaryDirectory() as temp:
         assert editor.deck_drop_candidates.get_children() == (str(enemy),)
         editor.mod_lp.set(str(huge))
         editor.save_lp()
+        editor.ps1_ai_choice.set('Normal — IA original')
+        editor.save_ps1_ai()
+        assert project.metadata[CONFIG_KEY]['ia_ps1'] == 'normal'
+        editor.ps1_ai_choice.set('Difícil — IA aprimorada')
+        editor.save_ps1_ai()
+        assert project.metadata[CONFIG_KEY]['ia_ps1'] == 'dificil'
         editor.starter.set('Perfil de teste')
         editor.start_match()
         root.update()
