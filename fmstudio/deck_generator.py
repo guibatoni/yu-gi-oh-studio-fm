@@ -47,8 +47,16 @@ def _support_score(cid, kind, effects, trap_limits):
 
 def generate_deck(cards, effects, fusions, equips, quantities, *,
                   max_atk=None, max_def=None, difficulty='Difícil', default_copies=3,
-                  trap_thresholds=None, rng=None) -> GeneratedDeck:
-    """Use quotas exatas e preserve o limite de cópias registrado para cada carta."""
+                  trap_thresholds=None, rng=None, ps1_only=False) -> GeneratedDeck:
+    """Monte 40 cartas, priorizando poder, fusões e suportes compatíveis.
+
+    Tetos max_atk/max_def são aceitos somente para compatibilidade com chamadas
+    antigas; a interface do Studio não impõe teto de poder. PS1_only evita
+    cartas virtuais ou IDs que não existem no executável original.
+    """
+    if ps1_only:
+        cards = {cid: card for cid, card in cards.items()
+                 if 1 <= cid <= CARD_COUNT and not card.get('virtual')}
     if difficulty not in DIFFICULTIES:
         raise ModError('Escolha a dificuldade do deck.')
     allowed = MONSTER_TYPES.union(SUPPORT_TYPES)
@@ -93,6 +101,8 @@ def generate_deck(cards, effects, fusions, equips, quantities, *,
     links = defaultdict(dict)
     recipes = []
     for (a, b), result in fusions.items():
+        if ps1_only and result not in cards:
+            continue
         if a not in eligible_monsters or b not in eligible_monsters or result not in powers:
             continue
         if a == b and limits[a] < 2:
