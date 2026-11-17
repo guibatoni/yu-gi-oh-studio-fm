@@ -1,6 +1,6 @@
 ## v1.7.8 — IA PS1 Difícil (motor nativo Drop x15)
 
-- Nova opção **Edição do Mod → Config. MOD → Inteligência artificial dos oponentes — PlayStation 1**: Normal (IA original) e Difícil (IA aprimorada). Difícil é a seleção padrão da nova versão.
+- Nova opção **Edição do Mod → Config. MOD → Inteligência artificial dos oponentes — PlayStation 1**: Normal (IA original) e Difícil (IA aprimorada). Projetos existentes permanecem em Normal até a seleção explícita de Difícil.
 - O modo Difícil grava cinco instruções MIPS no executável PS1 **Drop x15 conhecido**; remove os sorteios que impediam a IA de sequer procurar jogadas com fusões, equipamentos, armadilhas e magias. A IA continua usando os verificadores e decisões nativos e não recebe cartas ou ATK adicionais.
 - Pontos modificados: `0x8002727C` (busca de fusões, anteriormente descartada 50%), `0x80027524` (tentar Equip), `0x80027548` (tentar Trap), `0x8002756C` (tentar Magia) e `0x800279F4` (examinar Equip na fase de campo, anteriormente descartado 75%).
 - O módulo `fmstudio/ps1_ai.py` exige SHA-256 original e cada opcode esperado para evitar patch sobre mod de outra edição. Não altera delay slots nem o sorteio global; todos os cinco pontos são validados antes de escrever. Modo Normal deixa o código original intacto.
