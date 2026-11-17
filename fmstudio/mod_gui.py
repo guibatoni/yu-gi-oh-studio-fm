@@ -992,11 +992,25 @@ class ModEditor(ttk.Frame):
         self.studio.notify('Carta salva no baú.' if starter is None else f'Carta salva no baú e em {starter}.')
 
     def add_catalog_card(self, cid):
+        self.add_catalog_cards([cid])
+
+    def add_catalog_cards(self, ids):
+        """Adicionar ao deck do rival um lote da biblioteca principal."""
+        if not ids:
+            return
         self.refresh_catalog()
         self.studio.tabs.select(self.studio.tab_mod)
         self.tabs.select(self.deck_pane)
-        self.opponent_deck.tabs.select(self.opponent_deck.fixed_pane)
-        self.opponent_deck.change_card('add', cid, copies=1)
+        editor = self.opponent_deck
+        editor.tabs.select(editor.fixed_pane)
+        editor.kind.set('Todos os tipos')
+        editor.query.set('')
+        available = [str(cid) for cid in dict.fromkeys(ids) if editor.catalog.exists(str(cid))]
+        if len(available) != len(set(ids)):
+            editor.feedback.set('Há cartas da seleção que não existem no catálogo deste projeto.')
+            return
+        editor.catalog.selection_set(available)
+        editor.change_card('add', copies=1)
 
     def generate_deck(self, editor):
         if self.project is None or self.studio._extract_running:
