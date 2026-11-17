@@ -1,3 +1,21 @@
+# Studio FM v1.8.15 — Conferir descrições gravadas no BIN/CUE
+
+Na aba **Cartas**, use **Conferir descrições no BIN/CUE** após salvar
+as alterações. Escolha a imagem realmente carregada no ePSXe. O Studio
+lê o SLUS dentro dessa imagem e compara os bytes da descrição da carta
+com o texto do projeto, indicando aplicado, ainda original, divergente
+ou incompatível. Também gera o relatório local
+`exportacao/diagnostico_descricoes_ps1.json`, com ID, ponteiro e SHA-256
+dos textos conferidos. A verificação é somente leitura e não altera
+seu BIN ou o projeto.
+
+ATENÇÃO: a confirmação de bytes não garante que a tela de informações
+esteja acessível no emulador ou no MOD. Descrições acima do ID 722
+continuam apenas no Studio. Ícones personalizados sem suporte no PS1
+não são inseridos no jogo.
+
+---
+
 # Studio FM v1.8.14 — Exportação BIN/CUE com descrição incompatível
 
 Se alguma descrição editada ultrapassar a capacidade do executável PS1 (9 linhas de 21 colunas, slot original), usar caractere indisponível na fonte ou um ícone sem extensão MIPS, o Studio continua avisando antes de alterar o BIN. Agora é possível escolher **Gerar mantendo as descrições originais do PS1 apenas nas cartas incompatíveis**, sem descartar as edições no projeto. Descrições compatíveis continuam sendo escritas, e o manifesto JSON ao lado do BIN lista todas as falhas em `descricoes_nao_gravadas` e a política aplicada. O modo padrão segue rigoroso; sem consentimento nada será substituído.
