@@ -1,3 +1,11 @@
+# Studio FM v1.8.14 — Exportação BIN/CUE com descrição incompatível
+
+Se alguma descrição editada ultrapassar a capacidade do executável PS1 (9 linhas de 21 colunas, slot original), usar caractere indisponível na fonte ou um ícone sem extensão MIPS, o Studio continua avisando antes de alterar o BIN. Agora é possível escolher **Gerar mantendo as descrições originais do PS1 apenas nas cartas incompatíveis**, sem descartar as edições no projeto. Descrições compatíveis continuam sendo escritas, e o manifesto JSON ao lado do BIN lista todas as falhas em `descricoes_nao_gravadas` e a política aplicada. O modo padrão segue rigoroso; sem consentimento nada será substituído.
+
+**Observação:** esta alternativa não habilita os ícones novos nem aumenta o espaço da tela PS1. Para que uma descrição extensa apareça no jogo, ela precisa caber na fonte/tela/slot ou haver extensão comprovadamente compatível. A solução permite gerar o BIN/CUE para testar decks, efeitos e outras edições sem perder o texto salvo no Studio.
+
+---
+
 # Studio FM v1.8.13 — Geração de campanha difícil
 
 Em **Edição do Mod → Deck do oponente**, selecione **Gerar Decks Difíceis (3/5 → 5/5)** para construir todos os 39 decks ou regenerar somente o adversário selecionado. A dificuldade sobe de 3,0 a 5,0; o cabeçalho e o seletor exibem o nível e o foco de efeito. A IA recebe decks baseados nas cartas e efeitos *existentes*, rotas de fusão encadeadas (até três etapas), materiais com 1500 ATK/DEF base no máximo, equips realmente compatíveis e pools ponderadas com total 2048.
