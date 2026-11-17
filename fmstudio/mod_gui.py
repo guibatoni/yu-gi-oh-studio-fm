@@ -22,7 +22,20 @@ from .mod_data import (
 )
 from .tables import CARD_COUNT, DUELIST_NAMES_REFERENCE, POOL_TOTAL, TYPE_NAMES
 
-WEIGHT_COLUMNS = ('carta', 'nome', 'peso', 'chance', 'chance_ps1')
+WEIGHT_COLUMNS = ('carta', 'nome', 'atk', 'def', 'peso', 'chance', 'chance_ps1')
+
+
+def _monster_stat(card, stat):
+    """Mostrar valores base apenas para monstros (incluindo Deus, tipo 24)."""
+    if not card or int(card.get('tipo_id', -1)) not in MONSTER_TYPES:
+        return '—'
+    value = card.get(stat)
+    return str(value) if value is not None and str(value).strip() else '—'
+
+
+def _monster_stat_sort(card, stat):
+    value = _monster_stat(card, stat)
+    return int(value) if value != '—' else -1
 
 
 def _probability(weight, total):
@@ -70,11 +83,16 @@ class WeightTable(ttk.Frame):
         holder.pack(fill='both', expand=True)
         self.tree = ttk.Treeview(holder, columns=WEIGHT_COLUMNS, displaycolumns=WEIGHT_COLUMNS[:-1],
                                  show='headings', selectmode='extended', height=6)
-        widths = (58, 195, 70, 105, 100)
-        for key, label, width in zip(WEIGHT_COLUMNS, ('ID', 'Carta', 'Peso', 'Chance', 'Chance PS1'), widths):
+        widths = (58, 170, 78, 78, 70, 105, 100)
+        for key, label, width in zip(
+            WEIGHT_COLUMNS, ('ID', 'Carta', 'ATK', 'DEF', 'Peso', 'Chance', 'Chance PS1'), widths
+        ):
             self.tree.heading(key, text=label)
             self.tree.column(key, width=width, minwidth=55, stretch=key == 'nome')
         self.sort_rows = sortable_columns(self.tree, raw_values=self._sort_value)
+        hscroll = ttk.Scrollbar(holder, orient='horizontal', command=self.tree.xview)
+        hscroll.pack(side='bottom', fill='x')
+        self.tree.configure(xscrollcommand=hscroll.set)
         self.tree.pack(side='left', fill='both', expand=True)
         scroll = ttk.Scrollbar(holder, command=self.tree.yview)
         scroll.pack(side='right', fill='y')
@@ -93,6 +111,8 @@ class WeightTable(ttk.Frame):
             return self.weights.get(cid, 0)
         if field == 'chance_ps1':
             return self._ps1_weight(cid)
+        if field in ('atk', 'def'):
+            return _monster_stat_sort(self.cards.get(cid), 'ataque' if field == 'atk' else 'defesa')
         return cid if field == 'carta' else display_name(cid, self.cards)
 
     def _ps1_weight(self, cid):
@@ -129,7 +149,9 @@ class WeightTable(ttk.Frame):
         rows = ((cid, weight) for cid, weight in rows if cid in self.cards and card_matches(query, cid, self.cards[cid]))
         for index, (cid, weight) in enumerate(rows):
             self.tree.insert('', 'end', iid=str(cid), values=(
-                compact_number(cid), display_name(cid, self.cards), compact_number(weight),
+                compact_number(cid), display_name(cid, self.cards),
+                _monster_stat(self.cards[cid], 'ataque'),
+                _monster_stat(self.cards[cid], 'defesa'), compact_number(weight),
                 _probability(weight, total),
                 _probability(self._ps1_weight(cid), POOL_TOTAL) if self.ps1_weights else '—'),
                 tags=card_row_tags(self.tree, self.cards.get(cid), index))
@@ -221,11 +243,17 @@ class WeightTable(ttk.Frame):
     def _edit_weight(self, event):
         item = self.tree.identify_row(event.y)
         column = self.tree.identify_column(event.x)
-        if not item or column not in ('#3', '#4'):
+        if not item or not column.startswith('#') or column == '#0':
+            return
+        visible_columns = tuple(self.tree['displaycolumns'])
+        column_index = int(column[1:]) - 1
+        if column_index < 0 or column_index >= len(visible_columns):
+            return
+        field = visible_columns[column_index]
+        if field not in ('peso', 'chance'):
             return
         self._close_inline()
         cid = int(item)
-        field = 'peso' if column == '#3' else 'chance'
         x, y, width, height = self.tree.bbox(item, field)
         entry = self.inline = ttk.Entry(self.tree)
         value = str(self.weights.get(cid, 0)) if field == 'peso' else self.tree.set(item, field).removesuffix('%')
@@ -325,12 +353,14 @@ class DeckProfileEditor(ttk.Frame):
         fixed = ttk.LabelFrame(lists, text='Deck atual', padding=3)
         fixed.grid(row=0, column=1, sticky='nsew', padx=(3, 0))
         from .mod_tools_gui import _tree
-        self.catalog = _tree(catalog, [('id', 'ID', 50), ('nome', 'Carta', 120),
-                                       ('tipo', 'Tipo', 80)], height=5, raw_values=self._catalog_sort_value,
-                             selectmode='extended')
-        self.deck = _tree(fixed, [('id', 'ID', 50), ('nome', 'Carta', 126),
+        self.catalog = _tree(catalog, [('id', 'ID', 50), ('nome', 'Carta', 135),
+                                       ('tipo', 'Tipo', 76), ('atk', 'ATK', 78),
+                                       ('def', 'DEF', 78)], height=5, raw_values=self._catalog_sort_value,
+                             selectmode='extended', horizontal=True)
+        self.deck = _tree(fixed, [('id', 'ID', 50), ('nome', 'Carta', 135),
+                                  ('atk', 'ATK', 78), ('def', 'DEF', 78),
                                   ('qtd', 'Cópias', 58)], height=5, raw_values=self._deck_sort_value,
-                          selectmode='extended')
+                          selectmode='extended', horizontal=True)
         self.catalog.bind('<Double-1>', lambda _event: self.change_card('add'))
         self.catalog.bind('<Return>', lambda _event: self.change_card('add'))
         self.catalog.bind('<<TreeviewSelect>>', self._update_buttons)
@@ -398,22 +428,32 @@ class DeckProfileEditor(ttk.Frame):
         rows = []
         for cid in sorted(self.cards):
             typ = int(self.cards[cid]['tipo_id'])
-            label = TYPE_NAMES[typ] if 0 <= typ < len(TYPE_NAMES) else str(typ)
+            label = ('Deus' if typ == 24 else TYPE_NAMES[typ]
+                     if 0 <= typ < len(TYPE_NAMES) else str(typ))
             if kind == 'Monstros' and typ not in MONSTER_TYPES:
                 continue
             if kind not in ('Todos os tipos', 'Monstros') and label != kind:
                 continue
             name = display_name(cid, self.cards)
             if card_matches(query, cid, self.cards[cid]):
-                rows.append((cid, (compact_number(cid), name, label)))
+                rows.append((cid, (
+                    compact_number(cid), name, label,
+                    _monster_stat(self.cards[cid], 'ataque'),
+                    _monster_stat(self.cards[cid], 'defesa'))))
         self._render_rows(self.catalog, rows)
         self._render_deck()
         self._update_buttons()
 
     def _catalog_sort_value(self, item, field):
+        if field in ('atk', 'def'):
+            return _monster_stat_sort(self.cards.get(int(item)),
+                                      'ataque' if field == 'atk' else 'defesa')
         return int(item) if field == 'id' else self.catalog.set(item, field)
 
     def _deck_sort_value(self, item, field):
+        if field in ('atk', 'def'):
+            return _monster_stat_sort(self.cards.get(int(item)),
+                                      'ataque' if field == 'atk' else 'defesa')
         return int(item) if field == 'id' else self.deck.set(item, field)
 
     def _render_rows(self, tree, rows):
@@ -444,9 +484,13 @@ class DeckProfileEditor(ttk.Frame):
             fixed = []
             self.total.set('Revise os IDs ou as compras dos pools')
         query = search_text(self.query.get())
-        self._render_rows(self.deck, [(cid, (compact_number(cid), display_name(cid, self.cards), amount))
-                                     for cid, amount in sorted(Counter(fixed).items())
-                                     if card_matches(query, cid, self.cards.get(cid, {}))])
+        self._render_rows(self.deck, [
+            (cid, (compact_number(cid), display_name(cid, self.cards),
+                   _monster_stat(self.cards.get(cid), 'ataque'),
+                   _monster_stat(self.cards.get(cid), 'defesa'), amount))
+            for cid, amount in sorted(Counter(fixed).items())
+            if card_matches(query, cid, self.cards.get(cid, {}))
+        ])
         self._update_buttons()
 
     def _pool_slots(self):
