@@ -524,17 +524,25 @@ class DeckProfileEditor(ttk.Frame):
             if fixed_total + pools > MAX_DECK:
                 raise ModError(f'Deck excederia {MAX_DECK} cartas: {fixed_total} fixas '
                                f'+ {pools} de pools. Nada foi alterado.')
-            updated = []
-            # Manter ordem existente, sem embaralhar os IDs originais.
-            already = set()
-            for card_id in ids:
-                if card_id not in already:
-                    updated.extend([card_id] * counts[card_id])
-                    already.add(card_id)
-            for card_id in selected:
-                if card_id not in already:
-                    updated.extend([card_id] * counts[card_id])
-                    already.add(card_id)
+            # Não reordenar cópias intercaladas do deck original. Adições
+            # entram no final; ajuste diminui a quantidade das últimas cópias.
+            if action == 'add':
+                updated = list(ids)
+                for card_id in selected:
+                    updated.extend([card_id] * amount)
+            elif action == 'remove':
+                updated = [card_id for card_id in ids if card_id not in selected]
+            else:
+                remaining = {card_id: counts[card_id] for card_id in selected}
+                updated = []
+                for card_id in ids:
+                    if card_id not in remaining:
+                        updated.append(card_id)
+                    elif remaining[card_id]:
+                        updated.append(card_id)
+                        remaining[card_id] -= 1
+                for card_id in selected:
+                    updated.extend([card_id] * remaining[card_id])
             meta = getattr(self.project, 'metadata', {})
             effects = getattr(self.project, 'effects', {})
             validate_deck(self.cards, effects, updated,
