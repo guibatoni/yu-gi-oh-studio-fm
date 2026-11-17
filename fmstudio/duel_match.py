@@ -403,7 +403,7 @@ class DuelMatch(DuelLab):
         starting = self.preview_attack(side, action.slot, target_slot=action.target, against=None)
         old_lp = dict(self.lp)
         self.apply_event(source['card_id'], side, 'atacar', source_slot=action.slot, target_side=enemy,
-                         target_slot=action.target, strict=False)
+                         target_slot=action.target, strict=False, skip_attack_cost=True)
         if self.get(side, action.slot) is not None and not self.winner:
             self._attack_trap(side, action.slot)
         if target is not None and self.get(enemy, action.target) is target and not self.winner:
