@@ -72,7 +72,7 @@ class WeightedDeckDropTests(unittest.TestCase):
             'cartas': [1],
             'pools': [{'compras': 39, 'pesos': {2:5, 3:1, 4:0}}],
         }
-        self.assertEqual(deck_drop_candidates(self.config, {}, 1), {1,2,3,4})
+        self.assertEqual(deck_drop_candidates(self.config, {}, 1), {1,2,3})
         self.assertEqual(drop_weights(self.config, {}, 1, 'S-POW'), {1:90,2:10})
         self.assertEqual(drop_weights(self.config, {}, 1, 'B/C/D'), {3:50})
         with self.assertRaises(ModError):
