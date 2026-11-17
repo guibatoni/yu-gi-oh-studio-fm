@@ -320,7 +320,8 @@ def deck_drop_candidates(config, pools, opponent):
     """
     profile = duelist_profile(config, pools, opponent)
     return set(profile.get('cartas', ())) | {
-        int(cid) for pool in profile.get('pools', ()) for cid in pool['pesos']
+        int(cid) for pool in profile.get('pools', ())
+        for cid, weight in pool['pesos'].items() if int(weight) > 0
     }
 
 
