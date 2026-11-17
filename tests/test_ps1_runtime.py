@@ -66,6 +66,48 @@ class TestNativeRules(unittest.TestCase):
         self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+16), (SUMMON_HEAL, 0, 0, 2000, 0))
         self.assertEqual(struct.unpack_from('<BBHHH', plan.data, start+24), (1, 16, 2, 250, 50))
 
+    def test_attack_dano_lp_proprio_uses_real_native_battle_attack_cost(self):
+        self.project.effects = {'9': [
+            effect('dano_lp', 450, event='atacar', target='proprio'),
+            effect('perder_lp_por_ataque', 150, event='atacar', target='proprio'),
+            effect('cura_lp', 300, event='invocar', target='proprio'),
+        ]}
+        plan = compile_effects(self.project, True)
+        self.assertEqual(plan.pending, ())
+        self.assertEqual(plan.accepted,
+                         ((9, 'dano_lp'), (9, 'perder_lp_por_ataque'), (9, 'cura_lp')))
+        record = struct.unpack_from('<H', plan.data, 2 + 2 * 9)[0]
+        protection, attacks, copies, bonus_count, equip, attack_cost = struct.unpack_from(
+            '<BBBBHH', plan.data, record)
+        self.assertEqual((bonus_count, attack_cost), (1, 600))
+        self.assertEqual(struct.unpack_from('<BBHHH', plan.data, record + 8),
+                         (SUMMON_HEAL, 0, 0, 300, 0))
+        # Não converter o dano do ataque em efeito de invocação.
+        self.assertTrue(plan.gameplay)
+        self.assertIn((9, 'dano_lp'), plan.accepted)
+
+    def test_attack_dano_lp_enemy_and_heal_remain_explicitly_unsupported_on_ps1(self):
+        self.project.effects = {'9': [
+            effect('dano_lp', 500, event='atacar', target='inimigo'),
+            effect('cura_lp', 500, event='atacar', target='proprio'),
+            effect('dano_lp', 400, event='atacar', target='proprio'),
+        ]}
+        plan = compile_effects(self.project, True)
+        self.assertEqual(plan.accepted, ((9, 'dano_lp'),))
+        self.assertEqual(len(plan.pending), 2)
+        self.assertEqual(struct.unpack_from(
+            '<H', plan.data,
+            struct.unpack_from('<H', plan.data, 2 + 2 * 9)[0] + 6)[0], 400)
+
+    def test_attack_self_lp_cost_overflow_is_not_silently_truncated(self):
+        self.project.effects = {'9': [
+            effect('dano_lp', 9500, event='atacar', target='proprio'),
+            effect('perder_lp_por_ataque', 700, event='atacar', target='proprio'),
+        ]}
+        plan = compile_effects(self.project, True)
+        self.assertEqual(plan.accepted, ((9, 'dano_lp'),))
+        self.assertTrue(any('limite do PS1' in x for x in plan.pending))
+
     def test_three_copies_can_override_the_profile_default(self):
         effects = replace_quick_effects([], {'limite_copias': '3'}, default_copies=None)
         self.assertEqual(quick_settings(effects, default_copies=None)['limite_copias'], 3)
