@@ -1,3 +1,16 @@
+## v1.7.10 — Drops ponderados do próprio deck
+
+- **Edição do Mod → Drops do oponente**: opção **Drops ponderados do próprio deck** substitui a antiga seleção uniforme de uma carta do deck sorteado.
+- Ao habilitar, a tabela mostra cada carta candidata do deck salvo com **peso editável e probabilidade calculada**; peso zero a exclui do sorteio, mas a mantém visível para reativar. O último peso positivo não pode ser removido.
+- Pesos independentes para os três grupos do PS1: **S/A/Z-POW, S/A-TEC e B/C/D**. Botão **Restaurar pesos iguais** no grupo selecionado.
+- Projetos que usavam a antiga opção são migrados para pesos iniciais iguais (=1 por ID), sem sobrescrever pesos editados. Ao atualizar o deck, pesos existentes são preservados, candidatos removidos deixam de dropar e novas cartas recebem peso 1.
+- O simulador aplica os pesos por rank e permite selecionar o rank antes de receber a recompensa. Recompensas não são mais sorteadas automaticamente na vitória ao usar o modo do deck.
+- Na imagem Drop x15 validada, a exportação grava os pesos nas tabelas reais de drops **POW/TEC/B/C/D do WA_MRG** e deixa de instalar o antigo hook MIPS de drop uniforme por cópia. O BIN/CUE anterior deve ser gerado novamente.
+- Para **decks fixos**, todos os drops possíveis vêm das cartas do deck. Para **decks com pools aleatórios**, são usadas as cartas candidatas dos pools salvos; uma carta candidata pode não ter sido sorteada no duelo atual.
+- Não altera os pesos dos drops normais por rank quando o modo do próprio deck está desligado. Não modifica a imagem original.
+- Testes unitários, UI e exportação WA verificam filtragem por deck e probabilidades.
+- Backup: `backup/studio-v1.7.9-before-weighted-drops`.
+
 ## v1.7.9 — Contador de LP do PS1 em cinco dígitos (20.000)
 
 - **Config. MOD → LP inicial** continua sendo a única origem de LP. Configurando **20.000**, jogador e oponente iniciam com o mesmo total; a rotina de inicialização de LP da v1.7.7 é preservada.
