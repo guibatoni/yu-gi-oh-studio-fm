@@ -54,16 +54,16 @@ class DescriptionWriteTests(unittest.TestCase):
     def test_fallback_writes_compatible_and_skips_only_invalid(self):
         original = bytearray(sample_exe())
         struct.pack_into('<H', original, where(0x801C0000 + 0x102 * 2), 0x3010)
-        original[where(0x801C3010):where(0x801C3010)+3] = b'\\x01\\x01\\xff'
+        original[where(0x801C3010):where(0x801C3010)+3] = b'\x01\x01\xff'
         patched, rows, icons, skipped = _apply_card_descriptions(
             bytes(original), {1: 'AA', 2: 'A' * 50}, {},
             native_profile=False, start=0x801CD5A0, end=0x801D0000,
             policy='preserve_incompatible')
         self.assertEqual([row['id'] for row in rows], [1])
         self.assertEqual(patched[where(0x801C3000):where(0x801C3000)+3],
-                         b'\\x01\\x01\\xff')
+                         b'\x01\x01\xff')
         self.assertEqual(patched[where(0x801C3010):where(0x801C3010)+3],
-                         b'\\x01\\x01\\xff')
+                         b'\x01\x01\xff')
         self.assertEqual(len(skipped), 1)
         self.assertIn('#2:', skipped[0])
 
