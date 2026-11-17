@@ -2157,9 +2157,8 @@ class Studio(tk.Tk):
 
         if previous['acao']=='bonus_por_carta_id':
             cards={card_id:self.drafts.get_card(card_id) for card_id in self.project.cards}
-            SpecificCardEffectDialog(self,cards,submit,initial_effect=previous)
-        else:
-            EffectDialog(self,submit,initial_effect=previous)
+            return SpecificCardEffectDialog(self,cards,submit,initial_effect=previous)
+        return EffectDialog(self,submit,initial_effect=previous)
 
     def add_specific_effect(self):
         if self._extract_running or not self.project or not self.selected_id:
