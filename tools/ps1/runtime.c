@@ -274,7 +274,7 @@ static void lose_lp(unsigned side, unsigned amount)
     AT(u16, SIDE(side) + 0x14) = lp > amount ? lp - amount : 0;
 }
 
-static void gain_lp(unsigned side, unsigned amount)
+static EXTENSION void gain_lp(unsigned side, unsigned amount)
 {
     /* Life Points are stored as u16: saturate instead of silently wrapping. */
     u16 current = AT(u16, SIDE(side) + 0x14);
@@ -406,23 +406,28 @@ FILTER(Reveal, 0x80025BEC, 0)
 FILTER(StatPenalty, 0x80025D30, 0)
 FILTER(Swords, 0x80025F3C, 0)
 
-ENTRY void FieldActions(void)
+static EXTENSION unsigned selected_attack_flags(unsigned side, const s8 *cursor)
 {
-    unsigned side = TURN;
-    const s8 *cursor = (const s8 *)(0x800E9F48u + side * 0x70u);
-    volatile s8 *swords = (volatile s8 *)(SIDE(side) + 0x19);
+    if (cursor[0x10] != 2 || (unsigned)(u8)cursor[0xF] >= 5) return 0;
     unsigned selected = 5 + side * 15 + (unsigned)(u8)cursor[0xF];
-    int valid = cursor[0x10] == 2 && (unsigned)(u8)cursor[0xF] < 5;
-    unsigned flags = valid ? protection(selected) : 0;
-    /* The first-turn ability remains effective while the monster is set
-       face-down in ATTACK position. Other protections remain hidden/inactive.
-       Retail will reveal the card on attack and handles DEF position itself. */
-    if (valid && !(flags & FIRST_TURN) &&
+    unsigned flags = protection(selected);
+    /* Only FIRST_TURN remains active when the attacker is hidden.
+       Retail still checks attack stance and reveals on attack. */
+    if (!(flags & FIRST_TURN) &&
         (CARDS[selected].flags & (OCCUPIED | DEFENSE)) == OCCUPIED &&
         field_monster(selected, 1)) {
         const Rules *rule = rules(CARDS[selected].id);
         if (rule) flags |= rule->protection & FIRST_TURN;
     }
+    return flags;
+}
+
+ENTRY void FieldActions(void)
+{
+    unsigned side = TURN;
+    const s8 *cursor = (const s8 *)(0x800E9F48u + side * 0x70u);
+    volatile s8 *swords = (volatile s8 *)(SIDE(side) + 0x19);
+    unsigned flags = selected_attack_flags(side, cursor);
     unsigned step = STEP & 15;
     /* Step 3 checks the selected attacker. The native end-turn step clears the lock. */
     u16 lock = step == 3 && (flags & FIRST_TURN) ? GAME(u16, 0x8009B16C) & 0x1000 : 0;
