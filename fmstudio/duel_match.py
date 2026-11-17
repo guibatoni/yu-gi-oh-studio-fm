@@ -403,7 +403,7 @@ class DuelMatch(DuelLab):
         starting = self.preview_attack(side, action.slot, target_slot=action.target, against=None)
         old_lp = dict(self.lp)
         self.apply_event(source['card_id'], side, 'atacar', source_slot=action.slot, target_side=enemy,
-                         target_slot=action.target, strict=False)
+                         target_slot=action.target, strict=False, skip_attack_cost=True)
         if self.get(side, action.slot) is not None and not self.winner:
             self._attack_trap(side, action.slot)
         if target is not None and self.get(enemy, action.target) is target and not self.winner:
@@ -424,6 +424,10 @@ class DuelMatch(DuelLab):
             self.logs.append(result)
             return result
         result = super().attack(side, action.slot, target_slot=action.target, against=None)
+        # Incluir custos e gatilhos de ataque no resultado do duelo,
+        # não somente o dano de combate calculado por super().attack.
+        result['dano_lp_jogador'] = max(0, old_lp[side] - self.lp[side])
+        result['dano_lp_oponente'] = max(0, old_lp[enemy] - self.lp[enemy])
         if target is not None and (enemy, action.target) in result['destruidos'] and self.get(side, action.slot) is not None:
             self.apply_event(source['card_id'], side, 'destruir', source_slot=action.slot, strict=False)
         return result

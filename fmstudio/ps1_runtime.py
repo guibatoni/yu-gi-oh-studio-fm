@@ -210,8 +210,11 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                 continue
             effect = check_effect(raw)
             if action in ('dano_lp', 'cura_lp') and effect['evento'] != 'invocar':
-                pending.append(f'#{cid}: {action} no PS1 exige gatilho de entrada em campo.')
-                continue
+                if not (action == 'dano_lp' and effect['evento'] == 'atacar'
+                        and effect['alvo'] == 'proprio'):
+                    pending.append(f'#{cid}: {action} no PS1 exige entrada em campo; '
+                                   'somente dano_lp ao próprio controlador é aceito ao atacar.')
+                    continue
             attribute = effect.get('atributo_id', -1)
             if effect.get('origem_contagem') in ('mao', 'cemiterio'):
                 pending.append(f'#{cid}: {action} com essa zona funciona no Studio.')
@@ -244,6 +247,14 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                 scope = SCOPES[effect['escopo']] | predicate
                 bonuses.append(struct.pack('<BBHHH', code, scope, match,
                                            effect['valor'], effect.get('valor_def', 0)))
+            elif action == 'dano_lp' and effect['evento'] == 'atacar':
+                # O campo attack_cost das regras já é cobrado no hook
+                # Battle() uma vez por ataque, para ambos os duelistas.
+                # Não incluir esse efeito na lista de danos por invocação.
+                if cost + effect['valor'] > 9999:
+                    pending.append(f'#{cid}: dano LP acumulado ao atacar excede 9999 no PS1.')
+                    continue
+                cost += effect['valor']
             elif action in ('dano_lp', 'cura_lp'):
                 receiver = int(effect['alvo'] == 'inimigo')
                 code = SUMMON_HEAL if action == 'cura_lp' else SUMMON_DAMAGE

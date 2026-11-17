@@ -226,7 +226,12 @@ class DuelLab:
             raise ModError(f'Combate: limite de {maximum} ataque(s) por turno atingido; inicie novo turno')
         cost=0
         for raw in card_effects(self.effects, int(source['card_id'])):
-            if raw.get('acao') == 'perder_lp_por_ataque' and raw.get('evento') == 'atacar':
+            if raw.get('evento') != 'atacar':
+                continue
+            if (raw.get('acao') == 'perder_lp_por_ataque' or
+                    raw.get('acao') == 'dano_lp' and raw.get('alvo') == 'proprio'):
+                # As duas formas do editor são o mesmo custo por declaração
+                # de ataque. A simulação e o PS1 devem cobrar apenas uma vez.
                 cost += check_effect(raw)['valor']
         if target_slot is not None and not 1 <= int(target_slot) <= 5:
             raise ModError('Combate: slot alvo deve ser de 1 a 5')
@@ -343,7 +348,7 @@ class DuelLab:
                                 target_side=target_side, target_slot=target_slot, kind=kind)
 
     def apply_event(self, cid, side, event, *, source_slot=None, target_side=None,
-                    target_slot=None, kind='monstro', strict=True):
+                    target_slot=None, kind='monstro', strict=True, skip_attack_cost=False):
         opposing = opposite(side)
         target_side=target_side or opposing
         if target_side not in SIDES:
@@ -353,7 +358,14 @@ class DuelLab:
         try:
             source = self.get(side, source_slot) if source_slot is not None else None
             visible = source.get('face_up', True) if source is not None else kind != 'armadilha' or event != 'invocar'
-            summary = self._apply_trigger(card_effects(self.effects, cid), event, side, opposing,
+            effects = card_effects(self.effects, cid)
+            if skip_attack_cost and event == 'atacar':
+                # DuelMatch usa o custo somado em preview_attack/super().attack.
+                # O outro dano_lp (alvo inimigo) continua ativando normalmente.
+                effects = [raw for raw in effects if not (
+                    raw.get('acao') == 'dano_lp' and raw.get('evento') == 'atacar'
+                    and raw.get('alvo') == 'proprio')]
+            summary = self._apply_trigger(effects, event, side, opposing,
                                           target_side, target_slot, kind, source_slot, strict)
             if (event == 'invocar' and kind == 'monstro' and source is not None
                     and int(source['tipo_id']) in MONSTER_TYPES):

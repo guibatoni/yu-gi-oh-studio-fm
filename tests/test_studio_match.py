@@ -157,6 +157,60 @@ class StudioMatchTests(unittest.TestCase):
                         with self.assertRaises(ModError):
                             game.attack(side, action.slot)
 
+    def test_attacking_monster_damages_own_controller_once_in_duel(self):
+        for side, other in ((PLAYER, CPU), (CPU, PLAYER)):
+            with self.subTest(side=side):
+                effects = {1: [
+                    effect('dano_lp', 500, event='atacar', target='proprio'),
+                    effect('perder_lp_por_ataque', 100, event='atacar', target='proprio'),
+                    effect('ataques_multiplos', 2, event='continuo'),
+                ]}
+                game = DuelMatch(self.cards, effects, self.decks, first=side, rng=Random(7))
+                game.set_field([unit(side, 1, 1, self.cards[1])])
+                game.end_turn(side)
+                game.end_turn(other)
+                preview = game.preview_attack(side, 1)
+                self.assertEqual(preview['custo_lp'], 600)
+                self.assertEqual(preview['dano_lp_jogador'], 600)
+                for n in (1, 2):
+                    result = game.attack(side, 1)
+                    self.assertEqual(result['dano_lp_jogador'], 600)
+                    self.assertEqual(result['dano_lp_oponente'], 1000)
+                    self.assertEqual(game.lp[side], 8000 - n * 600)
+                    self.assertEqual(game.lp[other], 8000 - n * 1000)
+                    self.assertEqual(result['ataques_usados'], n)
+                self.assertEqual(len([r for r in game.logs
+                                      if r.get('acao') == 'dano_lp'
+                                      and r.get('evento') == 'atacar']), 0)
+                with self.assertRaises(ModError):
+                    game.attack(side, 1)
+                self.assertEqual(game.lp[side], 6800)
+
+    def test_attacking_defender_charges_own_lp_without_battle_damage(self):
+        effects = {1: [effect('dano_lp', 500, event='atacar', target='proprio')]}
+        game = DuelMatch(self.cards, effects, self.decks, first=PLAYER, rng=Random(11))
+        game.set_field([unit(PLAYER, 1, 1, self.cards[1]),
+                        unit(CPU, 1, 4, self.cards[4], position='defesa')])
+        game.end_turn(PLAYER)
+        game.end_turn(CPU)
+        result = game.attack(PLAYER, 1, target_slot=1)
+        self.assertEqual(result['dano_lp_jogador'], 500)
+        self.assertEqual(result['dano_lp_oponente'], 0)
+        self.assertEqual(game.lp, {PLAYER: 7500, CPU: 8000})
+        self.assertEqual(game.attacks_used[PLAYER, 1, 1], 1)
+
+    def test_self_attack_lp_zeroes_controller_after_declaring_attack(self):
+        effects = {1: [effect('dano_lp', 500, event='atacar', target='proprio')]}
+        game = DuelMatch(self.cards, effects, self.decks,
+                         first=PLAYER, initial_lp={PLAYER: 350, CPU: 8000}, rng=Random(12))
+        game.set_field([unit(PLAYER, 1, 1, self.cards[1])])
+        game.end_turn(PLAYER)
+        game.end_turn(CPU)
+        result = game.attack(PLAYER, 1)
+        self.assertEqual(result['dano_lp_jogador'], 350)
+        self.assertEqual(game.lp[PLAYER], 0)
+        self.assertEqual(game.winner, CPU)
+
     def test_life_gain_on_summon_works_once_and_keeps_2000_lp(self):
         cards = {2: card(1100, 800), 35: card(1500, 1100)}
         effects = {2: [effect('cura_lp', 2000, event='invocar', target='proprio')]}

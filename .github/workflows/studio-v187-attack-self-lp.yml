@@ -1,0 +1,31 @@
+name: Studio FM 1.8.7 - Dano LP proprio ao atacar
+on:
+  push:
+    branches: [feature/studio-v1.8.7-attack-self-lp-damage]
+permissions:
+  contents: read
+jobs:
+  attack-recoil:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Ambiente de testes
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb python3-tk
+          python -m pip install pillow
+      - name: Sintaxe e testes completos
+        run: |
+          python -m compileall -q app.py fmstudio tools tests
+          python -m unittest discover -s tests -v
+      - name: Editor real Tkinter e regressao da edicao de efeitos
+        run: |
+          PYTHONPATH=. xvfb-run -a python tests/gui_attack_self_lp_smoke.py
+          PYTHONPATH=. xvfb-run -a python tests/gui_effect_edit_smoke.py
+          PYTHONPATH=. xvfb-run -a python tests/gui_mod_smoke.py
+      - name: Pacote do atualizador
+        run: python tools/package_source.py --out /tmp/FM-Mod-Studio-Source.zip
