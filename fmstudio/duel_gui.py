@@ -142,14 +142,13 @@ class MatchDialog(tk.Toplevel):
         reward = ttk.Frame(pane)
         reward.pack(fill='x', pady=(5, 0))
         self.rank = tk.StringVar(value='S-POW')
-        if not self.deck_drops:
-            ttk.Combobox(reward, textvariable=self.rank, state='readonly',
-                         values=list(RANK_GROUPS), width=11).pack(side='left')
+        ttk.Combobox(reward, textvariable=self.rank, state='readonly',
+                     values=list(RANK_GROUPS), width=11).pack(side='left')
         self.drop_button = ttk.Button(reward, text='Receber recompensa',
                                       style='Accent.TButton', command=self._roll_drop)
         self.drop_button.pack(side='left', padx=5)
         self.reward = ttk.Label(reward, foreground=ACCENT,
-                                text='Recompensa do deck do oponente' if self.deck_drops else '')
+                                text='Selecione o rank e sorteie o drop ponderado do deck.' if self.deck_drops else '')
         self.reward.pack(side='left')
         self.output = tk.Text(pane, height=4, wrap='word', state='disabled', bg=SURFACE, fg=TEXT)
         self.output.pack(fill='x', pady=(5, 0))
@@ -285,9 +284,7 @@ class MatchDialog(tk.Toplevel):
         self.play_button.configure(state='normal' if self.built_plays else 'disabled')
         can_claim = self.game.winner == 'jogador' and self.game.reward_card is None
         self.drop_button.configure(state='normal' if can_claim else 'disabled')
-        if can_claim and self.deck_drops and not self._auto_reward_attempted:
-            self._auto_reward_attempted = True
-            self._roll_drop()
+        # O jogador escolhe o rank antes de sortear o drop, também em modo deck.
 
     def _action(self, callback):
         before = len(self.game.logs)
