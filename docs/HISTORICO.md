@@ -1,3 +1,13 @@
+## v1.8.4 — Corrigir campo Compras na pool ponderada
+
+- Ao salvar um deck de oponente com uma pool já preenchida de cartas/pesos, um campo **Compras** vazio não provoca mais o erro genérico: mantém a quantidade válida anterior, ou completa as vagas livres até 40.
+- Para uma pool única com zero cartas fixas (formato exportável PS1), completa automaticamente **40 compras** e preserva todos os pesos digitados.
+- Novo botão **Completar vagas** e explicação diretamente na aba **Pools ponderados** para indicar a diferença entre compras (quantidade de cartas no deck) e peso (chance de cada carta entrar).
+- Trocar ou adicionar pools com valor realmente inválido apresenta aviso próximo ao editor e mantém o pool anterior intacto, sem mensagens de erro inesperadas no Tkinter.
+- Ações de salvar continuam validando compras não numéricas, limites de 40 vagas, pesos e quantidade de cópias; valores explícitos como 0 ou 17 são respeitados.
+- Regerar BIN/CUE só é necessário se você alterar efetivamente o deck, não para atualizar o Studio.
+- Backup: `backup/studio-v1.8.3-before-pool-draws-fix`.
+
 ## v1.8.3 — Rank ao vivo no HUD do PS1
 
 - O BIN/CUE do Drop x15 mostra a projeção POW/TEC e os pontos abaixo
