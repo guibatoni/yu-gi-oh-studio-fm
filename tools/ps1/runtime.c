@@ -10,7 +10,7 @@ enum {
     MAGIC = 1, TRAP = 2, INDESTRUCTIBLE = 4, PIERCING = 8, DIRECT = 16, FIRST_TURN = 32,
     FIELD = 5, PLACING = 7, BATTLE = 9,
     CARD_COUNT = 722, DECK_SIZE = 40, RECORD_COUNT = 30, DUELIST_COUNT = 40,
-    AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE
+    AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE, SUMMON_HEAL
 };
 
 typedef struct {
@@ -181,7 +181,7 @@ ENTRY u32 CalculateStats(const Card *card)
             for (unsigned j = 0; j < rule->bonus_count; j++) {
                 const Bonus *bonus = &rule->bonuses[j];
                 int count;
-                if (bonus->action == SUMMON_DAMAGE) continue;
+                if (bonus->action == SUMMON_DAMAGE || bonus->action == SUMMON_HEAL) continue;
                 if (bonus->action == AURA) {
                     unsigned scope = bonus->scope & 3;
                     if ((scope < 2 && side != (owner(i) ^ scope)) ||
@@ -274,6 +274,14 @@ static void lose_lp(unsigned side, unsigned amount)
     AT(u16, SIDE(side) + 0x14) = lp > amount ? lp - amount : 0;
 }
 
+static void gain_lp(unsigned side, unsigned amount)
+{
+    /* Life Points are stored as u16: saturate instead of silently wrapping. */
+    u16 current = AT(u16, SIDE(side) + 0x14);
+    u32 total = (u32)current + amount;
+    AT(u16, SIDE(side) + 0x14) = total > 65535u ? 65535u : total;
+}
+
 static EXTENSION void summon_damage(unsigned slot)
 {
     const Rules *rule = rules(CARDS[slot].id);
@@ -282,6 +290,8 @@ static EXTENSION void summon_damage(unsigned slot)
         const Bonus *effect = &rule->bonuses[i];
         if (effect->action == SUMMON_DAMAGE)
             lose_lp(owner(slot) ^ effect->scope, effect->attack);
+        else if (effect->action == SUMMON_HEAL)
+            gain_lp(owner(slot) ^ effect->scope, effect->attack);
     }
 }
 
@@ -401,8 +411,18 @@ ENTRY void FieldActions(void)
     unsigned side = TURN;
     const s8 *cursor = (const s8 *)(0x800E9F48u + side * 0x70u);
     volatile s8 *swords = (volatile s8 *)(SIDE(side) + 0x19);
-    unsigned flags = (cursor[0x10] == 2 && (unsigned)cursor[0xF] < 5)
-        ? protection(5 + side * 15 + cursor[0xF]) : 0;
+    unsigned selected = 5 + side * 15 + (unsigned)(u8)cursor[0xF];
+    int valid = cursor[0x10] == 2 && (unsigned)(u8)cursor[0xF] < 5;
+    unsigned flags = valid ? protection(selected) : 0;
+    /* The first-turn ability remains effective while the monster is set
+       face-down in ATTACK position. Other protections remain hidden/inactive.
+       Retail will reveal the card on attack and handles DEF position itself. */
+    if (valid && !(flags & FIRST_TURN) &&
+        (CARDS[selected].flags & (OCCUPIED | DEFENSE)) == OCCUPIED &&
+        field_monster(selected, 1)) {
+        const Rules *rule = rules(CARDS[selected].id);
+        if (rule) flags |= rule->protection & FIRST_TURN;
+    }
     unsigned step = STEP & 15;
     /* Step 3 checks the selected attacker. The native end-turn step clears the lock. */
     u16 lock = step == 3 && (flags & FIRST_TURN) ? GAME(u16, 0x8009B16C) & 0x1000 : 0;
