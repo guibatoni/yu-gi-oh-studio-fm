@@ -12,8 +12,9 @@ from .duel_engine import MAX_DECK, parse_card_ids
 from .expanded import display_name
 from .gui import ACCENT, MUTED, ROW_ALT, card_row_tags, compact_number
 from .mod_data import (
-    CONFIG_KEY, DROP_FROM_DECK, DROP_GROUPS, MONSTER_TYPES, RANK_GROUPS, STOCK_STARTER,
-    base_tables, deal_deck, drop_weights, drops_from_deck, duelist_profile, match_recipes,
+    CONFIG_KEY, DROP_FROM_DECK, DECK_DROP_WEIGHTS, DROP_GROUPS, MONSTER_TYPES,
+    RANK_GROUPS, STOCK_STARTER, base_tables, deal_deck, deck_drop_candidates,
+    deck_drop_weights, drop_weights, drops_from_deck, duelist_profile, match_recipes,
     normalize_rules, save_rules, starting_life, validate_deck,
 )
 from .tables import DUELIST_NAMES_REFERENCE, TYPE_NAMES
@@ -28,8 +29,9 @@ def _probability(weight, total):
 
 class WeightTable(ttk.Frame):
     """Pick cards by name or ID and inspect normalized odds for a weight table."""
-    def __init__(self, parent):
+    def __init__(self, parent, *, show_zero=False):
         super().__init__(parent)
+        self.show_zero = show_zero
         self.cards = {}
         self.labels = {}
         self.weights = {}
@@ -78,7 +80,8 @@ class WeightTable(ttk.Frame):
         self.tree.delete(*self.tree.get_children())
         total = sum(self.weights.values())
         self.tree.tag_configure('stripe', background=ROW_ALT)
-        for index, (cid, weight) in enumerate(sorted(self.weights.items())):
+        rows = ((cid, self.weights.get(cid, 0)) for cid in sorted(self.cards)) if self.show_zero else sorted(self.weights.items())
+        for index, (cid, weight) in enumerate(rows):
             self.tree.insert('', 'end', iid=str(cid), values=(
                 compact_number(cid), display_name(cid, self.cards), compact_number(weight),
                 _probability(weight, total)), tags=card_row_tags(self.tree, self.cards.get(cid), index))
@@ -93,10 +96,10 @@ class WeightTable(ttk.Frame):
 
     def _select(self, _event):
         selection = self.tree.selection()
-        if selection and int(selection[0]) in self.weights:
+        if selection and int(selection[0]) in self.cards:
             cid = int(selection[0])
             self.selected.set(f'#{cid} — {display_name(cid, self.cards)}')
-            self.weight.set(str(self.weights[cid]))
+            self.weight.set(str(self.weights.get(cid, 0)))
 
     def _apply(self):
         try:
@@ -475,7 +478,7 @@ class ModEditor(ttk.Frame):
         for pane, name in zip((deck_pane, drop_pane, start_pane, lp_pane),
                               ('Deck do oponente', 'Drops do oponente', 'Decks iniciais', 'Config. MOD')):
             self.tabs.add(pane, text=name)
-        self.drop_toggle = ttk.Checkbutton(drop_pane, text='Dropar Cartas do Próprio Deck',
+        self.drop_toggle = ttk.Checkbutton(drop_pane, text='Drops ponderados do próprio deck',
                                            variable=self.use_deck_drops, command=self._toggle_deck_drops)
         self.drop_toggle.pack(anchor='w', pady=(0, 6))
         self.rank_editor = ttk.Frame(drop_pane)
@@ -490,12 +493,21 @@ class ModEditor(ttk.Frame):
         self.drops.changed = self._save_drop
         self.drops.pack(fill='both', expand=True)
         self.deck_drop_panel = ttk.Frame(drop_pane)
-        self.deck_drop_detail = ttk.Label(self.deck_drop_panel, wraplength=480, foreground=MUTED)
-        self.deck_drop_detail.pack(anchor='w')
-        from .mod_tools_gui import _tree
-        self.deck_drop_candidates = _tree(self.deck_drop_panel, [('id', 'ID', 63), ('nome', 'Carta', 220),
-                                                                ('origem', 'Origem no deck', 140)])
-        self.deck_drop_candidates.bind('<Double-1>', self._open_drop_candidate)
+        deck_rank = ttk.Frame(self.deck_drop_panel)
+        deck_rank.pack(fill='x', pady=(0, 6))
+        ttk.Label(deck_rank, text='Grupo de rank:').pack(side='left', padx=(0, 6))
+        self.deck_rank_selector = ttk.Combobox(
+            deck_rank, textvariable=self.rank, state='readonly', width=28,
+            values=[key for key, code in self.rank_ids.items() if code in DROP_GROUPS])
+        self.deck_rank_selector.pack(side='left')
+        self.deck_rank_selector.bind('<<ComboboxSelected>>', lambda _event: self._load_drop())
+        ttk.Button(deck_rank, text='Restaurar pesos iguais',
+                   command=self._reset_deck_drop).pack(side='right')
+        self.deck_drop_detail = ttk.Label(self.deck_drop_panel, wraplength=630, foreground=MUTED)
+        self.deck_drop_detail.pack(anchor='w', pady=(0, 6))
+        self.deck_drop_table = WeightTable(self.deck_drop_panel, show_zero=True)
+        self.deck_drop_table.changed = self._save_deck_drop
+        self.deck_drop_table.pack(fill='both', expand=True)
 
         self.opponent_deck = DeckProfileEditor(deck_pane)
         opponent_actions = ttk.Frame(deck_pane)
