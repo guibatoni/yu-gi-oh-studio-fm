@@ -18,6 +18,7 @@ from .ps1_runtime_blob import (
     RUNTIME_PASSWORD, RUNTIME_PASSWORD_BASE, RUNTIME_PASSWORD_END, RUNTIME_PASSWORD_SHA256,
     RUNTIME_MOD, RUNTIME_MOD_BASE, RUNTIME_MOD_END, RUNTIME_MOD_SHA256,
     RUNTIME_MARKERS, RUNTIME_MARKERS_BASE, RUNTIME_MARKERS_END, RUNTIME_MARKERS_SHA256,
+    RUNTIME_GRAVE_FILTERS, RUNTIME_GRAVE_FILTERS_BASE, RUNTIME_GRAVE_FILTERS_END, RUNTIME_GRAVE_FILTERS_SHA256,
     RUNTIME_RANK_HUD_BASE,
 )
 from .tables import CARD_COUNT, DECK_SIZE, DUELIST_COUNT, EXE_DELTA
@@ -38,6 +39,7 @@ SUPPORTED = PLAY_ACTIONS | COPY_ACTIONS
 BONUS_CODES = {'aura_tipo': 1, 'bonus_por_tipo': 2, 'bonus_deck_tipo': 3,
                'bonus_cemiterio_tipo': 6, ENTRY_GROW: 9, ENTRY_SHRINK: 10}
 SCOPES = {'aliados': 0, 'inimigos': 1, 'todos': 2}
+MATCH_EITHER = 0x80
 SUMMON_DAMAGE = 7
 SUMMON_HEAL = 8
 DROP_ENTRY = 0x80021810
@@ -50,6 +52,7 @@ FUSION_CALLERS = (
     (0x800727C0, 0x80072A48),  # AI searches for fusions.
 )
 CONFIG_EXTRAS = 2 + 2 * (CARD_COUNT + 1)
+GRAVE_FILTER_OFFSET = 2  # Reserved directory entry for card ID 0.
 FIXED_DECK_CONFIG = CONFIG_EXTRAS + 8
 NAME_COLOR_CONFIG = FIXED_DECK_CONFIG + 2
 FUSION_CONFIG = NAME_COLOR_CONFIG + 2
@@ -95,11 +98,17 @@ class EffectPlan:
         return any(action in ENTRY_EFFECTS for _, action in self.accepted)
 
     @property
+    def grave_filters(self):
+        return bool(self.data and struct.unpack_from('<H', self.data, GRAVE_FILTER_OFFSET)[0])
+
+    @property
     def data_end(self):
         return CONFIG_ADDRESS + len(self.data) if self.data else DUEL_STATE
 
     @property
     def bank_end(self):
+        if self.grave_filters:
+            return RUNTIME_GRAVE_FILTERS_BASE
         if self.entry_markers:
             return RUNTIME_MARKERS_BASE
         if self.mod_features:
@@ -182,7 +191,7 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
         if colors:
             struct.pack_into('<H', data, NAME_COLOR_CONFIG, len(data))
             data.extend(_pack_name_colors(colors))
-    offsets = {}
+    offsets, grave_filters = {}, {}
     for key, effects in sorted(getattr(project, 'effects', {}).items(), key=lambda pair: int(pair[0])):
         cid = int(key)
         if not effects:
@@ -204,9 +213,8 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                 pending.append(f'#{cid}: {action} no PS1 exige gatilho de entrada em campo.')
                 continue
             attribute = effect.get('atributo_id', -1)
-            if ((attribute != -1 and action == 'bonus_cemiterio_tipo')
-                    or effect.get('origem_contagem') in ('mao', 'cemiterio')):
-                pending.append(f'#{cid}: {action} com esse filtro ou zona funciona no Studio.')
+            if effect.get('origem_contagem') in ('mao', 'cemiterio'):
+                pending.append(f'#{cid}: {action} com essa zona funciona no Studio.')
                 continue
             if max(effect['valor'], effect.get('valor_def', 0)) > 9999:
                 pending.append(f'#{cid}: {action} excede 9999 pontos da rotina de efeitos PS1.')
@@ -228,7 +236,12 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                 else:
                     match = effect['tipo_id'] & 0xFFFF
                     code = BONUS_CODES[action]
-                scope = SCOPES[effect['escopo']] | ((attribute + 1) << 2)
+                predicate = (attribute + 1) << 2
+                if effect.get('combinar_filtros') == 'ou':
+                    predicate |= MATCH_EITHER
+                if action == 'bonus_cemiterio_tipo' and attribute != -1:
+                    match = grave_filters.setdefault((match, predicate), len(grave_filters))
+                scope = SCOPES[effect['escopo']] | predicate
                 bonuses.append(struct.pack('<BBHHH', code, scope, match,
                                            effect['valor'], effect.get('valor_def', 0)))
             elif action in ('dano_lp', 'cura_lp'):
@@ -267,6 +280,11 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
             data.extend(payload)
         struct.pack_into('<H', data, 2 + 2 * cid, offsets[payload])
         accepted.extend(entries)
+    if grave_filters:
+        struct.pack_into('<H', data, GRAVE_FILTER_OFFSET, len(data))
+        for kind, predicate in grave_filters:
+            data.extend(struct.pack('<BBHHH', 0, predicate, kind, 0, 0))
+        data.extend(bytes(8))
     data[1] = any(action in ENTRY_EFFECTS for _, action in accepted)
     configured = accepted or deck_drops or prefix is not None or fixed_decks or colors or edited_fusions
     plan = EffectPlan(bytes(data) if configured else b'', tuple(accepted), tuple(pending), default,
@@ -407,6 +425,9 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     if plan.entry_markers:
         start = RUNTIME_MARKERS_BASE - EXE_DELTA
         code_ok = code_ok and exe[start:start + len(RUNTIME_MARKERS)] == RUNTIME_MARKERS
+    if plan.grave_filters:
+        start = RUNTIME_GRAVE_FILTERS_BASE - EXE_DELTA
+        code_ok = code_ok and exe[start:start + len(RUNTIME_GRAVE_FILTERS)] == RUNTIME_GRAVE_FILTERS
     if plan.password_prefix is not None:
         password_start = RUNTIME_PASSWORD_BASE - EXE_DELTA
         code_ok = code_ok and exe[password_start:password_start+len(RUNTIME_PASSWORD)] == RUNTIME_PASSWORD
@@ -480,6 +501,15 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
         if any(exe[begin:end]):
             raise ModError('Extensão de marcadores PS1 conflita com código ou texto na área reservada.')
         out[begin:end] = RUNTIME_MARKERS
+    if plan.grave_filters:
+        begin, end = RUNTIME_GRAVE_FILTERS_BASE - EXE_DELTA, RUNTIME_GRAVE_FILTERS_END - EXE_DELTA
+        if (not RUNTIME_GRAVE_FILTERS or end - begin != len(RUNTIME_GRAVE_FILTERS) or end > len(exe)
+                or RUNTIME_GRAVE_FILTERS_END > RUNTIME_MARKERS_BASE
+                or hashlib.sha256(RUNTIME_GRAVE_FILTERS).hexdigest() != RUNTIME_GRAVE_FILTERS_SHA256):
+            raise ModError('Extensão dos filtros de cemitério PS1 incompleta ou fora da área reservada.')
+        if any(exe[begin:end]):
+            raise ModError('Extensão dos filtros de cemitério PS1 conflita com a área reservada.')
+        out[begin:end] = RUNTIME_GRAVE_FILTERS
     if plan.password_prefix is not None:
         password_start = RUNTIME_PASSWORD_BASE - EXE_DELTA
         password_end = RUNTIME_PASSWORD_END - EXE_DELTA

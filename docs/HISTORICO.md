@@ -1,3 +1,15 @@
+## v1.8.6 — Bônus por tipo ou atributo
+
+- Auras, bônus por contagem e marcadores de entrada aceitam tipo, atributo
+  ou os dois. O filtro **Tipo ou atributo** conta a união, com uma
+  aplicação por carta. As regras salvas com os dois filtros mantêm o
+  padrão **Tipo e atributo**.
+- O editor mostra a condição na coluna **Filtro** e restaura a seleção
+  ao reabrir um efeito.
+- O Drop x15 aplica os filtros a campo, deck, cemitério e marcadores.
+  A contagem usa a composição inicial do deck e o cemitério do duelo
+  atual. Os bônus da mão funcionam no simulador do Studio.
+
 ## v1.8.5 — Marcadores de ATK/DEF por entrada de monstros
 
 - **Acumular ATK/DEF quando o tipo entra** soma marcadores ao próprio monstro.

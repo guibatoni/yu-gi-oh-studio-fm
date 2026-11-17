@@ -61,6 +61,7 @@ def main():
         mod = section_bytes('.runtime_mod')
         rank_hud = section_bytes('.runtime_rank_hud')
         markers = section_bytes('.runtime_markers')
+        grave_filters = section_bytes('.runtime_grave_filters')
 
     pieces = ['"""Gerado por tools/compile_ps1_runtime.py a partir de tools/ps1."""\n',
               f'RUNTIME_SHA256 = {hashlib.sha256(content).hexdigest()!r}',
@@ -74,7 +75,8 @@ def main():
                                   ('RUNTIME_PASSWORD', password, '__password'),
                                   ('RUNTIME_MOD', mod, '__runtime_mod'),
                                   ('RUNTIME_RANK_HUD', rank_hud, '__rank_hud'),
-                                  ('RUNTIME_MARKERS', markers, '__markers')):
+                                  ('RUNTIME_MARKERS', markers, '__markers'),
+                                  ('RUNTIME_GRAVE_FILTERS', grave_filters, '__grave_filters')):
         pieces.extend(('""")', '',
                        f'{label}_SHA256 = {hashlib.sha256(binary).hexdigest()!r}',
                        f'{label}_BASE = 0x{symbols[symbol + "_start"]:08X}',

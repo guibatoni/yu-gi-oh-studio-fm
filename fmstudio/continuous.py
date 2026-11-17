@@ -22,25 +22,28 @@ def _in_scope(source, target, scope):
     return scope == 'todos' or (source == target) == (scope == 'aliados')
 
 
-def _matches(card, effect, cid=None):
+def matches_filter(card, effect, cid=None):
     if 'carta_referencia_id' in effect:
         return cid == effect['carta_referencia_id']
     type_id = effect.get('tipo_id', -1)
     attribute = effect.get('atributo_id', -1)
-    return ((type_id == -1 or int(card['tipo_id']) == type_id)
-            and (attribute == -1 or int(card.get('atributo_id', -1)) == attribute))
+    type_matches = type_id == -1 or int(card['tipo_id']) == type_id
+    attribute_matches = attribute == -1 or int(card.get('atributo_id', -1)) == attribute
+    if type_id != -1 and attribute != -1 and effect.get('combinar_filtros') == 'ou':
+        return type_matches or attribute_matches
+    return type_matches and attribute_matches
 
 
 def _count_bonus(effect, side, field, catalog, zones, legacy):
     origin = effect.get('origem_contagem') or COUNT_ZONES[effect['acao']]
     sides = [candidate for candidate in SIDES if _in_scope(side, candidate, effect['escopo'])]
     if origin == 'campo':
-        return sum(monster['lado'] in sides and _matches(monster, effect, int(monster['card_id']))
+        return sum(monster['lado'] in sides and matches_filter(monster, effect, int(monster['card_id']))
                    for monster in field)
     if origin == 'deck' and 'deck_inicial' in zones:
         origin = 'deck_inicial'
     if origin in zones:
-        return sum(_matches(catalog[cid], effect, cid)
+        return sum(matches_filter(catalog[cid], effect, cid)
                    for candidate in sides for cid in zones[origin].get(candidate, ()))
     if effect.get('atributo_id', -1) != -1:
         return 0
@@ -166,7 +169,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             eff = check_effect(raw)
             if action == 'aura_tipo':
                 for target in field:
-                    if _in_scope(source['lado'], target['lado'], eff['escopo']) and _matches(target, eff):
+                    if _in_scope(source['lado'], target['lado'], eff['escopo']) and matches_filter(target, eff):
                         add_bonus(source, target, eff, 1, i)
             else:
                 n = _count_bonus(eff, source['lado'], field, catalog, zones, legacy)

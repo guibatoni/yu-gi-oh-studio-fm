@@ -9,7 +9,7 @@ import tkinter as tk
 from decimal import Decimal
 from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from pathlib import Path
-from .core import (Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR,
+from .core import (Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR, FILTER_COMBINATIONS,
                    ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ENTRY_TYPE_EVENT,
                    ONCE_ACTIONS, legacy_god_description_icon_card, ps1_god24_card_ids,
                    ps1_supports_god24)
@@ -34,6 +34,7 @@ ACCENT = '#32cfb4'
 BLUE = '#589bfa'
 BORDER = '#344259'
 ROW_ALT = '#1c263a'
+EFFECT_ATTRIBUTE_NAMES = (*ATTR_NAMES, *(f'Atributo {i:02d}' for i in range(len(ATTR_NAMES), 16)))
 
 
 def format_id(cid):
@@ -46,6 +47,16 @@ def caption_key(mapping, key):
 
 def effect_target_label(action, target):
     return 'Esta carta' if action in SCALING_ACTIONS or action == ENTRY_GROW else caption_key(TARGETS, target)
+
+
+def effect_filter_label(effect):
+    kind = effect.get('tipo_id', -1)
+    attribute = effect.get('atributo_id', -1)
+    type_name = TYPE_NAMES[kind] if 0 <= kind < len(TYPE_NAMES) else ''
+    if not 0 <= attribute < len(EFFECT_ATTRIBUTE_NAMES):
+        return type_name or ('Todos' if effect.get('tipo_id') == -1 else '—')
+    name = EFFECT_ATTRIBUTE_NAMES[attribute]
+    return f'{type_name} {effect.get("combinar_filtros", "e")} {name}' if type_name else name
 
 
 def compact_number(value, width=13):
@@ -174,13 +185,30 @@ class EffectDialog(tk.Toplevel):
         self.type_combo=ttk.Combobox(form,state='disabled',width=60,values=[f'{i:02d} — {label}' for i,label in options])
         self.type_combo.current(0)
         self.type_combo.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
-        self.type_combo.bind('<<ComboboxSelected>>',lambda e:self.vars['tipo_id'].set(self.type_ids[self.type_combo.current()]))
-        ttk.Label(form,text='Atributo contado').grid(row=row,column=0,sticky='w');row+=1
-        self.vars['atributo_id']=tk.IntVar(value=-1)
-        self.attribute_combo=ttk.Combobox(form,state='disabled',width=60,values=['Todos',*ATTR_NAMES])
+        self.type_combo.bind('<<ComboboxSelected>>', lambda _: self._filter_selected(
+            'tipo_id', self.type_ids[self.type_combo.current()]))
+        filters = ttk.Frame(form)
+        filters.grid(row=row, column=0, sticky='ew', pady=(0, 9))
+        row += 1
+        filters.columnconfigure((0, 1), weight=1, uniform='filters')
+        ttk.Label(filters, text='Atributo').grid(row=0, column=0, sticky='w')
+        self.vars['atributo_id'] = tk.IntVar(value=-1)
+        self.attribute_combo = ttk.Combobox(filters, state='disabled', width=22,
+                                            values=('Todos os atributos', *EFFECT_ATTRIBUTE_NAMES))
         self.attribute_combo.current(0)
-        self.attribute_combo.grid(row=row,column=0,sticky='ew',pady=(3,9));row+=1
-        self.attribute_combo.bind('<<ComboboxSelected>>',lambda _e:self.vars['atributo_id'].set(self.attribute_combo.current()-1))
+        self.attribute_combo.grid(row=1, column=0, sticky='ew', padx=(0, 8), pady=(3, 0))
+        self.attribute_combo.bind('<<ComboboxSelected>>', lambda _: self._filter_selected(
+            'atributo_id', self.attribute_combo.current() - 1))
+        ttk.Label(filters, text='Combinar filtros').grid(row=0, column=1, sticky='w')
+        self.vars['combinar_filtros'] = tk.StringVar(value='e')
+        self.sources['combinar_filtros'] = FILTER_COMBINATIONS
+        self.filter_combo = ttk.Combobox(filters, state='disabled', width=22,
+                                         values=tuple(FILTER_COMBINATIONS.values()))
+        self.filter_combo.current(0)
+        self.filter_combo.grid(row=1, column=1, sticky='ew', pady=(3, 0))
+        self.filter_combo.bind('<<ComboboxSelected>>', lambda _: self.vars['combinar_filtros'].set(
+            tuple(FILTER_COMBINATIONS)[self.filter_combo.current()]))
+        self.combos['combinar_filtros'] = self.filter_combo
         self.labels['escopo']=ttk.Label(form)
         self.labels['escopo'].grid(row=row,column=0,sticky='w');row+=1
         self.vars['escopo']=tk.StringVar(value='aliados')
@@ -211,6 +239,15 @@ class EffectDialog(tk.Toplevel):
         self.vars[key].set(value)
         self.combos[key].current(list(self.sources[key]).index(value))
 
+    def _filter_selected(self, key, value):
+        self.vars[key].set(value)
+        self._refresh_filter_combination()
+
+    def _refresh_filter_combination(self):
+        both = (self.attribute_combo.instate(('readonly',))
+                and self.vars['tipo_id'].get() != -1 and self.vars['atributo_id'].get() != -1)
+        self.filter_combo.configure(state='readonly' if both else 'disabled')
+
     def _load_effect(self, entry):
         """Preenche os campos existentes sem transformar a regra em outra ação."""
         for key in ('evento', 'acao'):
@@ -225,7 +262,8 @@ class EffectDialog(tk.Toplevel):
         self.type_combo.current(self.type_ids.index(typ) if typ in self.type_ids else 0)
         attr = int(entry.get('atributo_id', -1))
         self.vars['atributo_id'].set(attr)
-        self.attribute_combo.current(attr + 1 if 0 <= attr < len(ATTR_NAMES) else 0)
+        self.attribute_combo.current(attr + 1 if 0 <= attr < len(EFFECT_ATTRIBUTE_NAMES) else 0)
+        self._set('combinar_filtros', entry.get('combinar_filtros', 'e'))
         scope = entry.get('escopo', 'aliados')
         self.vars['escopo'].set(scope)
         self.scope_combo.current(list(SCOPES).index(scope) if scope in SCOPES else 0)
@@ -294,6 +332,7 @@ class EffectDialog(tk.Toplevel):
         action=self.vars['acao'].get()
         continuous=action in EFFECT_ACTIONS
         marker = action in ENTRY_EFFECTS
+        filtered = (continuous and action != 'bonus_por_carta_id') or marker
         self._refresh_recipient(action)
         counted = action in SCALING_ACTIONS
         self.labels['valor'].configure(
@@ -312,7 +351,7 @@ class EffectDialog(tk.Toplevel):
                        ENTRY_GROW: 'Campos onde a entrada conta',
                        ENTRY_SHRINK: 'Campos atingidos pela redução'}
         self.labels['escopo'].configure(text=scope_label.get(action, 'Lados que entram na contagem'))
-        typ=continuous or marker or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo')
+        typ = filtered or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo')
         choices = [-1, *(i for i in range(25) if not marker or i < 20 or i == 24)]
         if self.type_ids != choices:
             self.type_ids = choices
@@ -325,7 +364,8 @@ class EffectDialog(tk.Toplevel):
         protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'}) or action in BOOLEAN_ACTIONS
         self.def_entry.configure(state='normal' if continuous or marker else 'disabled')
         self.type_combo.configure(state='readonly' if typ else 'disabled')
-        self.attribute_combo.configure(state='readonly' if continuous else 'disabled')
+        self.attribute_combo.configure(state='readonly' if filtered else 'disabled')
+        self._refresh_filter_combination()
         self.scope_combo.configure(state='readonly' if continuous or marker else 'disabled')
         if protection:
             self.vars['valor'].set('0')
@@ -333,16 +373,16 @@ class EffectDialog(tk.Toplevel):
             self.vars['valor'].set('500' if action!='descartar_alvo' else '1')
         self.value_entry.configure(state='disabled' if protection else 'normal')
         if action=='bonus_cemiterio_tipo':
-            help_text='Bônus contínuo: +X ATK e +Y DEF por cada carta do TIPO no cemitério. Atualiza quando cartas morrem ou saem do cemitério.'
+            help_text='Recebe o bônus por carta correspondente no cemitério. Atualiza conforme as cartas entram ou saem.'
         elif action=='bonus_deck_tipo':
-            help_text='Bônus fixo por carta na composição inicial do deck.'
+            help_text='Bônus fixo por carta correspondente na composição inicial do deck.'
         elif action=='bonus_mao_tipo':
-            help_text='Bônus contínuo por carta na mão. Recalcula após compras, invocações e descartes.'
+            help_text='Recebe o bônus por carta correspondente na mão. Recalcula após compras, invocações e descartes.'
         elif action=='bonus_por_tipo':
-            help_text=('Esta carta recebe o bônus por cada monstro do tipo escolhido no campo. '
+            help_text=('Esta carta recebe o bônus por cada monstro correspondente no campo. '
                        'Monstros virados para baixo também contam.')
         elif action=='aura_tipo':
-            help_text='Cada monstro do tipo escolhido nos lados afetados recebe o bônus, inclusive virado para baixo.'
+            help_text='Cada monstro correspondente nos lados escolhidos recebe o bônus, inclusive virado para baixo.'
         elif action in ('cura_lp_deck_tipo','dano_lp_deck_tipo'):
             help_text='X vezes o número de cartas do tipo no deck configurado. Ativado UMA vez ao entrar em campo.'
         elif action=='dano_monstro_alvo':
@@ -350,7 +390,7 @@ class EffectDialog(tk.Toplevel):
         elif action=='descartar_alvo':
             help_text='O oponente descarta até X cartas da mão configurada no simulador, uma vez por invocação.'
         elif action == ENTRY_GROW:
-            help_text=('Cada entrada do tipo soma ATK/DEF a esta carta, inclusive se ela própria for do tipo. '
+            help_text=('Cada monstro que atende ao filtro soma ATK/DEF a esta carta ao entrar, inclusive ela própria. '
                        'Monstros virados para baixo contam. Os pontos duram até a carta sair do campo.')
         elif action == ENTRY_SHRINK:
             help_text=('Ao entrar, reduz o ATK e a DEF de cada monstro escolhido, inclusive virado para baixo. '
@@ -516,6 +556,7 @@ class FieldDialog(tk.Toplevel):
                 continue
             card=self.drafts.get_card(cid)
             board.append({'lado':side,'slot':slot,'card_id':cid,'tipo_id':card['tipo_id'],
+                          'atributo_id':card.get('atributo_id', -1),
                           'ataque':card['ataque'],'defesa':card['defesa'],'face_up':face.get()})
         try:
             resolved,events=self.drafts.simulate_field(board)
@@ -955,7 +996,7 @@ class Studio(tk.Tk):
         holder.pack(fill='both',expand=True)
         self.effect_tree=ttk.Treeview(holder,columns=('evento','acao','alvo','tipo','atk','def'),show='headings',height=4)
         for key,label,w in [('evento','Quando',130),('acao','Efeito',205),('alvo','Alvo',135),
-                                ('tipo','Tipo',75),('atk','ATK',70),('def','DEF',70)]:
+                                ('tipo','Filtro',155),('atk','ATK',70),('def','DEF',70)]:
             self.effect_tree.heading(key,text=label)
             self.effect_tree.column(key,width=w,stretch=True)
         self.sort_effects = sortable_columns(self.effect_tree)
@@ -1776,7 +1817,7 @@ class Studio(tk.Tk):
                    if eff.get('acao')=='bonus_por_carta_id' else caption_key(ACTIONS,eff['acao']))
             self.effect_tree.insert('','end',iid=str(i),values=(caption_key(EVENTS,eff['evento']),
                 label,effect_target_label(eff['acao'], eff['alvo']),
-                ('Todos' if eff.get('tipo_id') == -1 else TYPE_NAMES[eff['tipo_id']] if 'tipo_id' in eff and 0 <= eff['tipo_id'] < len(TYPE_NAMES) else '—'),
+                effect_filter_label(eff),
                 eff['valor'],eff.get('valor_def','—')))
         self.sort_effects()
         if select_index is not None and 0 <= select_index < len(effects):

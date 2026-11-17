@@ -5,6 +5,7 @@ on:
       - feature/studio-rank-decks-expert
       - feature/studio-v1.8.3-ps1-rank-hud
       - feature/studio-v1.8.5-entry-markers
+      - feature/studio-v1.8.6-attribute-bonuses
   workflow_dispatch:
 permissions:
   contents: write
@@ -43,7 +44,8 @@ jobs:
         if: >-
           github.ref == 'refs/heads/feature/studio-rank-decks-expert' ||
           github.ref == 'refs/heads/feature/studio-v1.8.3-ps1-rank-hud' ||
-          github.ref == 'refs/heads/feature/studio-v1.8.5-entry-markers'
+          github.ref == 'refs/heads/feature/studio-v1.8.5-entry-markers' ||
+          github.ref == 'refs/heads/feature/studio-v1.8.6-attribute-bonuses'
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"

@@ -11,7 +11,8 @@ enum {
     FIELD = 5, PLACING = 7, CONFIRMING = 8, BATTLE = 9,
     CARD_COUNT = 722, DECK_SIZE = 40, RECORD_COUNT = 30, DUELIST_COUNT = 40,
     AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE, SUMMON_HEAL,
-    ENTRY_GROW, ENTRY_SHRINK
+    ENTRY_GROW, ENTRY_SHRINK,
+    ATTRIBUTE_MASK = 0x7C, MATCH_EITHER = 0x80
 };
 
 typedef struct {
@@ -27,7 +28,11 @@ _Static_assert(__builtin_offsetof(Card, flags) == 22, "field flags offset");
 
 typedef struct {
     u8 action, scope;
-    u16 match, attack, defense;
+    u16 match;
+    union {
+        struct { u16 attack, defense; };
+        u16 grave_count[2];
+    };
 } Bonus;
 typedef struct {
     u8 protection, attacks, copies, bonus_count;
@@ -71,8 +76,11 @@ register u8 *game_gp __asm__("$28");
 #define EXTENSION __attribute__((noinline, section(".runtime.extension")))
 #define MOD_RULE __attribute__((used, noinline, section(".runtime.mod")))
 #define MARKER_RULE __attribute__((used, noinline, section(".runtime.markers")))
+#define GRAVE_FILTER_CODE __attribute__((noinline, section(".runtime.grave_filters")))
 #define CARDS ((Card *)0x801A7AD8)
 #define CONFIG ((const Config *)0x801CD7A0)
+/* Offset zero of the card directory is unused by card IDs. */
+#define GRAVE_FILTERS ((Bonus *)((u8 *)CONFIG + CONFIG->offsets[0]))
 #define STATS ((const u32 *)0x801D4244)
 #define LEVELS ((const u8 *)0x801D5332)
 #define OBJECTS ((const u8 *volatile *)0x800E9EF0)
@@ -93,9 +101,14 @@ static struct {
     u16 pending_slot, pending_id;
 } markers __attribute__((section(".runtime.markers.data")));
 
+static inline __attribute__((always_inline)) unsigned type_in_catalog(unsigned id)
+{
+    return (STATS[id - 1] >> 26) & 31;
+}
+
 static unsigned type_of(int id)
 {
-    return (unsigned)(id - 1) < CARD_COUNT ? (STATS[id - 1] >> 26) & 31 : 32;
+    return (unsigned)(id - 1) < CARD_COUNT ? type_in_catalog(id) : 32;
 }
 
 static const Rules *rules(int id)
@@ -118,7 +131,7 @@ static int field_slot(const Card *card)
         ? offset / sizeof(Card) : -1;
 }
 
-static int object_slot(const u8 *object) { return object ? object[0x6A] : -1; }
+static EXTENSION int object_slot(const u8 *object) { return object ? object[0x6A] : -1; }
 
 static int field_monster(unsigned slot, int include_face_down)
 {
@@ -148,9 +161,27 @@ static unsigned protection(unsigned slot)
 static EXTENSION int matches_bonus(const Bonus *bonus, unsigned id, int by_id)
 {
     if (id < 1 || id > CARD_COUNT) return 0;
-    if (bonus->match != 0xFFFF && (by_id ? id : type_of(id)) != bonus->match) return 0;
-    unsigned attribute = bonus->scope >> 2;
-    return !attribute || attribute == (LEVELS[id] >> 4) + 1u;
+    unsigned kind = by_id ? id : type_in_catalog(id);
+    int type_matches = (bonus->match == 0xFFFF) | (kind == bonus->match);
+    unsigned attribute = (bonus->scope & ATTRIBUTE_MASK) >> 2;
+    if (!attribute) return type_matches;
+    int attribute_matches = attribute == (LEVELS[id] >> 4) + 1u;
+    return bonus->scope & MATCH_EITHER ? type_matches | attribute_matches
+                                      : type_matches & attribute_matches;
+}
+
+/* One counter per side and distinct configured predicate. ID zero clears
+ * them at the start of each duel. The ROM copy of every counter is zero. */
+static GRAVE_FILTER_CODE void update_grave_filters(unsigned side, int id)
+{
+    for (Bonus *filter = GRAVE_FILTERS; filter->scope; filter++) {
+        if (!id) {
+            filter->grave_count[0] = 0;
+            filter->grave_count[1] = 0;
+        } else if (matches_bonus(filter, id, 0) && filter->grave_count[side] != 0xFFFF) {
+            filter->grave_count[side]++;
+        }
+    }
 }
 
 static EXTENSION int count_bonus(const Bonus *bonus, unsigned source_side)
@@ -161,7 +192,8 @@ static EXTENSION int count_bonus(const Bonus *bonus, unsigned source_side)
     for (unsigned side = 0; side < 2; side++) {
         if (scope < 2 && side != (source_side ^ scope)) continue;
         if (bonus->action == GRAVE_TYPE) {
-            if (bonus->match < 32) count += duel.graveyard[side][bonus->match];
+            if (bonus->scope & ATTRIBUTE_MASK) count += GRAVE_FILTERS[bonus->match].grave_count[side];
+            else if (bonus->match < 32) count += duel.graveyard[side][bonus->match];
             else for (int i = 0; i < 32; i++) count += duel.graveyard[side][i];
         } else if (bonus->action == DECK_TYPE || bonus->action == DECK_ID) {
             for (int i = 0; i < DECK_SIZE; i++)
@@ -228,6 +260,7 @@ ENTRY void ResetCards(void)
     }
     volatile u8 *memory = (volatile u8 *)&duel;
     for (unsigned i = 0; i < sizeof(duel); i++) memory[i] = 0;
+    if (CONFIG->offsets[0]) update_grave_filters(0, 0);
 }
 
 ENTRY void Startup(void)
@@ -252,7 +285,9 @@ ENTRY void DrawPhase(void)
 static void cemetery(unsigned side, int id)
 {
     unsigned type = type_of(id);
-    if (type < 32 && duel.graveyard[side][type] != 0xFFFF) duel.graveyard[side][type]++;
+    if (type >= 32) return;
+    if (duel.graveyard[side][type] != 0xFFFF) duel.graveyard[side][type]++;
+    if (CONFIG->offsets[0]) update_grave_filters(side, id);
 }
 
 static EXTENSION void end_instance(unsigned slot)
@@ -556,7 +591,8 @@ static MARKER_RULE int entry_delta(const Rules *rule, unsigned action, unsigned 
     if (!rule) return 0;
     for (unsigned i = 0; i < rule->bonus_count; i++) {
         const Bonus *bonus = &rule->bonuses[i];
-        if (bonus->action != action || (bonus->scope != 2 && bonus->scope != side) ||
+        unsigned scope = bonus->scope & 3;
+        if (bonus->action != action || (scope != 2 && scope != side) ||
             !matches_bonus(bonus, id, 0)) continue;
         int sign = action == ENTRY_GROW ? 1 : -1;
         marker->attack += sign * bonus->attack;
