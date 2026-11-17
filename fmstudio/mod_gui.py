@@ -82,6 +82,7 @@ class WeightTable(ttk.Frame):
         self.tree.bind('<<TreeviewSelect>>', self._select)
         self.tree.bind('<Double-1>', self._edit_weight)
         self.tree.bind('<Delete>', lambda _event: self._remove())
+        self.tree.bind('<Control-a>', self._select_visible)
         self.summary = ttk.Label(self, foreground=MUTED)
         self.summary.pack(anchor='w', pady=(3, 0))
         self.query.trace_add('write', lambda *_: self.render())
@@ -159,13 +160,14 @@ class WeightTable(ttk.Frame):
             f'{len(self.weights)} cartas com peso · peso total {compact_number(sum(self.weights.values()))}'
             + (f' · {len(selection)} selecionadas' if len(selection) > 1 else '')))
 
-    def _select_visible(self):
+    def _select_visible(self, _event=None):
         visible = self.tree.get_children()
         self.tree.selection_set(visible)
         self._select(None)
         if visible:
             self.tree.focus(visible[0])
             self.tree.focus_set()
+        return 'break'
 
     def _apply(self):
         try:
@@ -332,7 +334,9 @@ class DeckProfileEditor(ttk.Frame):
         self.catalog.bind('<Double-1>', lambda _event: self.change_card('add'))
         self.catalog.bind('<Return>', lambda _event: self.change_card('add'))
         self.catalog.bind('<<TreeviewSelect>>', self._update_buttons)
+        self.catalog.bind('<Control-a>', self._select_all_catalog)
         self.deck.bind('<<TreeviewSelect>>', self._select_copy)
+        self.deck.bind('<Control-a>', self._select_all_deck)
         self.deck.bind('<Delete>', lambda _event: self.change_card('remove'))
         search.bind('<Return>', lambda _event: self._focus_result())
         ttk.Label(self.fixed_pane, text='Ctrl/Shift: selecione várias cartas; as ações valem para todas.',
@@ -469,21 +473,23 @@ class DeckProfileEditor(ttk.Frame):
             self.quantity.set(self.deck.set(selection[0], 'qtd'))
         self._update_buttons()
 
-    def _select_all_catalog(self):
+    def _select_all_catalog(self, _event=None):
         visible = self.catalog.get_children()
         self.catalog.selection_set(visible)
         if visible:
             self.catalog.focus(visible[0])
             self.catalog.focus_set()
         self._update_buttons()
+        return 'break'
 
-    def _select_all_deck(self):
+    def _select_all_deck(self, _event=None):
         visible = self.deck.get_children()
         self.deck.selection_set(visible)
         if visible:
             self.deck.focus(visible[0])
             self.deck.focus_set()
         self._update_buttons()
+        return 'break'
 
     def start_fixed_deck(self):
         self.load(self.cards, {})
