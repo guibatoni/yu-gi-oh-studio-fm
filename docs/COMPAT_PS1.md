@@ -1,3 +1,18 @@
+## IA dos oponentes no PS1 — v1.7.8
+
+O modo Difícil aplica cinco patches guardados ao SLUS Drop x15 verificado,
+removendo as portas de desistência aleatórias nas tentativas de fusão, Equip,
+Trap e Magia. A execução continua no motor retail para verificar se a jogada
+é válida. Não altera o simulador nem fornece vantagens artificiais.
+
+Normal preserva as cinco instruções retail; Difícil não depende de novos
+bancos de memória e coexistirá com as regras já suportadas. Imagens com SLUS
+desconhecido não receberão essa atualização automaticamente.
+
+**Ainda pendente:** um seletor de Guardian Star realmente estratégico no PS1,
+comparação aprofundada de poder e informações ocultas, IA de ataques com
+avaliação de trocas e teste em duelo real no ePSXe.
+
 ## v1.7.5 — Gatilho de cura e ataque inicial com carta setada
 
 **Cura LP ao entrar em campo** é compilada em uma ação nativa para o perfil

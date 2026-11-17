@@ -448,6 +448,9 @@ class ModEditor(ttk.Frame):
         self.starter_weight = tk.StringVar(value='1')
         self.random_starter = tk.BooleanVar()
         self.mod_lp = tk.StringVar(value='8000')
+        self.ps1_ai_modes = {'Normal — IA original': 'normal',
+                             'Difícil — IA aprimorada': 'dificil'}
+        self.ps1_ai_choice = tk.StringVar(value='Normal — IA original')
         self.opponent_first = tk.BooleanVar()
         self.status = tk.StringVar(value='Abra um projeto para editar as tabelas.')
         self.duelist_ids = {f'{i:02d} · {name}': i for i, name in enumerate(DUELIST_NAMES_REFERENCE) if i}
@@ -538,6 +541,20 @@ class ModEditor(ttk.Frame):
         ttk.Entry(lp_pane, textvariable=self.mod_lp, width=25).pack(anchor='w')
         ttk.Button(lp_pane, text='Salvar LP para ambos', style='Accent.TButton',
                    command=self.save_lp).pack(anchor='w', pady=9)
+        ttk.Separator(lp_pane, orient='horizontal').pack(fill='x', pady=13)
+        ttk.Label(lp_pane, text='Inteligência artificial dos oponentes — PlayStation 1',
+                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(4, 7))
+        ttk.Label(lp_pane, text='O modo Difícil modifica as decisões reais do BIN/CUE Drop x15: '
+                  'o oponente procura fusões, equipamentos, armadilhas e magias com mais frequência. '
+                  'Não aumenta atributos artificialmente.',
+                  wraplength=630, justify='left').pack(anchor='w', pady=(0, 9))
+        ttk.Combobox(lp_pane, textvariable=self.ps1_ai_choice, state='readonly',
+                     values=list(self.ps1_ai_modes), width=29).pack(anchor='w')
+        ttk.Button(lp_pane, text='Salvar dificuldade da IA', style='Accent.TButton',
+                   command=self.save_ps1_ai).pack(anchor='w', pady=9)
+        ttk.Label(lp_pane, text='Disponível para a imagem Drop x15 validada. '
+                  'Após salvar, gere outro BIN/CUE. A IA do simulador não é alterada.',
+                  foreground=MUTED, wraplength=630).pack(anchor='w', pady=(0, 8))
         ttk.Label(self, textvariable=self.status, foreground=ACCENT, wraplength=610).pack(anchor='w', pady=(5, 0))
         self._update_available()
 
@@ -560,6 +577,9 @@ class ModEditor(ttk.Frame):
             self.pools, self.stock, _, _ = base_tables(self.project)
             self.rules = normalize_rules(self.project.metadata.get(CONFIG_KEY, {}), self.cards)
             self.mod_lp.set(str(starting_life(self.project, self._duel_id())['jogador']))
+            current_ai = self.rules.get('ia_ps1', 'normal')
+            self.ps1_ai_choice.set(next((label for label, code in self.ps1_ai_modes.items()
+                                         if code == current_ai), 'Normal — IA original'))
             self.status.set('')
         else:
             self.cards, self.pools, self.rules, self.stock = {}, {}, {}, []
@@ -857,6 +877,19 @@ class ModEditor(ttk.Frame):
             self.project.save()
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Config. MOD — Life Points', str(exc), parent=self)
+
+    def save_ps1_ai(self):
+        try:
+            value = self.ps1_ai_modes.get(self.ps1_ai_choice.get())
+            if value is None:
+                raise ModError('Escolha Normal ou Difícil para a IA do PlayStation 1.')
+            rules = self._edit()
+            rules['ia_ps1'] = value
+            self._commit(rules, 'IA PS1: ' +
+                         ('Difícil. Recrie o BIN/CUE para ativar.' if value == 'dificil'
+                          else 'Normal. Recrie o BIN/CUE para restaurar.'))
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Config. MOD — IA PlayStation 1', str(exc), parent=self)
 
     def start_match(self):
         if not self.project or self.studio._extract_running:
