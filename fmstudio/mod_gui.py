@@ -853,6 +853,10 @@ class ModEditor(ttk.Frame):
         self.save_opponent_button = ttk.Button(opponent_actions, text='Salvar deck', style='Accent.TButton',
                                                command=self.save_opponent)
         self.save_opponent_button.pack(side='right')
+        self.preset_39_button = ttk.Button(
+            opponent_actions, text='Aplicar 39 decks (3/5–5/5)',
+            command=self.apply_39_opponent_presets)
+        self.preset_39_button.pack(side='right', padx=(0, 8))
         self.opponent_deck.pack(fill='both', expand=True)
 
         profiles = ttk.Frame(start_pane)
@@ -1183,6 +1187,56 @@ class ModEditor(ttk.Frame):
         editor.load(self.cards, profile)
         self.status.set('Deck gerado no editor. Salve quando terminar os ajustes.')
         self.studio.notify(f'Deck gerado com {len(ids)} cartas.')
+
+    def apply_39_opponent_presets(self):
+        """Aplicar presets de 39 rivais, preservando outras edições do MOD."""
+        try:
+            from .opponent_presets_39 import opponent_presets
+
+            rules = self._edit()
+            presets = opponent_presets()
+            # Validar IDs, pesos e viabilidade de 40 compras antes de qualquer gravação.
+            copies = int(self.project.metadata.get('ps1_deck_global_limit', 3))
+            for opponent, profile in presets.items():
+                normalized = normalize_rules(
+                    {'duelistas': {opponent: {'deck': profile}}}, self.cards
+                )['duelistas'][opponent]['deck']
+                deal_deck(normalized, self.cards, self.project.effects,
+                          default_copies=copies)
+                presets[opponent] = normalized
+
+            if not messagebox.askyesno(
+                'Aplicar 39 decks ponderados',
+                'Substituir APENAS os decks dos 39 oponentes neste projeto?\\n\\n'
+                'As 39 tabelas de decks receberão 40 compras ponderadas, '
+                'com soma de pesos 2048 por rival.\\n'
+                'Drops, cartas personalizadas, fusões e outras configurações '
+                'serão preservados.\\n\\n'
+                'Recomendamos salvar um backup do projeto antes de continuar.',
+                parent=self,
+            ):
+                return
+
+            duelists = rules.setdefault('duelistas', {})
+            for opponent, deck in presets.items():
+                duelist = duelists.setdefault(opponent, {})
+                duelist['deck'] = deck
+                if duelist.get(DROP_FROM_DECK):
+                    candidates = set(deck['pools'][0]['pesos'])
+                    existing = duelist.setdefault(DECK_DROP_WEIGHTS, {})
+                    for group in DROP_GROUPS:
+                        old = existing.get(group, {})
+                        existing[group] = {
+                            cid: int(old.get(cid, 1)) for cid in sorted(candidates)
+                            if int(old.get(cid, 1)) > 0
+                        } or {cid: 1 for cid in sorted(candidates)}
+
+            self._commit(rules, '39 decks de oponentes aplicados (níveis 3/5 a 5/5).')
+            self._opponent_drafts.clear()
+            self._loaded_opponent = None
+            self._load_duelist()
+        except (ModError, ValueError, OSError, KeyError) as exc:
+            messagebox.showerror('39 decks de oponentes', str(exc), parent=self)
 
     def save_opponent(self):
         try:
