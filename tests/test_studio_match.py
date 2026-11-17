@@ -170,6 +170,58 @@ class StudioMatchTests(unittest.TestCase):
         game.play(CPU,action)
         self.assertEqual(sorted(game.graveyards[CPU]),[1,4])
 
+    def test_ai_avoids_losing_star_against_revealed_monster(self):
+        cards = {1: card(2500, 2300, stars=(2, 3)),
+                 2: card(1100, 900, stars=(1, 1))}
+        game = DuelMatch(cards, {}, {PLAYER: [2], CPU: [1]}, first=CPU, rng=Random(3))
+        game.set_field([unit(PLAYER, 1, 2, cards[2], star=1)])
+        # Jupiter (2) loses to Mars (1). Saturn (3) is neutral.
+        self.assertEqual(guardian_bonuses(2, 1), (0, 500))
+        self.assertEqual(guardian_bonuses(3, 1), (0, 0))
+        action = choose_play(game)
+        self.assertIsNotNone(action)
+        self.assertEqual((action.kind, action.card_id, action.star), ('monstro', 1, 3))
+        game.play(CPU, action)
+        self.assertEqual(game.get(CPU, action.slot)['guardian_id'], 3)
+
+    def test_ai_chooses_winning_star_instead_of_losing_star(self):
+        cards = {1: card(2500, 2300, stars=(4, 2)),
+                 2: card(1100, 900, stars=(3, 3))}
+        game = DuelMatch(cards, {}, {PLAYER: [2], CPU: [1]}, first=CPU, rng=Random(3))
+        game.set_field([unit(PLAYER, 1, 2, cards[2], star=3)])
+        # Saturn (3) beats Uranus (4), while Jupiter (2) beats Saturn (3).
+        self.assertEqual(guardian_bonuses(4, 3), (0, 500))
+        self.assertEqual(guardian_bonuses(2, 3), (500, 0))
+        action = choose_play(game)
+        self.assertIsNotNone(action)
+        self.assertEqual(action.star, 2)
+
+    def test_ai_minimizes_unavoidable_guardian_disadvantages(self):
+        cards = {1: card(2700, 2300, stars=(2, 4)),
+                 2: card(1000, 900, stars=(1, 1)),
+                 3: card(1100, 950, stars=(3, 3))}
+        game = DuelMatch(cards, {}, {PLAYER: [2, 3], CPU: [1]}, first=CPU, rng=Random(4))
+        game.set_field([unit(PLAYER, 1, 2, cards[2], star=1),
+                        unit(PLAYER, 2, 3, cards[3], star=3)])
+        # Both choices lose to one rival. Jupiter (2) also beats Saturn (3).
+        action = choose_play(game)
+        self.assertIsNotNone(action)
+        self.assertEqual(action.star, 2)
+
+    def test_ai_does_not_inspect_hidden_opponent_guardian(self):
+        cards = {1: card(2500, 2300, stars=(2, 3)),
+                 2: card(1000, 900, stars=(1, 3))}
+        choices = []
+        for secret_star in (1, 3):
+            game = DuelMatch(cards, {}, {PLAYER: [2], CPU: [1]}, first=CPU,
+                             rng=Random(3))
+            hidden = unit(PLAYER, 1, 2, cards[2], star=secret_star)
+            hidden['face_up'] = False
+            game.set_field([hidden])
+            choices.append(choose_play(game))
+        self.assertIsNotNone(choices[0])
+        self.assertEqual(choices[0], choices[1])
+
     def test_two_fusion_paths_ritual_and_equip_above_722(self):
         self.cards[91000] = card(4550,2900,stars=(SUPREME,0))
         effects = {90004:[effect('equip_atk',5000,event='equipado',target='monstro_equipado')]}
