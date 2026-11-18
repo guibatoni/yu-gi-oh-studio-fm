@@ -1,3 +1,12 @@
+# Studio FM v1.9.3 — Artes PS1 sem instalar Pillow
+
+**Gerar jogo BIN/CUE** grava as artes PNG vinculadas às cartas originais e às
+adicionais **#723–#740**, incluindo as miniaturas, sem instalar Pillow. O Studio
+também gera os títulos das cartas adicionais em uma instalação Python sem o
+pacote. As imagens são convertidas para as paletas PS1 do jogo.
+
+---
+
 # Studio FM v1.9.2 — Descrições das cartas novas no PS1
 
 Ao gerar o BIN/CUE do **Original Drop x15**, o Studio ajusta as quebras de
@@ -928,7 +937,9 @@ A cada commit novo na branch `main`, o workflow de Windows compila e publica o R
 
 Editor gráfico Windows para criar MODs de *Yu-Gi-Oh! Forbidden Memories*. **Status real:** o Studio mantém um simulador para habilidades novas. A v1.1.0 amplia a geração BIN/CUE parcial para incluir **atributos, nomes curtos, descrições curtas com ícones e cores nativos, artes e miniaturas** de cartas #1..#722, com validação de origem. Isso **não** implementa as habilidades customizadas nem cartas #723+ no motor do PS1. Veja `docs/COMPAT_PS1.md`.
 
-O app usa Python/Tkinter para interface. A gravação de artes na cópia de disco requer **Pillow**, incluído no executável Windows criado pelo GitHub Actions. Se estiver executando via Python, instale com `python -m pip install pillow` quando for gerar artes.
+O app usa Python/Tkinter para a interface. A gravação de artes PNG na cópia de
+disco funciona com as bibliotecas padrão de Python. O executável Windows inclui
+Pillow para acelerar a conversão de imagens.
 
 ## Abrir o aplicativo
 

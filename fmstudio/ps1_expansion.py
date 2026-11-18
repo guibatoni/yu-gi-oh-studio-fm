@@ -11,6 +11,7 @@ import hashlib
 import struct
 import unicodedata
 
+from .ps1_card_title import title_bitmap as _title_bitmap
 from .tables import CARD_COUNT, EXE_DELTA, STATS_ADDR, LEVEL_ADDR, GUARDIAN_FIELDS, encode_ps1_star
 
 PS1_CARD_CAPACITY = 740
@@ -283,7 +284,7 @@ def expand_archive(wa, project, plan, *, prefix):
     from .core import ModError
     from .passwords import validate_ps1_prefix
     from .tables import PASSWORD_BASE
-    from .ps1_content import _map_png, _palette
+    from .ps1_content import render_card_art
     if not plan.enabled:
         return wa
     if len(wa) % 2048 or len(wa) < 5776 * 2048:
@@ -303,8 +304,9 @@ def expand_archive(wa, project, plan, *, prefix):
             png = (project.folder / rel).resolve()
             if not png.is_relative_to(project.folder.resolve()) or not png.is_file():
                 raise ModError(f'#{cid}: PNG ausente ou fora da pasta do projeto.')
-            thumb[:1280] = _map_png(png, (40, 32), _palette(thumb, 0x500, 64))
-            art[:9792] = _map_png(png, (102, 96), _palette(art, 0x2640, 256))
+            art_pixels, thumb_pixels = render_card_art(png, art, thumb)
+            art[:len(art_pixels)] = art_pixels
+            thumb[:len(thumb_pixels)] = thumb_pixels
         if cid in models:
             art[0x2840:0x2AE0] = _title_bitmap(project.get(cid).get('nome') or f'Carta {cid}')
         thumbs.append(thumb)
@@ -314,31 +316,6 @@ def expand_archive(wa, project, plan, *, prefix):
     struct.pack_into('<II', original, PASSWORD_BASE + 741 * 8, 0xFFFFFFFF, 0xFFFFFFFE)
     split = 722 * 2048
     return bytes(original[:split] + b''.join(thumbs) + original[split:] + b''.join(arts))
-
-
-def _title_bitmap(name):
-    """The native title is a separate 96x14 4bpp strip, not the main art."""
-    from .core import ModError
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-    except ImportError as exc:
-        raise ModError('A expansão de cartas precisa do Pillow para gerar os títulos PS1.') from exc
-    text = ''.join(c for c in unicodedata.normalize('NFD', str(name)) if not unicodedata.combining(c))
-    try:
-        font = ImageFont.load_default(size=22)
-    except TypeError:  # Pillow versions predating the scalable default font.
-        font = ImageFont.load_default()
-    bounds = font.getbbox(text)
-    canvas = Image.new('L', (max(1, bounds[2] - bounds[0]), max(1, bounds[3] - bounds[1])))
-    ImageDraw.Draw(canvas).text((-bounds[0], -bounds[1]), text, font=font, fill=255)
-    scale = min(94 / canvas.width, 12 / canvas.height)
-    canvas = canvas.resize((max(1, round(canvas.width * scale)), max(1, round(canvas.height * scale))),
-                           Image.Resampling.LANCZOS)
-    strip = Image.new('L', (96, 14))
-    strip.paste(canvas, (1, (14 - canvas.height) // 2))
-    pixels = list(strip.get_flattened_data() if hasattr(strip, 'get_flattened_data') else strip.getdata())
-    indices = [min(7, (p * 7 + 127) // 255) for p in pixels]
-    return bytes(indices[i] | (indices[i + 1] << 4) for i in range(0, len(indices), 2))
 
 
 def retail_archive_view(wa):

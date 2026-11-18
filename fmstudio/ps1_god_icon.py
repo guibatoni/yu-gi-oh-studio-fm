@@ -8,7 +8,6 @@ não substitui o ícone de tipo nem implementa God 24 como monstro.
 from __future__ import annotations
 
 import struct
-import zlib
 from pathlib import Path
 
 from .core import ModError
@@ -70,123 +69,15 @@ def find_god_icon_slot(wa: bytes, desired: list[bytes]) -> tuple[int,str]:
 
 
 def decode_icon_png(image_path: Path) -> list[tuple[int, int, int, int]]:
-    """Lê os PNGs de ícones 16x16 do Studio, em RGBA ou com paleta."""
-    path = Path(image_path)
-    icon = f'Ícone {path.stem}'
-    try:
-        with path.open('rb') as source:
-            raw = source.read(262145)
-    except OSError as exc:
-        raise ModError(f'{icon}: não foi possível ler o PNG.') from exc
-    if len(raw)>262144 or raw[:8]!=b'\x89PNG\r\n\x1a\n':
-        raise ModError(f'{icon}: PNG inválido ou maior que o limite seguro.')
-    offset=8
-    header=None
-    palette=None
-    transparency=None
-    parts=[]
-    ended=False
-    while offset<len(raw):
-        if len(raw)-offset<12:
-            raise ModError(f'{icon}: bloco PNG incompleto.')
-        length=struct.unpack_from('>I',raw,offset)[0]
-        offset+=4
-        if offset+8+length>len(raw):
-            raise ModError(f'{icon}: tamanho de bloco PNG inválido.')
-        kind=raw[offset:offset+4]
-        offset+=4
-        data=raw[offset:offset+length]
-        offset+=length
-        crc=struct.unpack_from('>I',raw,offset)[0]
-        offset+=4
-        if (zlib.crc32(kind+data)&0xFFFFFFFF)!=crc:
-            raise ModError(f'{icon}: CRC PNG incorreto.')
-        if header is None and kind != b'IHDR':
-            raise ModError(f'{icon}: faltou o cabeçalho PNG.')
-        if kind==b'IHDR':
-            if header is not None or length!=13:
-                raise ModError(f'{icon}: cabeçalho PNG inválido.')
-            w,h,depth,color,comp,filt,interlace=struct.unpack('>IIBBBBB',data)
-            indexed = color == 3
-            supported = (indexed and depth in (1, 2, 4, 8)) or (color, depth) == (6, 8)
-            if (w,h,comp,filt,interlace)!=(WIDTH,HEIGHT,0,0,0) or not supported:
-                raise ModError(f'{icon}: use PNG 16x16 RGBA ou indexado, sem entrelaçamento.')
-            header=(depth,color)
-        elif kind==b'PLTE':
-            if palette is not None or parts or length%3 or not 1<=length//3<=1<<depth:
-                raise ModError(f'{icon}: paleta PNG inválida.')
-            palette=data
-        elif kind==b'tRNS':
-            if (not indexed or palette is None or transparency is not None or parts
-                    or not 1<=length<=len(palette)//3):
-                raise ModError(f'{icon}: transparência PNG inválida.')
-            transparency=data
-        elif kind==b'IDAT':
-            if indexed and palette is None:
-                raise ModError(f'{icon}: PNG indexado sem paleta.')
-            parts.append(data)
-        elif kind==b'IEND':
-            if length or not parts:
-                raise ModError(f'{icon}: encerramento PNG inválido.')
-            ended=True
-            break
-        elif kind[:1] and not (kind[0]&0x20):
-            raise ModError(f'{icon}: bloco PNG obrigatório não suportado.')
-    if not ended or offset!=len(raw) or not parts:
-        raise ModError(f'{icon}: arquivo PNG incompleto.')
+    """Decode a 16×16 icon using the same reader as card artwork."""
+    from .png_pixels import read_png
 
-    stride = 1 if indexed else 4
-    row_bytes = WIDTH * depth * stride // 8
-    expected = HEIGHT * (1 + row_bytes)
+    path = Path(image_path)
     try:
-        inflater=zlib.decompressobj()
-        expanded=inflater.decompress(b''.join(parts),expected+1)
-    except zlib.error as exc:
-        raise ModError(f'{icon}: dados compactados PNG inválidos.') from exc
-    if (not inflater.eof or inflater.unused_data or inflater.unconsumed_tail
-            or len(expanded)!=expected):
-        raise ModError(f'{icon}: tamanho dos dados PNG inválido para 16x16.')
-    if indexed:
-        alpha = (transparency or b'').ljust(len(palette)//3, b'\xff')
-        entries = [(*palette[i:i+3], alpha[i//3]) for i in range(0,len(palette),3)]
-        mask = (1 << depth) - 1
-    pixels=[]
-    previous=bytearray(row_bytes)
-    pos=0
-    for _ in range(HEIGHT):
-        method=expanded[pos]
-        pos+=1
-        row=bytearray(expanded[pos:pos+row_bytes])
-        pos+=row_bytes
-        if method not in (0,1,2,3,4):
-            raise ModError(f'{icon}: filtro PNG desconhecido.')
-        for i in range(row_bytes):
-            left=row[i-stride] if i>=stride else 0
-            above=previous[i]
-            corner=previous[i-stride] if i>=stride else 0
-            if method==0:
-                predict=0
-            elif method==1:
-                predict=left
-            elif method==2:
-                predict=above
-            elif method==3:
-                predict=(left+above)//2
-            else:
-                p=left+above-corner
-                da,db,dc=abs(p-left),abs(p-above),abs(p-corner)
-                predict=left if da<=db and da<=dc else above if db<=dc else corner
-            row[i]=(row[i]+predict)&255
-        if indexed:
-            for bit in range(0, WIDTH * depth, depth):
-                index = (row[bit//8] >> (8-depth-bit%8)) & mask
-                if index >= len(entries):
-                    raise ModError(f'{icon}: índice de cor fora da paleta PNG.')
-                pixels.append(entries[index])
-        else:
-            pixels.extend(tuple(row[i:i+4]) for i in range(0,row_bytes,4))
-        previous=row
-    return pixels
+        _, _, pixels = read_png(path, max_bytes=262144, expected_size=(WIDTH, HEIGHT))
+    except (OSError, ValueError) as exc:
+        raise ModError(f'Ícone {path.stem}: {exc}') from exc
+    return [tuple(pixels[i:i + 4]) for i in range(0, len(pixels), 4)]
 
 
 decode_god_png = decode_icon_png

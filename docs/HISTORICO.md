@@ -1,3 +1,12 @@
+## v1.9.3 — Exportação de artes PS1 sem Pillow
+
+- Grava arte principal e miniatura de cartas originais e adicionais a partir
+  de PNG, usando as paletas do PS1 mesmo com uma instalação Python básica.
+- Gera os títulos das cartas adicionais com fonte bitmap quando Pillow estiver
+  indisponível. A fonte padrão do Pillow continua disponível com o pacote.
+- Compartilha o leitor PNG com os ícones de descrição e informa o arquivo na
+  mensagem de erro se a imagem não puder ser lida.
+
 ## v1.9.2 — Exportação de descrições para cartas novas
 
 - Reorganiza quebras de linha de textos altos no perfil Drop x15 e aproveita

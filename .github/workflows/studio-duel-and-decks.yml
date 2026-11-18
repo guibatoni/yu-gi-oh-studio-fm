@@ -10,6 +10,7 @@ on:
       - feature/studio-expanded-ps1-cards
       - fix/studio-v1.9.1-native-supreme
       - fix/studio-v1.9.2-ps1-descriptions
+      - fix/studio-v1.9.3-ps1-art
   workflow_dispatch:
 permissions:
   contents: write
