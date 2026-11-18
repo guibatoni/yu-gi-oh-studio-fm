@@ -93,8 +93,10 @@ class DescriptionWriteTests(unittest.TestCase):
     def test_strict_error_exposes_all_failed_ids(self):
         with self.assertRaises(DescriptionCompatibilityError) as ctx:
             self.apply({1: 'A' * 50, 2: '{icon:restaurar_lp}'})
-        self.assertEqual(len(ctx.exception.failures), 1)
-        self.assertTrue(ctx.exception.failures[0].startswith('#1:'))
+        # Perfil não-nativo não possui o hook PS1; ambos são rejeitados.
+        self.assertEqual(len(ctx.exception.failures), 2)
+        self.assertEqual([row.split(':')[0] for row in ctx.exception.failures],
+                         ['#1', '#2'])
 
     def test_invalid_description_does_not_modify_source_file(self):
         source = sample_exe()
