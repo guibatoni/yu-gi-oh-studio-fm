@@ -55,6 +55,7 @@ class ImageOptimizerDialog(tk.Toplevel):
         self.denoise = tk.BooleanVar(value=defaults.denoise)
         self.zoom = tk.StringVar(value="200%")
         self.resource = tk.StringVar(value="Arte 102×96")
+        self.show_adjusted = tk.BooleanVar(value=False)
         self._build()
         self._refresh()
 
@@ -127,6 +128,9 @@ class ImageOptimizerDialog(tk.Toplevel):
         ttk.Button(action,text="Recalcular prévia",command=self._refresh).pack(side="left")
         ttk.Button(action,text="Salvar configuração no projeto",command=self._save).pack(side="right")
         ttk.Button(action,text="Fechar",command=self.destroy).pack(side="right",padx=8)
+        ttk.Checkbutton(action,text="Mostrar pré-indexação em vez do original",
+                        variable=self.show_adjusted,
+                        command=self._redraw).pack(side="left",padx=(16,5))
         ttk.Label(action,text="Zoom").pack(side="left",padx=(18,5))
         zoom=ttk.Combobox(action,values=["100%","200%","400%","800%"],
                           state="readonly",textvariable=self.zoom,width=7)
@@ -135,7 +139,7 @@ class ImageOptimizerDialog(tk.Toplevel):
         self.panels=[]
         frames=ttk.Frame(self,padding=8)
         frames.pack(fill="both",expand=True)
-        for col,title in enumerate(("ANTES DA INDEXAÇÃO (após ajuste)", "PS1 REAL — ÍNDICES + CLUT")):
+        for col,title in enumerate(("PNG ORIGINAL (enquadramento sem ajustes)", "PS1 REAL — ÍNDICES + CLUT")):
             frame=ttk.LabelFrame(frames,text=title,padding=5)
             frame.grid(row=0,column=col,sticky="nsew",padx=5)
             canvas=tk.Canvas(frame,width=425,height=310,bg="#161c2b",highlightthickness=0)
@@ -177,9 +181,13 @@ class ImageOptimizerDialog(tk.Toplevel):
 
     def _refresh(self):
         try:
+            from .ps1_image_optimizer import _scaled_rgba
             self.rendered = render_card(self._source,self.art_record,
                                         self.thumb_record,self._options(),
                                         private_clut=False)
+            neutral=ImageOptions(mode="maxima_fidelidade",resample="lanczos")
+            self.reference_art=_scaled_rgba(self._source,self.rendered.art.size,neutral)[0]
+            self.reference_thumb=_scaled_rgba(self._source,self.rendered.thumbnail.size,neutral)[0]
             self._redraw()
         except (OSError,ValueError,tk.TclError,ModError) as exc:
             messagebox.showerror("Conversão PS1",str(exc),parent=self)
@@ -190,8 +198,12 @@ class ImageOptimizerDialog(tk.Toplevel):
         resource = (self.rendered.art if self.resource.get().startswith("Arte")
                     else self.rendered.thumbnail)
         z=int(self.zoom.get().rstrip("%"))//100
+        original=(self.reference_art if resource is self.rendered.art
+                  else self.reference_thumb)
+        if self.show_adjusted.get():
+            original=resource.source_rgba
         self._images.clear()
-        for canvas, pixels in zip(self.panels,(resource.source_rgba,resource.preview_rgba)):
+        for canvas, pixels in zip(self.panels,(original,resource.preview_rgba)):
             payload=png_rgba(pixels,resource.size)
             photo=tk.PhotoImage(data=base64.b64encode(payload).decode("ascii"))
             if z!=1:
@@ -227,6 +239,8 @@ class ImageOptimizerDialog(tk.Toplevel):
         except (OSError,ValueError,ModError) as exc:
             messagebox.showerror("Configuração PS1",str(exc),parent=self)
             return
+        if hasattr(self.master, "_refresh_project"):
+            self.master._refresh_project()
         messagebox.showinfo("Otimização PS1",
                             "Configuração salva. O mesmo pipeline será usado ao gerar o BIN/CUE.",
                             parent=self)
