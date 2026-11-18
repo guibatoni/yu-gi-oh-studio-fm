@@ -190,9 +190,15 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     show_all_chest = chest_show_all(project)
     prices_requested = price_overrides(project)
     win_reward_requested = fixed_win_reward(project)
-    from .ps1_expansion import (PS1_CARD_CAPACITY, compile_expansion, expand_archive,
-                                patch_expansion, inspect_expansion)
+    from .ps1_expansion import (EXPANDED_LEVELS, PS1_CARD_CAPACITY, compile_expansion, expand_archive,
+                                patch_expansion, inspect_expansion, retail_archive_view)
+    from .ps1_campaign_quests import (OVERLAY_SECTORS, build_quest_overlay, inspect_quest_overlay,
+                                     install_quest_handlers, project_quest_catalog, quest_settings,
+                                     reserve_quest_handlers, validate_quest_source)
     from .ps1_supreme import patch_supreme, supreme_cards, validate_slot
+    from .tables import LEVEL_ADDR
+    quests = quest_settings(project)
+    quest_enabled = quests['ativado']
     texts={int(cid):project.get(int(cid)).get('descricao','')
            for cid,rows in getattr(project,'edits',{}).items()
            if 'descricao' in rows and 1<=int(cid)<=722}
@@ -254,7 +260,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                             if metadata.get('ps1_rituals_enabled',False) else {})
             native_traps=metadata.get('ps1_trap_thresholds',{})
             native_terrain=metadata.get('ps1_terrain_boosts',{})
-            needs_wa=(expansion.enabled or requested_art or bool(prices_requested) or native_equips or replacements or native_rituals or mod_plan.needs_wa
+            needs_wa=(quest_enabled or expansion.enabled or requested_art or bool(prices_requested) or native_equips or replacements or native_rituals or mod_plan.needs_wa
                       or god_icon_card or god24_enabled or supreme_ids or native_plan.password_prefix is not None
                       or (native_profile and names)
                       or (native_profile and any('{icon:' in desc for desc in texts.values())))
@@ -276,6 +282,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     expected=getattr(project,'metadata',{}).get('base_sha256',{}).get('slus')
     if not expected or source_digest!=expected:
         raise ModError('SLUS da imagem não corresponde ao executável vinculado ao projeto.')
+    if quest_enabled:
+        validate_quest_source(project, original_wa, native_profile=native_profile)
     if native_plan.password_prefix is not None:
         if original_wa is None:
             raise ModError('Passwords por ID exigem o DATA/WA_MRG.MRG da imagem de origem.')
@@ -323,10 +331,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
 
     description_icons=set()
     descriptions_not_written=[]
-    if texts:
+    regions = None
+    if native_profile and (texts or quest_enabled):
         from .ps1_text import description_regions
+        regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
+    if quest_enabled:
+        quest_handlers, regions = reserve_quest_handlers(patched_exe, regions)
+    if texts:
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
-        regions = description_regions(native_plan, has_lp=mod_plan.has_lp) if native_profile else None
         (patched_exe, written_descriptions, description_icons,
          descriptions_not_written) = _apply_card_descriptions(
             patched_exe, texts, catalog, native_profile=native_profile,
@@ -533,6 +545,19 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_exe, patched_wa = patch_supreme(
             original_exe, patched_exe, patched_wa if patched_wa is not None else original_wa)
 
+    if quest_enabled:
+        wa = patched_wa if patched_wa is not None else original_wa
+        if len(wa) != len(original_wa) or len(wa) % PAYLOAD:
+            raise ModError('Quests PS1 exigem o WA_MRG em setores de dados completos.')
+        quest_sector = len(wa) // PAYLOAD
+        levels = EXPANDED_LEVELS if expansion.enabled else LEVEL_ADDR
+        quest_catalog = project_quest_catalog(project, wa, exe=patched_exe, supreme=bool(supreme_ids))
+        quest_payload, quest_config, quest_table = build_quest_overlay(
+            patched_exe, quest_catalog, quests, level_address=levels)
+        # The existing transfer adapter shifts subsequent requests by 18
+        # thumbnails. Keep the overlay before the extra full-art blocks.
+        patched_wa = wa + quest_payload
+
     expansion_report = expansion.report()
     if expansion.enabled:
         if not expected_wa:
@@ -544,7 +569,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                                     project, expansion, prefix=native_plan.password_prefix,
                                     art_reports=art_reports)
         patched_exe = patch_expansion(original_exe, patched_exe, project, expansion,
-                                      wa_sectors=len(original_wa) // PAYLOAD)
+                                      wa_sectors=len(original_wa) // PAYLOAD + (OVERLAY_SECTORS if quest_enabled else 0))
         expansion_report.update(inspect_expansion(patched_exe))
         expansion_report['titulos_gravados'] = list(expansion.ids)
         written_titles.extend(expansion.ids)
@@ -559,6 +584,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         if expansion_report['status'] != 'aplicado':
             raise ModError('Expansão incompleta após instalar as tabelas e os adaptadores nativos.')
         chest_catalog_report = inspect_chest_catalog(patched_exe)
+    if quest_enabled:
+        patched_exe = install_quest_handlers(patched_exe, quest_handlers, quest_sector)
 
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
     if not native_profile and patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
@@ -578,10 +605,12 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     safe_name=re.sub(r'[^A-Za-z0-9À-ÿ()\[\] .,_+-]', '_', original_bin.stem)
     safe_name=safe_name.strip(' .')[:96].rstrip(' .') or 'JOGO'
     name_id=hashlib.sha256(original_bin.name.encode('utf-8')).hexdigest()[:10]
-    bin_file=base/f'FM_STUDIO_TESTE_{safe_name}_{name_id}.bin'
+    suffix = '_QUESTS' if quest_enabled else ''
+    bin_file=base/f'FM_STUDIO_TESTE_{safe_name}_{name_id}{suffix}.bin'
     cue_file=bin_file.with_suffix('.cue')
     meta_file=bin_file.with_suffix('.json')
-    target_paths=(bin_file,cue_file,meta_file)
+    quest_paths = (bin_file.with_suffix('.quests.json'), bin_file.with_suffix('.quests.bin')) if quest_enabled else ()
+    target_paths=(bin_file,cue_file,meta_file,*quest_paths)
     if source_image in target_paths or original_bin in target_paths:
         raise ModError('A imagem original não pode ser usada como arquivo de saída.')
     if any(target.is_symlink() for target in target_paths):
@@ -659,8 +688,23 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                                'A imagem anterior foi preservada.')
             if rank_hud_report['status'] == 'aplicado' and inspect_rank_hud(reread_exe)['status'] != 'aplicado':
                 raise ModError('Rank no HUD: a extensão diverge no BIN final.')
-            if patched_wa is not None and b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))!=patched_wa:
-                raise ModError('WA_MRG não corresponde após reempacotamento.')
+            if patched_wa is not None:
+                reread_wa = b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))
+                if reread_wa != patched_wa:
+                    raise ModError('WA_MRG não corresponde após reempacotamento.')
+            quest_report = {'status': 'desativado'}
+            if quest_enabled:
+                quest_report = inspect_quest_overlay(reread_exe, reread_wa, expanded=expansion.enabled)
+                if (quest_report['status'] != 'aplicado'
+                        or quest_report['sha256_tabela'] != hashlib.sha256(quest_table).hexdigest()):
+                    raise ModError('O código e os requisitos de campanha divergem no BIN final.')
+                reread_catalog = project_quest_catalog(
+                    project, retail_archive_view(reread_wa) if expansion.enabled else reread_wa,
+                    exe=reread_exe, level_address=levels, supreme=bool(supreme_ids))
+                if reread_catalog.fingerprint() != quest_config['sha256_dados']:
+                    raise ModError('As fontes de doação diferem dos drops, cartas ou pools do BIN final.')
+                quest_report.update(seed=quest_config['seed'], requisitos=str(quest_paths[0]),
+                                    tabela=str(quest_paths[1]))
 
         stage_cue.write_text(
             f'FILE "{bin_file.name}" BINARY\n'
@@ -691,6 +735,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'ia_nativa_ps1':ai_report,
                 'contador_lp_ps1':lp_hud_report,
                 'rank_hud_ps1':rank_hud_report,
+                'quests_campanha_ps1':quest_report,
                 'catalogo_bau_ps1':chest_catalog_report,
                 'catalogo_bau_completo_ativado':show_all_chest,
                 'precos_password_ps1':price_report,
@@ -780,6 +825,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         # no mesmo volume. Se o ePSXe mantiver o BIN travado, não perdemos a
         # última versão de teste.
         sidecars=((cue_file,stage_cue),(meta_file,stage_meta))
+        if quest_enabled:
+            rules_path, table_path = (workspace / path.name for path in quest_paths)
+            rules_path.write_text(json.dumps(quest_config, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+            table_path.write_bytes(quest_table)
+            sidecars += tuple(zip(quest_paths, (rules_path, table_path)))
         old_sidecars={}
         for dest,_ in sidecars:
             backup=workspace/(dest.name+'.anterior')

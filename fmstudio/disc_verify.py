@@ -57,6 +57,7 @@ def verify_image_stats(project, source):
     from .ps1_expansion import (inspect_expansion, EXPANDED_LEVELS, PS1_CARD_CAPACITY,
                                 retail_archive_view)
     from .ps1_supreme import inspect_supreme, supreme_cards
+    from .ps1_campaign_quests import inspect_quest_overlay, quest_settings
     config=getattr(project,'metadata',{}) or {}
     profile=ps1_supports_god24(project)
     mod_plan=compile_mod(project,profile=profile,
@@ -73,10 +74,13 @@ def verify_image_stats(project, source):
             capacity = PS1_CARD_CAPACITY if expanded else CARD_COUNT
             god_display = inspect_god_display(exe)
             supreme = inspect_supreme(exe)
+            quests = inspect_quest_overlay(exe)
             if ('aguardando_textura' in (god_display['status'], supreme['status'])
-                    or mod_plan.needs_wa or expanded):
+                    or quests['status'] == 'aguardando_wa' or mod_plan.needs_wa or expanded):
                 entry = entries.get('DATA/WA_MRG.MRG')
                 wa = b''.join(image.read_entry(entry)) if entry else b''
+                if quests['status'] == 'aguardando_wa':
+                    quests = inspect_quest_overlay(exe, wa, expanded=expanded)
                 if expanded:
                     wa = retail_archive_view(wa)
             if god_display['status'] == 'aguardando_textura':
@@ -162,6 +166,7 @@ def verify_image_stats(project, source):
             'god24_exibicao_tipo':god_display,
             'efeitos_nativos_ps1':runtime,
             'rank_hud_ps1':inspect_rank_hud(exe),
+            'quests_campanha_ps1':{**quests, 'ativado_no_projeto': quest_settings(project)['ativado']},
             'supreme_ps1':supreme,
             'expansao_cartas_ps1':expansion,
             'catalogo_bau_ps1':inspect_chest_catalog(exe) if profile else {'status':'perfil_incompativel','cartas':0},
@@ -204,6 +209,11 @@ def describe(result):
         text.append('Rank ao vivo ausente. Gere outro BIN/CUE a partir da imagem de origem.')
     elif rank == 'divergente':
         text.append('Rank ao vivo incompleto na cópia. Gere outro BIN/CUE.')
+    quests = result.get('quests_campanha_ps1', {})
+    if quests.get('status') == 'aplicado':
+        text.append(f'Quests de doação confirmadas no BIN para {quests["duelistas"]} duelistas.')
+    elif quests.get('ativado_no_projeto'):
+        text.append('As quests do projeto não foram encontradas completas no BIN selecionado.')
     if runtime.get('status')=='aplicado':
         text.append(f'Efeitos nativos conferidos na cópia: {runtime["quantidade"]}.')
         fusions = runtime.get('fusoes', [])
