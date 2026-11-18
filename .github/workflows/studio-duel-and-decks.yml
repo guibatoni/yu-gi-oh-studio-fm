@@ -8,6 +8,7 @@ on:
       - feature/studio-v1.8.6-attribute-bonuses
       - feature/studio-v1.8.8-full-chest-catalog
       - feature/studio-expanded-ps1-cards
+      - fix/studio-v1.9.1-native-supreme
   workflow_dispatch:
 permissions:
   contents: write
@@ -51,11 +52,12 @@ jobs:
           github.ref == 'refs/heads/feature/studio-v1.8.5-entry-markers' ||
           github.ref == 'refs/heads/feature/studio-v1.8.6-attribute-bonuses' ||
           github.ref == 'refs/heads/feature/studio-v1.8.8-full-chest-catalog' ||
-          github.ref == 'refs/heads/feature/studio-expanded-ps1-cards'
+          github.ref == 'refs/heads/feature/studio-expanded-ps1-cards' ||
+          github.ref == 'refs/heads/fix/studio-v1.9.1-native-supreme'
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add fmstudio/ps1_runtime_blob.py fmstudio/ps1_expanded_runtime_blob.py
+          git add fmstudio/ps1_runtime_blob.py fmstudio/ps1_expanded_runtime_blob.py fmstudio/ps1_supreme_blob.py
           if ! git diff --cached --quiet; then
             git commit -m "build: recompilar runtime MIPS"
             git push origin "HEAD:${GITHUB_REF_NAME}"

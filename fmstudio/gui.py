@@ -2869,6 +2869,7 @@ class Studio(tk.Tk):
             'conflito': 'Rank no HUD pendente. A rotina de desenho do BIN já foi alterada.\n',
             'perfil_incompativel': 'Rank no HUD do PS1 requer a imagem original Drop x15 compatível.\n',
         }.get(manifest.get('rank_hud_ps1', {}).get('status'), '')
+        supreme = manifest.get('supreme_ps1', {})
         simplified=sum(bool(row.get('acentos_simplificados')) for row in manifest['descricoes_aplicadas'])
         messagebox.showinfo(f'Imagem de teste {action}',
             f'Imagem de teste {action} com sucesso.\n\n'
@@ -2890,6 +2891,8 @@ class Studio(tk.Tk):
                if mod.get('bloqueio_turno_inicial') else '')
             + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
             + rank_hud
+            + (f'Supreme (+700) conferida no BIN em {len(supreme["ids"])} carta(s).\n'
+               if supreme.get('status') == 'aplicado' else '')
             + (f'Baú com {manifest["catalogo_bau_ps1"]["cartas"]} cartas, inclusive as sem cópias.\n'
                if manifest.get('catalogo_bau_ps1', {}).get('status') == 'aplicado' else '')
             + (f'Cartas novas gravadas: {len(manifest["expansao_cartas_ps1"]["ids_adicionais"])}. Expansão experimental até #740.\n'

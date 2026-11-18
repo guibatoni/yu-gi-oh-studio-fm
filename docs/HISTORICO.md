@@ -1,3 +1,13 @@
+## v1.9.1 — Guardian Star Supreme no BIN/CUE
+
+- Corrige o erro ao gerar a imagem com Supreme em uma carta adicional.
+- Grava Supreme nos dois slots de cartas até #740 no Original Drop x15,
+  com nome, ícone, animação e bônus de combate de +700 contra as estrelas
+  originais. Supreme contra Supreme empata.
+- Confere as estrelas, o código e a textura na imagem gerada. Mantém
+  o ID 16 dos projetos e registra 11 nos campos nativos de quatro bits.
+- Suporte experimental. Validação de partida completa no ePSXe pendente.
+
 ## v1.9.0 — Cartas PS1 #723–#740 (experimental)
 
 - Dezoito IDs adicionais com baú de 740 posições, atributos/textos próprios,

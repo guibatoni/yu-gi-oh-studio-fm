@@ -60,6 +60,21 @@ class StudioCoreTests(unittest.TestCase):
         self.assertEqual(self.p.get(16)['raridade'],'deus')
         self.assertEqual(hashlib.sha256(self.file.read_bytes()).hexdigest(),source_sha)
 
+    def test_original_card_supreme_export_requires_the_matching_bin_profile(self):
+        from unittest.mock import patch
+        from fmstudio.tables import PS1_SUPREME, SUPREME, decode_cards
+
+        self.p.set_card(1, {'guardian_2_id': SUPREME})
+        with self.assertRaisesRegex(ModError, 'Supreme no PS1 exige o BIN original Drop x15'):
+            self.p.export()
+        source_hash = hashlib.sha256(self.file.read_bytes()).hexdigest()
+        with patch('fmstudio.ps1_god24_chest.SOURCE_SHA256', source_hash):
+            output, manifest = self.p.export()
+        self.assertEqual(manifest['supreme_ps1'], {'status': 'requer_gerar_bin_cue', 'ids': [1]})
+        cards, _ = decode_cards((output/'build_local'/'SLUS_014.11').read_bytes())
+        self.assertEqual(cards[0]['guardian_2_id'], PS1_SUPREME)
+        self.assertEqual(Project.open(self.p.folder).get(1)['guardian_2_id'], SUPREME)
+
     def test_saved_god24_types_write_exact_stats_on_supported_profile(self):
         from unittest.mock import patch
         from fmstudio.core import ps1_god24_card_ids

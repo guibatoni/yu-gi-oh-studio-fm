@@ -11,7 +11,7 @@ import hashlib
 import struct
 import unicodedata
 
-from .tables import CARD_COUNT, EXE_DELTA, STATS_ADDR, LEVEL_ADDR
+from .tables import CARD_COUNT, EXE_DELTA, STATS_ADDR, LEVEL_ADDR, GUARDIAN_FIELDS, encode_ps1_star
 
 PS1_CARD_CAPACITY = 740
 EXTRA_SLOTS = PS1_CARD_CAPACITY - CARD_COUNT
@@ -73,6 +73,8 @@ def pack_stats(cid, card):
     from .core import ModError
     values = {key: int(card.get(key, 0)) for key in (
         'ataque', 'defesa', 'tipo_id', 'guardian_1_id', 'guardian_2_id', 'nivel', 'atributo_id')}
+    for key in GUARDIAN_FIELDS:
+        values[key] = encode_ps1_star(values[key])
     for key in ('ataque', 'defesa'):
         if not 0 <= values[key] <= 5110 or values[key] % 10:
             raise ModError(f'#{cid}: {key} nativo exige múltiplos de 10 entre 0 e 5110; '

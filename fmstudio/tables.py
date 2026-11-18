@@ -40,6 +40,8 @@ ATTR_NAMES = ("Light", "Dark", "Earth", "Water", "Fire", "Wind")
 RETAIL_STAR_NAMES = ("", "Mars", "Jupiter", "Saturn", "Uranus", "Pluto", "Neptune", "Mercury", "Sun", "Moon", "Venus")
 # 11–15 may occur in imported data. Preserve them as reserved values.
 SUPREME = 16
+PS1_SUPREME = 11  # Reserved only in a BIN with the verified Supreme extension.
+GUARDIAN_FIELDS = ('guardian_1_id', 'guardian_2_id')
 STAR_NAMES = RETAIL_STAR_NAMES + ("",) * 5 + ("Supreme",)
 # Nomes da grade retail, documentados externamente; NÃO decodificados desta imagem.
 DUELIST_NAMES_REFERENCE = (
@@ -65,25 +67,36 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def decode_cards(slus: bytes, *, capacity: int = CARD_COUNT, level_address: int = LEVEL_ADDR) -> tuple[list[dict], list[str]]:
+def encode_ps1_star(star: int) -> int:
+    return PS1_SUPREME if star == SUPREME else star
+
+
+def decode_cards(slus: bytes, *, capacity: int = CARD_COUNT, level_address: int = LEVEL_ADDR,
+                 supreme: bool = False) -> tuple[list[dict], list[str]]:
     if slus[:8] != b"PS-X EXE":
         raise ValueError("SLUS_014.11 não possui cabeçalho PS-X EXE válido")
     first = STATS_ADDR - EXE_DELTA
     _need(slus, first, capacity * 4, "tabela de estatísticas")
     _need(slus, level_address - EXE_DELTA + capacity, 1, "tabela de níveis")
     cards, notes = [], []
+    stars = dict(enumerate(RETAIL_STAR_NAMES))
+    if supreme:
+        stars[SUPREME] = STAR_NAMES[SUPREME]
     for cid in range(1, capacity + 1):
         raw = struct.unpack_from("<I", slus, first + (cid - 1) * 4)[0]
         lv_attr = slus[level_address - EXE_DELTA + cid]
         type_id, attr = (raw >> 26) & 31, lv_attr >> 4
         s1, s2 = (raw >> 22) & 15, (raw >> 18) & 15
+        if supreme:
+            s1 = SUPREME if s1 == PS1_SUPREME else s1
+            s2 = SUPREME if s2 == PS1_SUPREME else s2
         cards.append({
             "id": cid, "ataque": (raw & 511) * 10, "defesa": ((raw >> 9) & 511) * 10,
             "tipo_id": type_id, "tipo_referencia": TYPE_NAMES[type_id] if type_id < len(TYPE_NAMES) else "(não mapeado)",
             "atributo_id": attr, "atributo_referencia": ATTR_NAMES[attr] if attr < len(ATTR_NAMES) else "(não mapeado)",
             "nivel": lv_attr & 15, "guardian_1_id": s1,
-            "guardian_1_referencia": RETAIL_STAR_NAMES[s1] if s1 < len(RETAIL_STAR_NAMES) else "(não mapeado)",
-            "guardian_2_id": s2, "guardian_2_referencia": RETAIL_STAR_NAMES[s2] if s2 < len(RETAIL_STAR_NAMES) else "(não mapeado)",
+            "guardian_1_referencia": stars.get(s1, "(não mapeado)"),
+            "guardian_2_id": s2, "guardian_2_referencia": stars.get(s2, "(não mapeado)"),
             "valor_hex": f"{raw:08X}", "offset_no_slus": f"0x{first + (cid - 1) * 4:X}",
         })
     weird = sum(1 for c in cards if c["tipo_id"] > 23 or c["atributo_id"] > 5)

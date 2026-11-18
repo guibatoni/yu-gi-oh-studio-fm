@@ -127,6 +127,8 @@ def inspect(exe: bytes, wa: bytes | None = None) -> dict:
     regions = [exe[offset:offset + len(before)] for offset, before, _ in REGIONS]
     status = 'assinatura_divergente'
     if exe.startswith(b'PS-X EXE'):
+        from .ps1_supreme import sprite_without_supreme
+        regions[1] = sprite_without_supreme(exe, regions[1])
         original = [before for _, before, _ in REGIONS]
         wanted = [after for _, _, after in REGIONS]
         from . import ps1_runtime_blob, ps1_expanded_runtime_blob

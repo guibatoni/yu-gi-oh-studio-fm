@@ -12,7 +12,8 @@ from tempfile import NamedTemporaryFile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .tables import (CARD_COUNT, EXE_DELTA, LEVEL_ADDR, STATS_ADDR, SUPREME, decode_all,
+from .tables import (CARD_COUNT, EXE_DELTA, GUARDIAN_FIELDS, LEVEL_ADDR, STATS_ADDR,
+                     SUPREME, decode_all, encode_ps1_star,
                      sha256, TYPE_NAMES, ATTR_NAMES, STAR_NAMES)
 from .disc import DiscReader, DiscError
 from .expanded import GOD_TYPE_ID
@@ -205,7 +206,7 @@ def legacy_god_description_icon_card(project) -> int | None:
 def ps1_unwritable_numeric_edits(project) -> list[str]:
     """Recusa edição numérica que o gerador anterior ignorava silenciosamente."""
     errors=[]
-    supports_god=ps1_supports_god24(project)
+    native_profile=ps1_supports_god24(project)
     for key, fields in sorted(getattr(project,'edits',{}).items(),key=lambda pair:int(pair[0])):
         cid=int(key)
         if cid < 1 or cid > CARD_COUNT or not (set(fields)&set(NUMERIC)):
@@ -216,7 +217,7 @@ def ps1_unwritable_numeric_edits(project) -> list[str]:
         typ=int(current['tipo_id'])
         attr=int(current['atributo_id'])
         name=str(current.get('nome') or '')
-        if typ == GOD_TYPE_ID and not supports_god:
+        if typ == GOD_TYPE_ID and not native_profile:
             errors.append(f'Carta #{cid:03d} {name}: God 24 no PS1 exige '
                           'o executável do perfil Drop x15 vinculado ao projeto.')
         elif typ > GOD_TYPE_ID:
@@ -226,9 +227,12 @@ def ps1_unwritable_numeric_edits(project) -> list[str]:
                 f'Carta #{cid:03d} {name}: atributo {attr} não é suportado '
                 'na exportação retail PS1.'
             )
-        if any(int(current.get(key, 0)) >= SUPREME for key in ('guardian_1_id', 'guardian_2_id')):
-            errors.append(f'Carta #{cid:03d} {name}: Supreme está disponível no Studio. '
-                          'O campo de 4 bits do BIN/CUE exige uma estrela com ID de 0 a 15.')
+        stars = tuple(int(current.get(key, 0)) for key in GUARDIAN_FIELDS)
+        if any(not 0 <= star <= SUPREME for star in stars):
+            errors.append(f'Carta #{cid:03d} {name}: código de Guardian Star inválido para o PS1.')
+        elif SUPREME in stars and not native_profile:
+            errors.append(f'Carta #{cid:03d} {name}: Supreme no PS1 exige o BIN original Drop x15 '
+                          'reconhecido pelo Studio. A estrela continua salva no projeto.')
     return errors
 
 
@@ -1016,6 +1020,7 @@ class Project:
             if hashlib.sha256(data).hexdigest() != self.metadata.get('base_sha256',{}).get('slus'):
                 raise ModError('Executável original diverge do hash salvo; exportação bloqueada')
             byte_diffs = []
+            supreme_prepared = []
             for row in changes:
                 cid = row['id']
                 if cid > CARD_COUNT or not (set(row) & set(NUMERIC)):
@@ -1026,10 +1031,14 @@ class Project:
                 if f'{before:08X}' != base['valor_hex'].upper():
                     raise ModError(f'Proteção: bytes originais inesperados na carta #{cid}')
                 current = self.get(cid)
+                stars = [int(current[key]) for key in GUARDIAN_FIELDS]
+                if SUPREME in stars:
+                    supreme_prepared.append(cid)
+                star_1, star_2 = map(encode_ps1_star, stars)
                 raw = (before & 0x80000000) | \
                       ((int(current['tipo_id']) & 31) << 26) | \
-                      ((int(current['guardian_1_id']) & 15) << 22) | \
-                      ((int(current['guardian_2_id']) & 15) << 18) | \
+                      ((star_1 & 15) << 22) | \
+                      ((star_2 & 15) << 18) | \
                       (((int(current['defesa']) // 10) & 511) << 9) | \
                       ((int(current['ataque']) // 10) & 511)
                 if raw != before:
@@ -1052,6 +1061,8 @@ class Project:
             manifest['slus_modificado_sha256'] = hashlib.sha256(data).hexdigest()
             if ps1_supports_god24(self) and any(cid <= CARD_COUNT for cid in ps1_god24_card_ids(self)):
                 manifest['tipo_god_status'] = 'TIPO_24_GRAVADO_NO_SLUS_AUXILIAR'
+            if supreme_prepared:
+                manifest['supreme_ps1'] = {'status': 'requer_gerar_bin_cue', 'ids': supreme_prepared}
             manifest['observacao_executavel'] = ('Executável auxiliar modificado localmente; NÃO é imagem BIN/CUE '
                 'jogável e não deve ser distribuído. Ainda faltam empacotamento do disco e testes in-game.')
         _write_json_atomic(output/'manifesto.json',manifest)

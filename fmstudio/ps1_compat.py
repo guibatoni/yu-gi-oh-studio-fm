@@ -6,7 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from .tables import CARD_COUNT, SUPREME
+from .tables import CARD_COUNT
 from .ps1_content import name_patch_info, description_patch_info
 from .core import ACTIONS, ModError, ps1_supports_god24
 from .expanded import GOD_TYPE_ID
@@ -38,7 +38,8 @@ def audit(project) -> dict:
     counts['decks_fixos_ps1'] = len(native_plan.fixed_decks)
     counts['fusoes_personalizadas_ps1'] = len(native_plan.fusions)
     blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
-    from .ps1_expansion import compile_expansion
+    from .ps1_expansion import PS1_CARD_CAPACITY, compile_expansion
+    from .ps1_supreme import supreme_cards, validate_slot
     try:
         expansion = compile_expansion(project, profile=native_profile and wa_pinned)
         extra_ids = set(expansion.ids)
@@ -51,6 +52,18 @@ def audit(project) -> dict:
                          'baú, save, estatísticas, arte, modelos e passwords por ID')
         counts['cartas_extras_ps1'] = len(extra_ids)
         counts['estatisticas'] += len(extra_ids)
+    capacity = PS1_CARD_CAPACITY if extra_ids else CARD_COUNT
+    supreme_ids = supreme_cards(project, capacity)
+    if supreme_ids:
+        if native_profile:
+            try:
+                validate_slot(project, capacity)
+                supported.append(f'Supreme PS1 em {len(supreme_ids)} carta(s), com ícone e bônus de +700')
+            except ModError as exc:
+                blocked.append(str(exc))
+        else:
+            blocked.extend(f'#{cid}: Supreme no PS1 exige o Original Drop x15 reconhecido.'
+                           for cid in supreme_ids)
     if mod_plan.player_lp > 9999:
         if native_profile:
             supported.append('Contador LP de cinco dígitos para ambos no BIN/CUE PS1 (teste visual ePSXe pendente)')
@@ -74,18 +87,16 @@ def audit(project) -> dict:
     descriptions={cid: project.get(cid).get('descricao', '') for cid in extra_ids}
     for key,edits in sorted(project.edits.items(),key=lambda item:int(item[0])):
         cid=int(key); current=project.get(cid)
-        if current.get('virtual'):
+        if current.get('virtual') and cid not in extra_ids:
             continue
         changed=set(edits)
         numeric=changed & {'ataque','defesa','tipo_id','atributo_id','nivel','guardian_1_id','guardian_2_id'}
-        if numeric:
+        if numeric and cid not in extra_ids and (native_profile or cid not in supreme_ids):
             typ=int(current.get('tipo_id',0))
             if cid>CARD_COUNT or typ>GOD_TYPE_ID or int(current.get('atributo_id',0))>5:
                 blocked.append(f'#{cid}: carta adicional ou tipo/atributo incompatível com o PS1')
             elif typ == GOD_TYPE_ID and not native_profile:
                 blocked.append(f'#{cid}: God 24 no PS1 exige o perfil Drop x15 vinculado ao projeto.')
-            elif any(int(current.get(key,0)) == SUPREME for key in ('guardian_1_id','guardian_2_id')):
-                blocked.append(f'#{cid}: Supreme usa uma Guardian Star do Studio.')
             elif any(
                     int(current[stat])>5110 or int(current[stat])%10
                     for stat in ('ataque','defesa')):
@@ -97,7 +108,7 @@ def audit(project) -> dict:
                 supported.append(f'#{cid}: estatísticas de carta original')
                 if typ == GOD_TYPE_ID:
                     supported.append(f'#{cid}: God 24 com nome, ícone e jogabilidade de monstro')
-        if 'nome' in changed:
+        if 'nome' in changed and cid not in extra_ids:
             if known:
                 try:
                     name_patch_info(exe,cid,current.get('nome',''))
@@ -122,8 +133,8 @@ def audit(project) -> dict:
                 blocked.append(f'#{cid}: descrição exige SLUS verificado')
         if changed & {'raridade','cor_nome'}:
             counts['classes_cores']+=1
-            if not native_profile or cid > CARD_COUNT:
-                blocked.append(f'#{cid}: cores de tier no BIN/CUE exigem carta original e perfil Drop x15.')
+            if not native_profile or (cid > CARD_COUNT and cid not in extra_ids):
+                blocked.append(f'#{cid}: cores de tier no BIN/CUE exigem carta nativa e perfil Drop x15.')
     if descriptions:
         from .ps1_text import patch_descriptions
         catalog={cid:project.get(cid) for cid in project.cards}
@@ -229,6 +240,7 @@ def audit(project) -> dict:
         'raridade_e_cor_nomes':'Cores de tier salvo por carta no Drop x15',
         'icones_personalizados':'Graváveis nas descrições no perfil Drop x15',
         'cartas_maiores_722':'EXPANSAO_NATIVA_EXPERIMENTAL_723_740; outros IDs permanecem no Studio',
+        'guardian_star_supreme':'Ícone, nome e bônus de +700 no perfil Drop x15',
         'tipo_god':'O tipo 24 ativa automaticamente o nome, o ícone e o roteamento de monstro no Drop x15.',
         'buffs_auras_cemiterio':'Bônus de campo com cartas viradas para baixo, deck inicial e cemitério no Drop x15',
         'equipamentos_imunidades':'Equipamentos com ATK e proteção, imunidades e indestrutibilidade no Drop x15',

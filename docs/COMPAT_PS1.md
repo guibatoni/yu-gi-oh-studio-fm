@@ -1,10 +1,12 @@
-# Atualização de compatibilidade — v1.9.0
+# Atualização de compatibilidade — v1.9.1
 
 O perfil **Original Drop x15** dispõe de expansão nativa experimental para
 **#723–#740**. Ela inclui baú/save, atributos, textos, imagens, modelos e
 comportamentos herdados para monstros, magias, traps, equips e rituais.
 Fusões personalizadas e decks fixos de 40 cartas aceitam os IDs novos.
 Pools ponderados/drops e a Library separada conservam o formato original.
+Supreme pode ocupar qualquer um dos dois slots de Guardian Star em cartas
+nativas. A imagem recebe o ícone e o bônus de +700 contra as estrelas originais.
 
 Veja [capacidade, criação, validação e limites](EXPANSAO_PS1_740.md).
 A execução completa no ePSXe permanece pendente. A documentação abaixo

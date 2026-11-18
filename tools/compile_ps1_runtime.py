@@ -45,6 +45,8 @@ def main():
         inputs = [SOURCES / 'runtime.c', SOURCES / 'hooks.S', SOURCES / 'rank_hud.c']
         if args.expanded:
             inputs.append(SOURCES / 'expansion.S')
+        else:
+            inputs.append(SOURCES / 'supreme.S')
         for src in inputs:
             obj = work / (src.stem + '.o')
             subprocess.run([args.cc, *flags, '-c', str(src), '-o', str(obj)], check=True)
@@ -70,6 +72,7 @@ def main():
         grave_filters = section_bytes('.runtime_grave_filters')
         expansion = section_bytes('.runtime_expansion') if args.expanded else b''
         expansion_aux = section_bytes('.runtime_expansion_aux') if args.expanded else b''
+        supreme = section_bytes('.runtime_supreme') if not args.expanded else b''
 
     pieces = ['"""Gerado por tools/compile_ps1_runtime.py a partir de tools/ps1."""\n',
               f'RUNTIME_SHA256 = {hashlib.sha256(content).hexdigest()!r}',
@@ -101,6 +104,17 @@ def main():
     pieces.append('""")\n')
     output = OUTPUT.with_name('ps1_expanded_runtime_blob.py') if args.expanded else OUTPUT
     output.write_text('\n'.join(pieces), encoding='utf-8', newline='\n')
+    if not args.expanded:
+        entries = ('SupremeMatchup', 'SupremeTextIcon', 'SupremeFieldIcon',
+                   'SupremeSprite', 'SupremeGather', 'SupremeDisplayBonus')
+        supreme_parts = [pieces[0], f'BASE = 0x{symbols["__supreme_start"]:08X}',
+                         f'END = 0x{symbols["__supreme_end"]:08X}', 'ENTRY_POINTS = {']
+        supreme_parts.extend(f'    {name!r}: 0x{symbols[name]:08X},' for name in entries)
+        supreme_parts.extend(('}', 'CODE = bytes.fromhex("""'))
+        supreme_parts.extend(supreme[i:i+32].hex(' ') for i in range(0, len(supreme), 32))
+        supreme_parts.append('""")\n')
+        output.with_name('ps1_supreme_blob.py').write_text(
+            '\n'.join(supreme_parts), encoding='utf-8', newline='\n')
     print(f'{len(content)} bytes de código, reserva até 0x{symbols["__runtime_end"]:08X}')
 
 

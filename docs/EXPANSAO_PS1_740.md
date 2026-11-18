@@ -72,7 +72,9 @@ configurados antes de consultar a tabela original de 722 cartas.
 - **#741 em diante continuam no Studio**, com criação, persistência, receitas e
   simulação. Não são IDs nativos desta expansão.
 - Os valores nativos continuam sendo **0–5110, em múltiplos de 10**, para ATK/DEF,
-  nível de 0–15 e estrelas de quatro bits. Supreme continua no simulador.
+  nível de 0–15 e estrelas de quatro bits. Desde a v1.9.1, o perfil Drop x15
+  usa o código nativo reservado 11 para Supreme e mantém o ID 16 no projeto.
+  O BIN recebe o ícone, nome e regra de +700 contra estrelas originais.
   Valores maiores são preservados no projeto e impedem a exportação nativa
   daquela configuração, sem truncamento silencioso.
 - Nomes usam a fonte do PS1 e o espaço disponível no banco. O gerador simplifica
