@@ -23,6 +23,8 @@ class OriginalPassword:
 
 
 def original_passwords(project) -> dict[int, OriginalPassword]:
+    from .ps1_economy import price_overrides
+    overrides = price_overrides(project)
     path = project.folder / 'base' / 'senhas.csv'
     if not path.is_file():
         return {}
@@ -34,7 +36,7 @@ def original_passwords(project) -> dict[int, OriginalPassword]:
         cid = positive_int(row.get('carta_id'), 'ID do password')
         if 1 <= cid <= CARD_COUNT and cid in project.cards and not project.cards[cid].get('virtual'):
             cost = (row.get('custo_starchips') or '').strip()
-            records[cid] = OriginalPassword(code, int(cost) if cost else None)
+            records[cid] = OriginalPassword(code, overrides.get(cid, int(cost) if cost else None))
     return records
 
 

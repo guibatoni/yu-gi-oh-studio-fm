@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 from random import SystemRandom
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .core import ModError, ps1_supports_god24, simulation_nonnegative_int
 from .deck_generator import (DIFFICULTIES, STARTER_MAX_POWER, SUPPORT_TYPES, duelist_preset,
@@ -15,7 +15,12 @@ from .gui import ACCENT, ROW_ALT, card_row_tags, compact_number, sortable_column
 from .mod_data import CONFIG_KEY, MONSTER_TYPES, STOCK_STARTER
 from .passwords import (
     PS1_ID_PREFIX, chest_cards, grant_card, id_code, import_original_passwords, ps1_id_code,
-    redeem_id, redeem_original, set_ps1_id_passwords,
+    redeem_id, redeem_original, set_ps1_id_passwords, original_passwords,
+)
+from .ps1_economy import (
+    CHEST_VISIBILITY_KEY, PRICE_LIMIT, STAR_LIMIT, chest_show_all,
+    fixed_win_reward, price_overrides, set_chest_show_all,
+    set_password_price, reset_password_price, set_win_reward,
 )
 from .tables import CARD_COUNT, DECK_SIZE, TYPE_NAMES
 
@@ -108,7 +113,7 @@ class PasswordPanel(ttk.Frame):
             prefix = self.project.metadata.get(PS1_ID_PREFIX)
             self.copy_ps1.configure(state='disabled' if prefix is None else 'normal')
             self.status.set('Digite o ID da carta ou selecione uma linha.' if prefix is None else
-                            f'No BIN/CUE, digite {prefix:05d} e o ID com três dígitos. Custo de 1 Star Chip.')
+                            f'No BIN/CUE, digite {prefix:05d} e o ID com três dígitos. Preços configuráveis na aba Estrelas.')
         elif not self.records:
             self.status.set('Carregue a tabela original do BIN/CUE vinculado ao projeto.')
         else:
@@ -178,13 +183,19 @@ class PasswordsDialog(tk.Toplevel):
         super().__init__(owner)
         self.title('Passwords e baú')
         self.transient(owner)
-        self.geometry('710x500')
-        self.minsize(580, 395)
+        self.geometry('850x640')
+        self.minsize(680, 480)
         self.project, self.cards = project, cards
         self.studio, self.changed = studio, changed
         self.into_starter = tk.BooleanVar()
         self.starter = tk.StringVar(value='Deck do baú')
         self.ps1_enabled = tk.BooleanVar(value=PS1_ID_PREFIX in project.metadata)
+        self.ps1_chest_visible = tk.BooleanVar(value=chest_show_all(project))
+        self.chest_show_zero = tk.BooleanVar(value=True)
+        self.price_query = tk.StringVar()
+        initial_reward = fixed_win_reward(project)
+        self.reward_mode = tk.StringVar(value='fixo' if initial_reward is not None else 'por_rank')
+        self.reward_amount = tk.StringVar(value=str(initial_reward if initial_reward is not None else 5))
 
         tabs = ttk.Notebook(self)
         tabs.pack(fill='both', expand=True, padx=10, pady=(10, 5))
@@ -209,6 +220,9 @@ class PasswordsDialog(tk.Toplevel):
                                  grant=self._grant, project=project)
         chest = ttk.Frame(tabs, padding=9)
         self.chest_search = tk.StringVar()
+        ttk.Checkbutton(
+            chest, text='Mostrar todas as cartas no Studio (inclusive 0/0)',
+            variable=self.chest_show_zero, command=self._refresh_chest).pack(anchor='w')
         ttk.Label(chest, text='ID, nome, tipo ou descrição').pack(anchor='w')
         ttk.Entry(chest, textvariable=self.chest_search).pack(fill='x')
         self.chest = _tree(chest, [('id', 'ID', 70), ('nome', 'Carta', 290), ('qtd', 'Cópias no baú', 100)],
@@ -219,6 +233,39 @@ class PasswordsDialog(tk.Toplevel):
         tabs.add(self.original, text='Códigos originais')
         tabs.add(self.ids, text='Códigos por ID')
         tabs.add(chest, text='Baú')
+
+        prices = ttk.Frame(tabs, padding=9)
+        ttk.Label(prices,text='Custo em Star Chips para comprar cada carta pelo Password do PS1.').pack(anchor='w')
+        ttk.Label(prices,text='IDs 1–722 e cartas expandidas 723–740. O preço original permanece no backup.').pack(anchor='w')
+        ttk.Entry(prices, textvariable=self.price_query).pack(fill='x',pady=(5,2))
+        self.price_tree = _tree(prices,
+            [('id','ID',68),('nome','Carta',260),('original','Custo original',125),
+             ('novo','Novo custo',125)],
+            raw_values=self._price_sort_value)
+        self.price_query.trace_add('write',lambda *_:self._refresh_prices())
+        self.price_tree.bind('<Double-1>',lambda _e:self._edit_price())
+        actions=ttk.Frame(prices)
+        actions.pack(fill='x',pady=(6,0))
+        ttk.Button(actions,text='Editar custo da carta',command=self._edit_price).pack(side='left')
+        ttk.Button(actions,text='Restaurar preço original',command=self._reset_price).pack(side='left',padx=(8,0))
+        tabs.add(prices,text='Estrelas por carta')
+
+        rewards = ttk.Frame(tabs,padding=16)
+        ttk.Label(rewards,text='Estrelas recebidas ao vencer um duelo no PS1',
+                  font=('Segoe UI',11,'bold')).pack(anchor='w',pady=(0,12))
+        ttk.Radiobutton(rewards,text='Original por rank: S=5 · A=4 · B=3 · C=2 · D=1',
+                        variable=self.reward_mode,value='por_rank').pack(anchor='w',pady=5)
+        ttk.Radiobutton(rewards,text='Quantidade fixa por vitória (independente do rank)',
+                        variable=self.reward_mode,value='fixo').pack(anchor='w',pady=5)
+        star_row=ttk.Frame(rewards)
+        star_row.pack(fill='x',pady=(6,12))
+        ttk.Label(star_row,text='Valor fixo de 1 a 255 Star Chips:').pack(side='left')
+        ttk.Entry(star_row,textvariable=self.reward_amount,width=12).pack(side='left',padx=8)
+        ttk.Button(rewards,text='Salvar ganho de estrelas',command=self._save_reward).pack(anchor='w')
+        ttk.Label(rewards,text=('A pontuação de RANK e os drops não são alterados. '
+                               'O valor será gravado no SLUS da próxima cópia BIN/CUE.'),
+                  wraplength=600,foreground=ACCENT).pack(anchor='w',pady=(20,0))
+        tabs.add(rewards,text='Estrelas por duelo')
         if owner is not studio or not originals:
             tabs.select(self.ids)
 
@@ -227,6 +274,9 @@ class PasswordsDialog(tk.Toplevel):
         if ps1_supports_god24(project):
             ttk.Checkbutton(footer, text='Ativar passwords por ID no BIN/CUE Drop x15',
                             variable=self.ps1_enabled, command=self._toggle_ps1).pack(anchor='w')
+            ttk.Checkbutton(
+                footer, text='Mostrar todas as cartas no baú do PS1, inclusive as que não possuo',
+                variable=self.ps1_chest_visible, command=self._toggle_chest_ps1).pack(anchor='w')
         destination = ttk.Frame(footer)
         destination.pack(fill='x', pady=(4, 3))
         ttk.Checkbutton(destination, text='Adicionar também ao deck inicial',
@@ -235,6 +285,7 @@ class PasswordsDialog(tk.Toplevel):
         self.profile.pack(side='left', fill='x', expand=True, padx=(5, 0))
         ttk.Button(destination, text='Fechar', command=close).pack(side='right', padx=(6, 0))
         self._refresh_chest()
+        self._refresh_prices()
         self.protocol('WM_DELETE_WINDOW', close)
         self.bind('<Escape>', lambda _event: close())
         self.grab_set()
@@ -261,6 +312,8 @@ class PasswordsDialog(tk.Toplevel):
             if not card_matches(query, cid, card):
                 continue
             count = int(owned.get(str(cid), 0))
+            if not self.chest_show_zero.get() and count <= 0:
+                continue
             self.chest.insert('', 'end', iid=str(cid),
                               values=(compact_number(cid), display_name(cid, self.cards), count or '0/0'),
                               tags=card_row_tags(self.chest, card, index))
@@ -268,6 +321,122 @@ class PasswordsDialog(tk.Toplevel):
         if selection and self.chest.exists(selection[0]):
             self.chest.selection_set(selection[0])
         self.profile.configure(values=list(self.project.metadata.get(CONFIG_KEY, {}).get('iniciais', {})))
+
+    def _price_sort_value(self, item, field):
+        if field == 'id':
+            return int(item)
+        if field in ('original', 'novo'):
+            value = self.price_tree.set(item, field)
+            return int(value) if value.lstrip('-').isdigit() else -1
+        return self.price_tree.set(item,field)
+
+    def _refresh_prices(self):
+        selected=self.price_tree.selection()
+        self.price_tree.delete(*self.price_tree.get_children())
+        query=search_text(self.price_query.get())
+        overrides=price_overrides(self.project)
+        original=original_passwords(self.project)
+        # No CSV inicial, os valores já são atualizados na visualização.
+        # Para mostrar a referência imutável, ler o CSV da extração original.
+        from .core import _read_csv
+        source=self.project.folder/'base'/'senhas.csv'
+        legacy={}
+        if source.is_file():
+            for row in _read_csv(source):
+                try:
+                    legacy[int(row['carta_id'])]=int(row['custo_starchips'])
+                except (KeyError,ValueError,TypeError):
+                    continue
+        for index,(cid,card) in enumerate(sorted(self.cards.items())):
+            if cid > 740 or card.get('virtual') and cid <= CARD_COUNT:
+                continue
+            if not card_matches(query,cid,card):
+                continue
+            base=legacy.get(cid,1 if cid>722 else None)
+            after=overrides.get(cid,base)
+            self.price_tree.insert('', 'end',iid=str(cid),
+                values=(compact_number(cid),display_name(cid,self.cards),
+                        base if base is not None else '—',
+                        after if after is not None else '—'),
+                tags=card_row_tags(self.price_tree,card,index))
+        self.price_tree.sort_rows()
+        if selected and self.price_tree.exists(selected[0]):
+            self.price_tree.selection_set(selected[0])
+
+    def _selected_price_id(self):
+        selection=self.price_tree.selection()
+        if not selection:
+            messagebox.showinfo('Preço Password','Selecione uma carta na tabela.',parent=self)
+            return None
+        return int(selection[0])
+
+    def _edit_price(self):
+        cid=self._selected_price_id()
+        if cid is None:
+            return
+        initial=self.price_tree.set(str(cid),'novo')
+        amount=simpledialog.askinteger(
+            'Preço do Password',f'Carta #{cid}: novo custo em Star Chips (0 a {PRICE_LIMIT}):',
+            parent=self,initialvalue=int(initial) if initial.isdigit() else 1,
+            minvalue=0,maxvalue=PRICE_LIMIT)
+        if amount is None:
+            return
+        try:
+            self._check_project()
+            set_password_price(self.project,cid,amount)
+        except (ModError,ValueError,OSError) as exc:
+            messagebox.showerror('Preço Password',str(exc),parent=self)
+            return
+        self._refresh_prices()
+        self.original.records=original_passwords(self.project)
+        self.original.render()
+        self.studio.notify(f'Password #{cid}: {amount} Star Chips. Gere o BIN/CUE.')
+
+    def _reset_price(self):
+        cid=self._selected_price_id()
+        if cid is None:
+            return
+        try:
+            self._check_project()
+            reset_password_price(self.project,cid)
+        except (ModError,ValueError,OSError) as exc:
+            messagebox.showerror('Preço Password',str(exc),parent=self)
+            return
+        self._refresh_prices()
+        self.original.records=original_passwords(self.project)
+        self.original.render()
+        self.studio.notify(f'Password #{cid}: preço restaurado no projeto.')
+
+    def _save_reward(self):
+        try:
+            self._check_project()
+            mode=self.reward_mode.get()
+            if mode not in ('por_rank','fixo'):
+                raise ModError('Escolha modo original por rank ou valor fixo.')
+            if mode=='por_rank':
+                amount=None
+            else:
+                raw=self.reward_amount.get().strip()
+                if not raw.isdecimal():
+                    raise ModError(f'Digite estrelas inteiras entre 1 e {STAR_LIMIT}.')
+                amount=int(raw)
+            set_win_reward(self.project,amount)
+        except (ModError,ValueError,OSError) as exc:
+            messagebox.showerror('Estrelas por vitória',str(exc),parent=self)
+            return
+        self.studio.notify('Ganho original por rank restaurado.' if amount is None else
+                           f'Ganho fixo configurado: {amount} Star Chips por vitória.')
+
+    def _toggle_chest_ps1(self):
+        try:
+            self._check_project()
+            set_chest_show_all(self.project,self.ps1_chest_visible.get())
+        except (ModError,ValueError,OSError) as exc:
+            self.ps1_chest_visible.set(chest_show_all(self.project))
+            messagebox.showerror('Visualização do baú PS1',str(exc),parent=self)
+            return
+        self.studio.notify('Baú completo do PS1 ativado.' if self.ps1_chest_visible.get()
+                           else 'Baú do PS1 voltará a mostrar apenas cartas obtidas.')
 
     def _grant(self, cid):
         self._check_project()

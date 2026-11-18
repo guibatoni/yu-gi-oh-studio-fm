@@ -1,0 +1,34 @@
+name: Validar economia PS1 — baú, Password e estrelas
+on:
+  pull_request:
+    paths:
+      - 'fmstudio/ps1_economy.py'
+      - 'fmstudio/ps1_mod.py'
+      - 'fmstudio/ps1_expansion.py'
+      - 'fmstudio/passwords.py'
+      - 'fmstudio/mod_tools_gui.py'
+      - 'fmstudio/disc_build.py'
+      - 'fmstudio/updates.py'
+      - 'tests/test_ps1_economy.py'
+      - '.github/workflows/ps1-economy.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ps1-economy:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependências
+        run: python -m pip install pillow
+      - name: Sintaxe Python
+        run: python -m compileall -q fmstudio tests app.py updater_main.py
+      - name: Testes específicos PS1
+        run: python -m unittest discover -s tests -p test_ps1_economy.py -v
+      - name: Testes existentes completos
+        run: python -m unittest discover -s tests -v
+      - name: Validar pacote para botão Atualizar
+        run: python tools/package_source.py --out FM-Mod-Studio-Source.zip

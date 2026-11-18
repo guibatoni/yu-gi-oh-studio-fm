@@ -182,6 +182,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patch_executable, patch_wa, wa_sha,
     )
     from .passwords import validate_ps1_prefix, choose_ps1_prefix, PS1_ID_PREFIX
+    from .tables import PASSWORD_BASE
+    from .ps1_economy import (
+        chest_show_all, price_overrides, fixed_win_reward, apply_password_prices,
+        patch_win_reward, reward_status, read_prices,
+    )
+    show_all_chest = chest_show_all(project)
+    prices_requested = price_overrides(project)
+    win_reward_requested = fixed_win_reward(project)
     from .ps1_expansion import (PS1_CARD_CAPACITY, compile_expansion, expand_archive,
                                 patch_expansion, inspect_expansion)
     from .ps1_supreme import patch_supreme, supreme_cards, validate_slot
@@ -213,6 +221,16 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             god24_enabled=native_profile and bool(god_cards)
             expansion = compile_expansion(project, profile=native_profile)
             capacity = PS1_CARD_CAPACITY if expansion.enabled else CARD_COUNT
+            if (prices_requested or win_reward_requested is not None) and not native_profile:
+                raise ModError(
+                    'Economia PS1 personalizada exige o SLUS Drop x15 original vinculado.')
+            invalid_extra = [cid for cid in prices_requested
+                             if cid > CARD_COUNT and (not expansion.enabled or cid not in expansion.ids)]
+            if invalid_extra:
+                raise ModError(
+                    'Preço de Password não gravável no PS1: '
+                    + ', '.join('#'+str(cid) for cid in sorted(invalid_extra))
+                    + '. Somente cartas expandidas 723–740 presentes no BIN são suportadas.')
             supreme_ids = supreme_cards(project, capacity) if native_profile else []
             if supreme_ids:
                 validate_slot(project, capacity)
@@ -236,7 +254,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                             if metadata.get('ps1_rituals_enabled',False) else {})
             native_traps=metadata.get('ps1_trap_thresholds',{})
             native_terrain=metadata.get('ps1_terrain_boosts',{})
-            needs_wa=(expansion.enabled or requested_art or native_equips or replacements or native_rituals or mod_plan.needs_wa
+            needs_wa=(expansion.enabled or requested_art or bool(prices_requested) or native_equips or replacements or native_rituals or mod_plan.needs_wa
                       or god_icon_card or god24_enabled or supreme_ids or native_plan.password_prefix is not None
                       or (native_profile and names)
                       or (native_profile and any('{icon:' in desc for desc in texts.values())))
@@ -462,7 +480,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     patched_exe=patch_executable(patched_exe,mod_plan,profile=native_profile)
     chest_catalog_report = {'status': 'perfil_incompativel', 'cartas': 0}
     if native_profile:
-        patched_exe = patch_chest_catalog(patched_exe)
+        patched_exe = patch_chest_catalog(patched_exe, show_all=show_all_chest)
         chest_catalog_report = inspect_chest_catalog(patched_exe)
     from .ps1_lp_hud import patch_lp_hud, verify_lp_hud
     # O HUD é um patch separado da RAM: 20000 LP na memória requer também
@@ -474,6 +492,12 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     else:
         lp_hud_report={'status':'perfil_incompativel' if lp_hud_initial>9999 else 'original',
                        'digitos':4,'lp_inicial':lp_hud_initial,'validado_epsxe':False}
+    # A única instrução alterada fica no resultado de vitória; a regra
+    # original por RANK continua intacta se a opção não estiver configurada.
+    reward_report = ({'status': 'original_por_rank', 'estrelas': None}
+                     if native_profile else {'status': 'perfil_incompativel', 'estrelas': None})
+    if native_profile and win_reward_requested is not None:
+        patched_exe, reward_report = patch_win_reward(patched_exe, win_reward_requested)
     from .ps1_rank_hud import inspect_rank_hud, patch_rank_hud
     rank_hud_report = {'status': 'perfil_incompativel'}
     if native_profile:
@@ -490,6 +514,15 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         if original_wa is None or hashlib.sha256(original_wa).hexdigest()!=expected_wa:
             raise ModError('As tabelas de duelistas exigem o WA_MRG vinculado ao projeto.')
         patched_wa=patch_wa(patched_wa if patched_wa is not None else original_wa,mod_plan)
+
+    price_report = []
+    if prices_requested:
+        price_source = wa_sha(project)
+        if not original_wa or not price_source or hashlib.sha256(original_wa).hexdigest() != price_source:
+            raise ModError('Alterar custos de Password exige o WA_MRG original vinculado e validado.')
+        patched_wa, price_report = apply_password_prices(
+            patched_wa if patched_wa is not None else original_wa,
+            {cid: cost for cid, cost in prices_requested.items() if cid <= CARD_COUNT})
 
     if supreme_ids:
         if original_wa is None:
@@ -517,6 +550,12 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         written_titles.extend(expansion.ids)
         expansion_report['artes_proprias'] = list(art_reports)
         expansion_report['otimizacao_artes'] = art_reports
+        # Os preços 723–740 foram gravados diretamente nos registros adicionais.
+        price_report.extend({
+            'id': cid, 'estrelas': prices_requested[cid],
+            'offset_wa': PASSWORD_BASE + 18 * 2048 + cid * 8,
+            'expandido': True,
+        } for cid in sorted(prices_requested) if cid > CARD_COUNT)
         if expansion_report['status'] != 'aplicado':
             raise ModError('Expansão incompleta após instalar as tabelas e os adaptadores nativos.')
         chest_catalog_report = inspect_chest_catalog(patched_exe)
@@ -653,6 +692,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'contador_lp_ps1':lp_hud_report,
                 'rank_hud_ps1':rank_hud_report,
                 'catalogo_bau_ps1':chest_catalog_report,
+                'catalogo_bau_completo_ativado':show_all_chest,
+                'precos_password_ps1':price_report,
+                'estrelas_por_vitoria_ps1':reward_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
@@ -698,8 +740,23 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                                'A cópia anterior foi preservada.')
             if native_profile and not all(checked['edicao_do_mod_ps1'].values()):
                 raise ModError('As regras de duelo do BIN divergem do projeto. A cópia anterior foi preservada.')
-            if native_profile and checked['catalogo_bau_ps1']['status'] != 'aplicado':
-                raise ModError('O catálogo do baú não foi confirmado no BIN. A cópia anterior foi preservada.')
+            if native_profile and checked['catalogo_bau_ps1']['status'] != (
+                    'aplicado' if show_all_chest else 'ausente'):
+                raise ModError('A opção de visualização do baú não coincide com o BIN gerado. '
+                               'A cópia anterior foi preservada.')
+            if native_profile and win_reward_requested is not None:
+                observed_reward = reward_status(reread_exe)
+                if observed_reward != reward_report:
+                    raise ModError('Estrelas por vitória divergentes no SLUS final. '
+                                   'A cópia anterior foi preservada.')
+            if prices_requested:
+                with DiscReader(stage_bin) as price_disc:
+                    price_entries = {e.path.upper(): e for e in price_disc.files() if not e.is_dir}
+                    written_wa = b''.join(price_disc.read_entry(price_entries['DATA/WA_MRG.MRG']))
+                observed_prices = read_prices(written_wa, prices_requested, expanded=expansion.enabled)
+                if observed_prices != prices_requested:
+                    raise ModError('Custos de Password divergentes no WA_MRG do BIN final. '
+                                   'A cópia anterior foi preservada.')
             if god24_enabled:
                 if (checked['god24_mascaras_bau']['status']!='aplicado_2_de_2'
                         or checked['god24_renderizador_lista_bau']
