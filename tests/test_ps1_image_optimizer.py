@@ -173,6 +173,24 @@ class PS1ImagePipelineTests(unittest.TestCase):
         self.assertEqual(blocked.clut,original)
         self.assertEqual(blocked.report['paleta'],'original_preservada')
 
+    def test_overcolor_icon_fits_16_color_clut_with_pillow(self):
+        try:
+            import PIL
+        except ImportError:
+            self.skipTest("Pillow não disponível")
+        from unittest.mock import patch as patch_function
+        from fmstudio.ps1_text import _indexed_sprite
+        icon = png(self.folder/'test.png', (16,16),
+                   b''.join(bytes((x*17, y*17, (x+y)*8,255))
+                            for y in range(16) for x in range(16)))
+        with patch_function('fmstudio.ps1_text.god_icon_asset', return_value=icon):
+            rows, raw_clut = _indexed_sprite('test')
+        self.assertEqual(len(rows), 16)
+        self.assertTrue(all(len(row) == 8 for row in rows))
+        self.assertEqual(len(raw_clut), 32)
+        self.assertTrue(any(rows))
+        self.assertTrue(any(raw_clut))
+
     def test_invalid_configuration_fails_without_mutating_image(self):
         for config in ({'intensity':5}, {'resample':'unknown'},
                        {'brightness':2}, {'mode':'arbitrario'}):
