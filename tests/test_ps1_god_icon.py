@@ -52,7 +52,10 @@ class GodIconNativeTests(unittest.TestCase):
         with patch.dict('sys.modules', {'PIL': None, 'PIL.Image': None}):
             slus, rows, icons, pending = patch_descriptions(exe, {16: edited}, {})
             self.assertFalse(pending)
-            expected = b''.join(bytes((0xF8, 0x0B, code)) for code in ICON_CODES.values()) + b'\xff'
+            # A décima primeira imagem ocupa a segunda linha (cada ícone
+            # equivale a duas colunas e a tela oferece 21 colunas por linha).
+            parts=[bytes((0xF8,0x0B,code)) for code in ICON_CODES.values()]
+            expected = b''.join(parts[:10]) + b'\xfe' + b''.join(parts[10:]) + b'\xff'
             offset = rows[0]['offset_exe']
             self.assertEqual(slus[offset:offset+len(expected)], expected)
             self.assertEqual(icons, set(ICON_CODES))
