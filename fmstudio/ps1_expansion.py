@@ -304,7 +304,13 @@ def expand_archive(wa, project, plan, *, prefix):
             png = (project.folder / rel).resolve()
             if not png.is_relative_to(project.folder.resolve()) or not png.is_file():
                 raise ModError(f'#{cid}: PNG ausente ou fora da pasta do projeto.')
-            art_pixels, thumb_pixels = render_card_art(png, art, thumb)
+            # Mesmo pipeline das cartas originais. A CLUT do registro novo
+            # também colore as faixas/título herdados do modelo; portanto
+            # não podemos substituí-la sem mapear todos os consumidores.
+            art_pixels, thumb_pixels = render_card_art(
+                png, art, thumb,
+                options=project.metadata.get('ps1_image_optimizer'),
+                private_clut=False)
             art[:len(art_pixels)] = art_pixels
             thumb[:len(thumb_pixels)] = thumb_pixels
         if cid in models:

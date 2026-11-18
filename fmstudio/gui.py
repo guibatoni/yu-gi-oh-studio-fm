@@ -929,7 +929,8 @@ class Studio(tk.Tk):
         self.color_sample.pack(side='left')
         self.class_caption=tk.Label(form,text='Classe: Comum',bg=BG,fg=MUTED,font=('Segoe UI',9))
         self.class_caption.pack(anchor='w',pady=(5,0))
-        ttk.Button(form,text='Importar arte PNG (prévia)',command=self.import_art).pack(anchor='w',pady=(9,0))
+        ttk.Button(form,text='Importar imagem (PNG/JPG/WEBP/BMP)',command=self.import_art).pack(anchor='w',pady=(9,0))
+        ttk.Button(form,text='Comparar original | PS1 (CLUT real)',command=self.preview_ps1_image).pack(anchor='w',pady=(3,0))
         links=ttk.LabelFrame(body,text='Efeitos e relações da carta',padding=8)
         links.pack(fill='x',pady=(10,4))
         ttk.Button(links,text='Efeitos e bônus',command=lambda:self.tabs.select(self.tab_effects)).pack(side='left',padx=(0,5))
@@ -1140,6 +1141,16 @@ class Studio(tk.Tk):
         ttk.Button(buttons,text='Compatibilidade PS1',command=self.audit_ps1).pack(side='left',padx=8)
         ttk.Button(buttons,text='Gerar BIN/CUE de teste',command=self.build_disc).pack(side='left',padx=8)
         ttk.Button(buttons,text='Verificar BIN/CUE',command=self.verify_disc).pack(side='left',padx=8)
+        graphics=ttk.LabelFrame(body,text='Otimização automática de imagens PS1',padding=8)
+        graphics.pack(fill='x',pady=(0,8))
+        self.ps1_opt_enabled=tk.BooleanVar(value=True)
+        self.ps1_opt_mode=tk.StringVar(value='Automático (recomendado)')
+        ttk.Checkbutton(graphics,text='ATIVADA',variable=self.ps1_opt_enabled).pack(side='left',padx=(0,12))
+        ttk.Combobox(graphics,textvariable=self.ps1_opt_mode,state='readonly',width=24,
+                     values=['Automático (recomendado)','Máxima fidelidade',
+                             'Compatibilidade original','Personalizado']).pack(side='left',padx=4)
+        ttk.Button(graphics,text='Salvar configuração',command=self.save_image_optimizer_settings).pack(side='left',padx=5)
+        ttk.Button(graphics,text='Prévia real PS1 da carta selecionada',command=self.preview_ps1_image).pack(side='left',padx=5)
         diagnostic=ttk.Frame(body)
         diagnostic.pack(fill='x',pady=(0,6))
         ttk.Button(diagnostic,text='Diagnosticar Equip no BIN/CUE',command=self.diagnose_equip).pack(side='left')
@@ -1673,11 +1684,44 @@ class Studio(tk.Tk):
         except (OSError,tk.TclError):
             self.preview.itemconfigure(self.art_placeholder,text='ARTE INDISPONÍVEL')
 
+    def preview_ps1_image(self):
+        if not self.project or not self.selected_id:
+            messagebox.showinfo('Otimização PS1','Selecione uma carta e importe sua imagem.',parent=self)
+            return
+        try:
+            from .ps1_image_preview import ImageOptimizerDialog
+            ImageOptimizerDialog(self,self.project,self.selected_id)
+        except (OSError,ValueError,ModError,DiscError,tk.TclError) as exc:
+            messagebox.showerror('Prévia PS1 indisponível',str(exc),parent=self)
+
+    def save_image_optimizer_settings(self):
+        if not self._ensure_project():
+            return
+        from .ps1_image_optimizer import ImageOptions
+        from dataclasses import asdict
+        names={'Automático (recomendado)':'automatico',
+               'Máxima fidelidade':'maxima_fidelidade',
+               'Compatibilidade original':'compatibilidade',
+               'Personalizado':'personalizado'}
+        data=asdict(ImageOptions.from_mapping(
+            self.project.metadata.get('ps1_image_optimizer')))
+        data.update(enabled=bool(self.ps1_opt_enabled.get()),
+                    mode=names[self.ps1_opt_mode.get()])
+        try:
+            ImageOptions.from_mapping(data)
+            self.project.metadata['ps1_image_optimizer']=data
+            self.project.save()
+        except (ValueError,KeyError,OSError,ModError) as exc:
+            messagebox.showerror('Otimização PS1',str(exc),parent=self)
+            return
+        self.notify('Configuração de imagens PS1 salva. Próximo BIN usará este perfil.')
+        self._refresh_project()
+
     def import_art(self):
         if not self.project or not self.selected_id:
             messagebox.showinfo('Selecione uma carta','Escolha uma carta primeiro.')
             return
-        path = filedialog.askopenfilename(title='Escolha uma arte PNG',filetypes=[('Imagem PNG','*.png')])
+        path = filedialog.askopenfilename(title='Escolha uma imagem',filetypes=[('Imagens','*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff')])
         if not path:
             return
         try:
@@ -2641,6 +2685,14 @@ class Studio(tk.Tk):
             txt='Nenhum projeto aberto.\n\n1. Novo projeto\n2. Importar CSVs ou BIN/CUE\n3. Escolher uma carta\n4. Editar / adicionar efeitos\n5. Exportar'
         else:
             pr=self.project
+            from .ps1_image_optimizer import ImageOptions
+            config=ImageOptions.from_mapping(pr.metadata.get('ps1_image_optimizer'))
+            self.ps1_opt_enabled.set(config.enabled)
+            labels={'automatico':'Automático (recomendado)',
+                    'maxima_fidelidade':'Máxima fidelidade',
+                    'compatibilidade':'Compatibilidade original',
+                    'personalizado':'Personalizado'}
+            self.ps1_opt_mode.set(labels[config.mode])
             effects=sum(map(len,pr.effects.values()))
             source='VINCULADO' if (pr.folder/'base'/'source_SLUS_014.11').is_file() else 'NÃO VINCULADO'
             notes='\n'.join(f' • {x}' for x in pr.imported_notes[:8]) or ' • Nenhum aviso registrado.'

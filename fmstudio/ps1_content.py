@@ -119,15 +119,16 @@ def _index_art(pixels: bytes, palette: list[tuple[int, int, int, int]]) -> bytes
     return bytes(indices)
 
 
-def render_card_art(png: Path, art_record: bytes, thumbnail_record: bytes) -> tuple[bytes, bytes]:
-    """Render pixels for an original or additional card using its local CLUTs."""
-    art_colors = _palette(art_record, 0x2640, 256)
-    thumbnail_colors = _palette(thumbnail_record, 0x500, 64)
-    art, thumbnail = _rgba_views(png, ((ART_WIDTH, ART_HEIGHT), (THUMB_WIDTH, THUMB_HEIGHT)))
-    return _index_art(art, art_colors), _index_art(thumbnail, thumbnail_colors)
+def render_card_art(png: Path, art_record: bytes, thumbnail_record: bytes, *,
+                    options=None, private_clut: bool = False) -> tuple[bytes, bytes]:
+    """Compatibilidade da API antiga; conversão real é centralizada no otimizador."""
+    from .ps1_image_optimizer import render_card
+    output = render_card(png, art_record, thumbnail_record, options,
+                         private_clut=private_clut)
+    return output.art.indices, output.thumbnail.indices
 
 
-def patch_card_art(wa: bytes, cid: int, png:Path) -> tuple[bytes, list[dict]]:
+def patch_card_art(wa: bytes, cid: int, png:Path, *, options=None) -> tuple[bytes, list[dict]]:
     """Aplica apenas pixels indexados, preservando paletas e tiras originais.
 
     Arte principal: 102x96 em 8bpp. Miniatura: 40x32, paleta 64 cores.
@@ -137,12 +138,18 @@ def patch_card_art(wa: bytes, cid: int, png:Path) -> tuple[bytes, list[dict]]:
         raise ModError('Artes de cartas adicionais exigem expansão de arquivos do PS1.')
     base=((cid-1)*7+722)*WA_SECTOR
     thumb=(cid-1)*WA_SECTOR
-    art, thumbnail = render_card_art(Path(png), wa[base:base+7*WA_SECTOR], wa[thumb:thumb+WA_SECTOR])
+    from .ps1_image_optimizer import render_card
+    output = render_card(Path(png), wa[base:base+7*WA_SECTOR],
+                         wa[thumb:thumb+WA_SECTOR], options,
+                         private_clut=False)
     result=bytearray(wa);modified=[]
-    for kind, offset, pixels in (('arte', base, art), ('miniatura', thumb, thumbnail)):
+    for kind, offset, resource in (('arte', base, output.art),
+                                   ('miniatura', thumb, output.thumbnail)):
+        pixels = resource.indices
         if bytes(result[offset:offset+len(pixels)]) != pixels:
             result[offset:offset+len(pixels)]=pixels
-            modified.append({'id':cid,'regiao':kind,'offset_wa':offset,'bytes':len(pixels)})
+            modified.append({'id':cid,'regiao':kind,'offset_wa':offset,'bytes':len(pixels),
+                                 'otimizacao':resource.report})
     return bytes(result),modified
 
 

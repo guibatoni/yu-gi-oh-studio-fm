@@ -351,7 +351,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 raise ModError('Referência de arte fora da pasta do projeto.')
             if not path.is_file():
                 raise ModError(f'PNG não encontrado para carta #{cid}: {path.name}')
-            patched_wa,regions=patch_card_art(patched_wa,cid,path)
+            patched_wa,regions=patch_card_art(
+                patched_wa,cid,path,
+                options=project.metadata.get('ps1_image_optimizer'))
             written_arts.extend(regions)
 
     native_written=[]

@@ -851,19 +851,53 @@ class Project:
         return path if path.is_file() else None
 
     def attach_art(self, cid: int, path: Path):
+        """Guarda a imagem de origem no projeto, nunca modifica o arquivo externo.
+
+        Outros formatos são convertidos a PNG sem filtros (Pillow). A otimização
+        real acontece na conversão PS1 e a prévia usa os mesmos bytes.
+        """
         if cid not in self.cards:
             raise ModError('Carta não carregada')
         path = Path(path)
-        if path.suffix.lower() != '.png' or not path.is_file():
-            raise ModError('Selecione uma imagem PNG válida')
-        with path.open('rb') as inp:
-            if inp.read(8) != b'\x89PNG\r\n\x1a\n':
-                raise ModError('Assinatura PNG inválida')
+        supported = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff')
+        if path.suffix.lower() not in supported or not path.is_file():
+            raise ModError('Selecione PNG, JPG, WEBP, BMP ou TIFF.')
+        if path.stat().st_size > 200 * 1024 * 1024:
+            raise ModError('Arquivo de imagem maior que 200 MB.')
+        from .ps1_image_optimizer import ImageOptions
+        from dataclasses import asdict
         folder = self.folder / 'assets' / 'cartas'
         folder.mkdir(parents=True, exist_ok=True)
         dest = folder / f'{cid:03d}.png'
         if path.resolve() != dest.resolve():
-            shutil.copy2(path,dest)
+            temp = folder / f'.{cid:03d}.novo.png'
+            try:
+                if path.suffix.lower() == '.png':
+                    from .png_pixels import read_png
+                    read_png(path)  # validar antes de copiar
+                    shutil.copy2(path, temp)
+                else:
+                    try:
+                        from PIL import Image
+                    except ImportError as exc:
+                        raise ModError('Importar JPG/WEBP/BMP/TIFF exige Pillow. Use PNG.') from exc
+                    try:
+                        with Image.open(path) as image:
+                            if image.width * image.height > 16_777_216:
+                                raise ModError('Imagem acima do limite seguro de pixels.')
+                            image.load()
+                            image.convert('RGBA').save(temp, format='PNG')
+                    except (OSError, ValueError, Image.DecompressionBombError) as exc:
+                        raise ModError(f'Imagem inválida: {exc}') from exc
+                if dest.is_file():
+                    backups = folder / 'backups'
+                    backups.mkdir(parents=True, exist_ok=True)
+                    stamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')
+                    shutil.copy2(dest, backups / f'{cid:03d}_{stamp}.png')
+                temp.replace(dest)
+            finally:
+                temp.unlink(missing_ok=True)
+        self.metadata.setdefault('ps1_image_optimizer', asdict(ImageOptions()))
         self.arts[str(cid)] = str(dest.relative_to(self.folder)).replace('\\','/')
         self.save()
 
