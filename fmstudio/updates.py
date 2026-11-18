@@ -58,7 +58,7 @@ SOURCE_FILES = frozenset({
     'docs/EXPANSAO_PS1_740.md', 'tools/verify_expanded_bau_mips.py',
     'README.md', 'docs/HISTORICO.md', 'docs/ATUALIZACOES_GITHUB.md',
     'docs/ORIGEM_E_VALIDACAO.md', 'docs/ROADMAP_EFEITOS.md',
-    'docs/MIGRACAO_REPOSITORIO.md', 'docs/COMPAT_PS1.md', 'docs/EXPANSAO_722_GOD_TEXTO.md', 'docs/CLASSES_E_CORES.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md', 'docs/OTIMIZACAO_PS1_PILLOW.md',
+    'docs/MIGRACAO_REPOSITORIO.md', 'docs/COMPAT_PS1.md', 'docs/EXPANSAO_722_GOD_TEXTO.md', 'docs/CLASSES_E_CORES.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md', 'docs/OTIMIZACAO_PS1_PILLOW.md', 'docs/ECONOMIA_PS1.md',
 })
 SOURCE_REQUIRED = frozenset({
     'fmstudio/png_pixels.py', 'fmstudio/ps1_image_optimizer.py', 'fmstudio/ps1_image_preview.py', 'fmstudio/ps1_card_title.py',
