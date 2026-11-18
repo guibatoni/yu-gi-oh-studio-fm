@@ -1,3 +1,14 @@
+## Otimização de imagens PS1 — implementação em revisão
+
+O conversor Pillow (opcional) permite importação de PNG/JPG/WEBP/BMP/TIFF,
+filtros de redimensionamento, dithering, comparação lado a lado com a
+CLUT/pixels reais e zoom. Aplica o mesmo pipeline às artes originais e às
+cartas nativas expandidas #723–740. Preserva CLUTs compartilhadas e não
+regrava regiões de títulos/faixas. Projetos antigos sem opção de otimização
+mantêm o conversor legado. Consulte [a documentação técnica](docs/OTIMIZACAO_PS1_PILLOW.md).
+
+---
+
 # Studio FM v1.9.3 — Artes PS1 sem instalar Pillow
 
 **Gerar jogo BIN/CUE** grava as artes PNG vinculadas às cartas originais e às
