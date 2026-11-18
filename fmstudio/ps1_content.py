@@ -92,6 +92,26 @@ def patch_card_art(wa: bytes, cid: int, png: Path, *, options=None,
     return bytes(result), modified
 
 
+def patch_card_titles(wa: bytes, names: dict[int, str]) -> tuple[bytes, list[int]]:
+    """Update the separate title texture after the executable name was written."""
+    from .ps1_card_title import TITLE_BYTES, TITLE_OFFSET, title_bitmap
+    from .ps1_image_optimizer import has_mirrored_thumbnail
+
+    result = bytearray(wa)
+    written = []
+    for cid, name in sorted(names.items()):
+        if not 1 <= cid <= CARD_COUNT:
+            continue
+        art = ((cid - 1) * 7 + CARD_COUNT) * WA_SECTOR
+        thumb = (cid - 1) * WA_SECTOR
+        if not has_mirrored_thumbnail(wa[art:art + 7 * WA_SECTOR], wa[thumb:thumb + WA_SECTOR]):
+            continue
+        start = art + TITLE_OFFSET
+        result[start:start + TITLE_BYTES] = title_bitmap(name)
+        written.append(cid)
+    return bytes(result), written
+
+
 _TEXT_CONTROL = re.compile(r'\{(f8 0[AB] [0-9A-Fa-f]{2}|color:[a-z]+|/color|card:[0-9]+|icon:[a-z0-9_]+)\}')
 
 

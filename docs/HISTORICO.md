@@ -1,3 +1,13 @@
+## v1.9.6 — Descrições, títulos e enquadramento no PS1
+
+- Preenche a arte e as miniaturas por recorte central no perfil Automático.
+  A opção Imagem inteira usa o enquadramento com margens.
+- Usa a altura da faixa de 96×14 e o contraste nativo dos títulos.
+  Alterações de nome compatíveis no Drop x15 atualizam a faixa da carta.
+- Preserva palavras nas quebras de linha e prioriza texto nas prévias
+  quando o espaço do BIN é pequeno. Ícones de vida sem sprite podem ser
+  escritos por extenso nas descrições compatíveis das cartas novas.
+
 ## v1.9.5 — Cores das artes no BIN/CUE
 
 - Calcula paletas RGB555 a partir das imagens das cartas originais e

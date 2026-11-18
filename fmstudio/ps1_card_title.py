@@ -1,9 +1,22 @@
-"""Render the separate 96×14 4bpp title texture for additional PS1 cards."""
+"""Render the separate 96×14 4bpp title texture for PS1 cards."""
 from __future__ import annotations
 
 import unicodedata
 
 from .png_pixels import resize_rgba
+
+TITLE_OFFSET = 0x2840
+TITLE_WIDTH, TITLE_HEIGHT = 96, 14
+TITLE_BYTES = TITLE_WIDTH * TITLE_HEIGHT // 2
+TITLE_LEFT, TITLE_INK_WIDTH, TITLE_INK_HEIGHT = 3, 90, 11
+
+# The title blends subtractively over the frame. Index 1 takes the most
+# light from the frame; 7 is a faint edge and 0 is transparent.
+INK_COVERAGE = (0, 255, 237, 204, 153, 128, 89, 46)
+INK_BY_ALPHA = bytes(
+    min(range(len(INK_COVERAGE)), key=lambda i: abs(alpha - INK_COVERAGE[i]))
+    for alpha in range(256)
+)
 
 
 # Seven rows per glyph, with the leftmost pixel in bit 4.
@@ -69,15 +82,15 @@ GLYPHS = {
 
 
 def _title_size(width: int, height: int) -> tuple[int, int]:
-    scale = min(94 / width, 12 / height)
-    return max(1, round(width * scale)), max(1, round(height * scale))
+    # Keep a full-height line and compress only its width when the name is long.
+    return max(1, min(TITLE_INK_WIDTH, round(width * TITLE_INK_HEIGHT / height))), TITLE_INK_HEIGHT
 
 
 def _pillow_title(text: str) -> tuple[tuple[int, int], bytes]:
     from PIL import Image, ImageDraw, ImageFont
 
     try:
-        font = ImageFont.load_default(size=22)
+        font = ImageFont.load_default(size=32)
     except TypeError:  # Pillow versions predating the scalable default font.
         font = ImageFont.load_default()
     left, top, right, bottom = font.getbbox(text)
@@ -102,14 +115,15 @@ def _bitmap_title(text: str) -> tuple[tuple[int, int], bytes]:
 
 
 def title_bitmap(name: str) -> bytes:
-    text = ''.join(c for c in unicodedata.normalize('NFD', str(name)) if not unicodedata.combining(c))
+    text = ' '.join(str(name).split())
     try:
         (width, height), ink = _pillow_title(text)
     except (ImportError, OSError, ValueError, AttributeError):
+        text = ''.join(c for c in unicodedata.normalize('NFD', text) if not unicodedata.combining(c))
         (width, height), ink = _bitmap_title(text)
-    indices = bytearray(96 * 14)
-    top = (14 - height) // 2
+    indices = bytearray(TITLE_WIDTH * TITLE_HEIGHT)
+    top = (TITLE_HEIGHT - height) // 2
     for row in range(height):
-        start = 96 * (row + top) + 1
-        indices[start:start + width] = bytes((p * 7 + 127) // 255 for p in ink[row * width:(row + 1) * width])
+        start = TITLE_WIDTH * (row + top) + TITLE_LEFT
+        indices[start:start + width] = ink[row * width:(row + 1) * width].translate(INK_BY_ALPHA)
     return bytes(low | (high << 4) for low, high in zip(indices[::2], indices[1::2]))

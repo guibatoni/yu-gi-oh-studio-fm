@@ -26,6 +26,8 @@ FILTER_LABEL = {"automatico": "Automático", "lanczos": "Lanczos",
 DITHER_LABEL = {"automatico": "Automático", "nenhum": "Sem dithering",
                 "floyd": "Floyd–Steinberg", "bayer2": "Bayer 2×2",
                 "bayer4": "Bayer 4×4", "bayer8": "Bayer 8×8"}
+FRAMING_LABEL = {"preencher": "Preencher (recorte central)",
+                 "inteira": "Imagem inteira"}
 
 
 class ImageOptimizerDialog(tk.Toplevel):
@@ -49,7 +51,8 @@ class ImageOptimizerDialog(tk.Toplevel):
         self.enabled = tk.BooleanVar(value=defaults.enabled)
         self.params = {}
         for field, labels in (("mode", MODES_LABEL), ("palette", PALETTE_LABEL),
-                              ("resample", FILTER_LABEL), ("dither", DITHER_LABEL)):
+                              ("resample", FILTER_LABEL), ("dither", DITHER_LABEL),
+                              ("framing", FRAMING_LABEL)):
             self.params[field] = tk.StringVar(value=labels[getattr(defaults, field)])
         self.strength = tk.DoubleVar(value=defaults.intensity)
         self.manual = {name: tk.DoubleVar(value=getattr(defaults, name))
@@ -117,10 +120,15 @@ class ImageOptimizerDialog(tk.Toplevel):
         ttk.Label(controls, text="Intensidade de dithering (0–100%)").grid(row=3,column=0,sticky="w")
         ttk.Scale(controls, from_=0, to=1, variable=self.strength).grid(
             row=3,column=1,sticky="ew",padx=3)
-        ttk.Label(controls, text="Visualização").grid(row=3,column=2,sticky="e")
+        ttk.Label(controls, text="Enquadramento").grid(row=3,column=2,sticky="e")
+        framing = ttk.Combobox(controls, values=list(FRAMING_LABEL.values()),
+                              textvariable=self.params["framing"], state="readonly", width=24)
+        framing.grid(row=3,column=3,sticky="ew",padx=3)
+        framing.bind("<<ComboboxSelected>>", lambda _e: self._refresh())
+        ttk.Label(controls, text="Visualização").grid(row=4,column=2,sticky="e")
         resources=ttk.Combobox(controls, values=["Arte 102×96", "Miniatura 40×32"],
                      textvariable=self.resource,state="readonly",width=17)
-        resources.grid(row=3,column=3,sticky="ew")
+        resources.grid(row=4,column=3,sticky="ew",padx=3)
         resources.bind("<<ComboboxSelected>>",lambda _e:self._redraw())
         advanced=ttk.LabelFrame(self,text="Ajustes manuais (usados no perfil Personalizado)",padding=7)
         advanced.pack(fill="x",padx=12,pady=3)
@@ -183,6 +191,7 @@ class ImageOptimizerDialog(tk.Toplevel):
             "palette":key("palette",PALETTE_LABEL),
             "resample":key("resample",FILTER_LABEL),
             "dither":key("dither",DITHER_LABEL),
+            "framing":key("framing",FRAMING_LABEL),
             "intensity":float(self.strength.get()),
             "denoise":self.denoise.get(),
             **{name:float(var.get()) for name,var in self.manual.items()},
@@ -191,10 +200,13 @@ class ImageOptimizerDialog(tk.Toplevel):
     def _refresh(self):
         try:
             from .ps1_image_optimizer import _scaled_rgba
+            options = self._options()
             self.rendered = render_card(self._source,self.art_record,
-                                        self.thumb_record,self._options(),
+                                        self.thumb_record,options,
                                         verified_layout=self.verified_layout)
-            neutral=ImageOptions(mode="maxima_fidelidade",resample="lanczos")
+            neutral=ImageOptions(enabled=options.enabled, framing=options.framing,
+                                 mode="compatibilidade" if options.mode == "compatibilidade"
+                                 else "maxima_fidelidade", resample="lanczos")
             self.reference_art=_scaled_rgba(self._source,self.rendered.art.size,neutral)[0]
             self.reference_thumb=_scaled_rgba(self._source,self.rendered.thumbnail.size,neutral)[0]
             self._redraw()

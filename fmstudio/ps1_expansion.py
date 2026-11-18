@@ -11,7 +11,7 @@ import hashlib
 import struct
 import unicodedata
 
-from .ps1_card_title import title_bitmap as _title_bitmap
+from .ps1_card_title import TITLE_OFFSET, TITLE_BYTES, title_bitmap as _title_bitmap
 from .tables import CARD_COUNT, EXE_DELTA, STATS_ADDR, LEVEL_ADDR, GUARDIAN_FIELDS, encode_ps1_star
 
 PS1_CARD_CAPACITY = 740
@@ -314,7 +314,8 @@ def expand_archive(wa, project, plan, *, prefix, art_reports=None):
             if art_reports is not None:
                 art_reports[cid] = converted.diagnostics()
         if cid in models:
-            art[0x2840:0x2AE0] = _title_bitmap(project.get(cid).get('nome') or f'Carta {cid}')
+            art[TITLE_OFFSET:TITLE_OFFSET + TITLE_BYTES] = _title_bitmap(
+                project.get(cid).get('nome') or f'Carta {cid}')
         thumbs.append(thumb)
         arts.append(art)
         code = int(f'{prefix:05d}{cid:03d}', 16) if cid in models else 0xFFFFFFFE

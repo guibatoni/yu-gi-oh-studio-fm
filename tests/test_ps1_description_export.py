@@ -148,9 +148,45 @@ class DescriptionWriteTests(unittest.TestCase):
         _, rows, _, pending = _apply_card_descriptions(
             source, {723: 'A' * 250, 724: 'B' * 45}, {}, native_profile=True,
             start=0x801CD5A0, end=0x801CD5A0 + 52, policy='preserve_incompatible')
-        self.assertEqual([row['id'] for row in rows], [724])
-        self.assertEqual(len(pending), 1)
-        self.assertIn('#723:', pending[0])
+        self.assertFalse(pending)
+        self.assertEqual([(row['id'], row.get('resumida', False)) for row in rows],
+                         [(723, True), (724, False)])
+        self.assertEqual(rows[1]['bytes'], 46)
+
+    def test_tiny_description_slot_uses_words_instead_of_only_leading_icons(self):
+        source = bytearray(sample_exe())
+        struct.pack_into('<I', source, where(0x801D9000 + 4 * 4), 0x8144)
+        value = '{color:azul}{icon:indestrutivel}{icon:perfurar}AB AB AB AB AB AB{/color}'
+        patched, rows, icons, pending = _apply_card_descriptions(
+            source, {723: value}, {}, native_profile=True, start=0x801CD5A0,
+            end=0x801CD5A0 + 14, policy='preserve_incompatible')
+        self.assertFalse(pending)
+        self.assertFalse(icons)
+        self.assertTrue(rows[0]['resumida'])
+        with patch('fmstudio.ps1_expansion.inspect_expansion',
+                   return_value={'status': 'aplicado', 'capacidade': 740}):
+            result = inspect_exe_description(patched, 723, value, {}, native_profile=True)
+        self.assertEqual(result['status'], 'resumida')
+        self.assertEqual(result['texto_no_bin'], 'AB AB AB...')
+
+    def test_unmapped_studio_icons_render_as_words_in_compatible_new_descriptions(self):
+        source = bytearray(sample_exe())
+        letters = sorted(set('Vinculo de vida Restaura LP') - {' '})
+        codes = (i for i in range(4, 0x5C) if i not in (0x1B, 0x27, 0x28, 0x30, 0x40, 0x47))
+        for code, char in zip(codes, letters):
+            sjis = chr(ord(char) + 0xFEE0).encode('shift_jis')
+            struct.pack_into('<I', source, where(0x801D9000 + 4 * code), int.from_bytes(sjis,'big'))
+        text = '{icon:vinculo_vida} {icon:restaurar_lp}'
+        patched, rows, _, pending = _apply_card_descriptions(
+            source, {723: text}, {}, native_profile=True, start=0x801CD5A0,
+            end=0x801CD5A0 + 90, policy='preserve_incompatible')
+        self.assertFalse(pending)
+        self.assertTrue(rows[0]['resumida'])
+        with patch('fmstudio.ps1_expansion.inspect_expansion',
+                   return_value={'status': 'aplicado', 'capacidade': 740}):
+            result = inspect_exe_description(patched, 723, text, {}, native_profile=True)
+        self.assertEqual(result['status'], 'resumida')
+        self.assertEqual(result['texto_no_bin'], 'Vinculo de vida Restaura LP')
 
     def test_identical_new_descriptions_share_one_native_string(self):
         _, rows, _, pending = _apply_card_descriptions(

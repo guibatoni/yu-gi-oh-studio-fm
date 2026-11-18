@@ -15,7 +15,8 @@ from .deep_extract import BANK_DESC, STRING_TABLE, decode_text, exe_pos, glyph_m
 from .disc import DiscReader, DiscError
 from .ps1_content import _encode_description
 from .ps1_god24_chest import SOURCE_SHA256
-from .ps1_text import MAX_TEXT_BYTES, _measure, compile_description, preview_description
+from .ps1_text import (MAX_TEXT_BYTES, _measure, compile_description,
+                       compile_compatible_description, preview_description)
 from .tables import CARD_COUNT
 
 def _card_capacity(exe):
@@ -69,7 +70,10 @@ def inspect_exe_description(exe: bytes, cid: int, desired: str, cards: dict,
             result.update(status='sem_texto', motivo='A carta nova está sem descrição nesta imagem. '
                           'O texto completo está no projeto.')
             return result
-        if native_profile:
+        adapted = False
+        if native_profile and cid > CARD_COUNT:
+            expected, _, reflowed, adapted = compile_compatible_description(desired, cmap, cards)
+        elif native_profile:
             expected, _, reflowed = compile_description(desired, cmap, cards)
         else:
             expected = _encode_description(desired.replace('\r\n', '\n'), cmap, cards)
@@ -78,11 +82,14 @@ def inspect_exe_description(exe: bytes, cid: int, desired: str, cards: dict,
         if native_profile:
             if cid > CARD_COUNT and actual != expected and actual == preview_description(expected, cmap, len(actual)):
                 _measure(actual)
-                result.update(status='resumida', motivo='A prévia gravada no BIN corresponde ao início '
-                              'da descrição. O Studio guarda o texto completo.')
+                result.update(status='resumida', motivo='O BIN contém uma prévia legível da descrição. '
+                              'O Studio guarda o texto completo.')
                 return result
             _measure(expected)
-        if actual == expected:
+        if actual == expected and adapted:
+            result.update(status='resumida',
+                          motivo='O BIN contém o nome por extenso de um ícone sem sprite no PS1.')
+        elif actual == expected:
             result.update(status='aplicada', quebras_reorganizadas=reflowed,
                           motivo='O BIN contém o texto completo com as quebras de linha reorganizadas.'
                           if reflowed else 'Texto salvo no Studio coincide com os bytes e o ponteiro do BIN.')
