@@ -317,7 +317,7 @@ class PasswordsDialog(tk.Toplevel):
         self.bulk_price_count.set(f'{len(self.price_tree.selection())} cartas selecionadas')
 
     def _select_all_visible(self, tree):
-        tree.selection_set(tree.get_children(''))
+        tree.selection_set(*tree.get_children(''))
         self._update_selection_count()
         return 'break'
 
@@ -381,7 +381,7 @@ class PasswordsDialog(tk.Toplevel):
         self.chest.sort_rows()
         remain=[cid for cid in selection if self.chest.exists(cid)]
         if remain:
-            self.chest.selection_set(remain)
+            self.chest.selection_set(*remain)
         self.profile.configure(values=list(self.project.metadata.get(CONFIG_KEY, {}).get('iniciais', {})))
         self._update_selection_count()
 
@@ -425,7 +425,7 @@ class PasswordsDialog(tk.Toplevel):
         self.price_tree.sort_rows()
         remain=[cid for cid in selected if self.price_tree.exists(cid)]
         if remain:
-            self.price_tree.selection_set(remain)
+            self.price_tree.selection_set(*remain)
         self._update_selection_count()
 
     def _selected_price_id(self):
