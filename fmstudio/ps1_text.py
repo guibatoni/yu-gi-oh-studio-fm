@@ -284,11 +284,26 @@ def _indexed_sprite(name: str) -> tuple[list[bytes], bytes]:
         if rgb not in colors:
             colors.append(rgb)
         indices.append(colors.index(rgb))
+    if len(colors) > 16:
+        # Cada glifo personalizado possui sua própria célula e CLUT de 16
+        # posições, verificadas em patch_icons antes da gravação. Se a arte
+        # tiver >15 cores visíveis, quantizar sem tocar CLUTs existentes.
+        from .ps1_image_optimizer import render_resource
+        from .ps1_image_optimizer import _pillow
+        if _pillow() is None:
+            raise ModError(f'Ícone {name} tem mais de 15 cores; instale Pillow '
+                           'para quantização ou envie PNG indexado.')
+        optimized = render_resource(
+            god_icon_asset().with_name(name + '.png'), (0,) + (1,) * 15,
+            (16, 16), {'mode':'automatico','palette':'personalizada',
+                       'dither':'nenhum'}, private_clut=True)
+        indices = list(optimized.indices)
+        colors = list(optimized.clut)
     if not 1 < len(colors) <= 16:
         raise ModError(f'Ícone {name} exige até 15 cores opacas e transparência.')
     rows = [bytes(indices[i] | indices[i+1] << 4 for i in range(y*16, y*16 + 16, 2))
             for y in range(16)]
-    return rows, struct.pack('<16H', *colors, *([0] * (16 - len(colors))))
+    return rows, struct.pack('<16H', *colors, *([0] * (16 - len(colors)))) if len(colors)<16 else struct.pack('<16H', *colors)
 
 
 def patch_icons(wa: bytes, icons: set[str]) -> bytes:
