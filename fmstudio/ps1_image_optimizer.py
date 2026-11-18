@@ -246,7 +246,7 @@ def _palette_from_image(pixels: bytes, limit: int) -> tuple[int, ...] | None:
 
 
 def _index_rgba(pixels: bytes, size: tuple[int, int], clut: tuple[int, ...],
-                dither: str, strength: float):
+                dither: str, strength: float, *, legacy: bool = False):
     w, h = size
     colors = [(i, rgb555(value)[:3]) for i, value in enumerate(clut) if value != 0]
     if not colors:
@@ -274,8 +274,9 @@ def _index_rgba(pixels: bytes, size: tuple[int, int], clut: tuple[int, ...],
             choice = nearest_cache.get(key)
             if choice is None:
                 choice = min(colors, key=lambda c:
-                             3*(rgb[0]-c[1][0])**2 + 6*(rgb[1]-c[1][1])**2 +
-                             2*(rgb[2]-c[1][2])**2)
+                             (1 if legacy else 3)*(rgb[0]-c[1][0])**2 +
+                             (1 if legacy else 6)*(rgb[1]-c[1][1])**2 +
+                             (1 if legacy else 2)*(rgb[2]-c[1][2])**2)
                 if len(nearest_cache) < 65536:
                     nearest_cache[key] = choice
             index, actual = choice
@@ -329,6 +330,9 @@ def render_resource(png: Path, original_clut: tuple[int, ...],
                and requested in ("automatico", "seguro", "personalizada"))
     new_clut = _palette_from_image(raw, len(original_clut)) if replace else None
     clut = new_clut if new_clut is not None else original_clut
+    if clut[0] != 0 and any(raw[i] < 128 for i in range(3, len(raw), 4)):
+        raise ModError("O índice zero desta CLUT é opaco; transparência não pode "
+                       "ser gravada sem alterar uma paleta compartilhada.")
     if not private_clut and requested in ("seguro", "personalizada"):
         warnings += ("CLUT original preservada: não foi comprovada exclusividade; "
                      "a troca de paleta foi bloqueada.",)
@@ -338,7 +342,8 @@ def render_resource(png: Path, original_clut: tuple[int, ...],
     method = "nenhum" if not opts.enabled or opts.mode == "compatibilidade" else _choose_dither(
         raw, size[0], size[1], opts)
     strength = opts.intensity if method != "nenhum" else 0
-    mapped, rmse = _index_rgba(raw, size, clut, method, strength)
+    mapped, rmse = _index_rgba(raw, size, clut, method, strength,
+                               legacy=not opts.enabled or opts.mode == "compatibilidade")
     decoded = rgba_from_indices(mapped, clut)
     used = len(set(mapped))
     return RenderedResource(
