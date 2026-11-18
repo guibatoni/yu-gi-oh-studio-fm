@@ -31,6 +31,8 @@ def decode_effects(raw):
         raise ModError('Origem do efeito inválida.')
     if not isinstance(entries,list) or not 1 <= len(entries) <= MAX_EFFECTS:
         raise ModError('Quantidade de efeitos copiados não suportada.')
+    if not all(isinstance(item, dict) for item in entries):
+        raise ModError('Os efeitos copiados devem conter registros válidos.')
     return source,[check_effect(item) for item in entries]
 
 
