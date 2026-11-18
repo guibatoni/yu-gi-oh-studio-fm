@@ -1,3 +1,14 @@
+## Studio FM v1.9.10 — Quests de doação na campanha PS1
+
+Em **Edição do Mod → Quests da campanha**, ative a opção de teste,
+defina a seed e confira os requisitos por duelista. **Gerar jogo BIN/CUE**
+cria a cópia `_QUESTS` para o Original Drop x15. Após a vitória no modo
+História, o jogo mostra o progresso e oferece a entrega pelo baú.
+
+[Instruções de teste e exemplos de requisitos](docs/QUESTS_CAMPANHA_PS1.md).
+
+---
+
 ## Studio FM v1.9.9 — Criar deck do oponente pela ISO original
 
 Na aba **Edição do Mod → Deck do oponente**, selecione o duelista

@@ -4,6 +4,9 @@ on:
     paths:
       - 'fmstudio/disc_build.py'
       - 'fmstudio/gui.py'
+      - 'fmstudio/campaign_quests.py'
+      - 'fmstudio/ps1_campaign_quests.py'
+      - 'tests/test_campaign_quests.py'
       - 'tests/test_ps1_description_export.py'
       - '.github/workflows/ps1-description-export.yml'
   workflow_dispatch:
@@ -18,7 +21,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Instalar dependencias
-        run: python -m pip install pillow
+        run: python -m pip install pillow unicorn==2.1.4
       - name: Compilar sintaxe Python
         run: python -m compileall -q fmstudio tests app.py updater_main.py
       - name: Testar exportacao de descricoes PS1

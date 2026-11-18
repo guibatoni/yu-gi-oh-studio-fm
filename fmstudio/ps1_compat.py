@@ -38,6 +38,12 @@ def audit(project) -> dict:
     counts['decks_fixos_ps1'] = len(native_plan.fixed_decks)
     counts['fusoes_personalizadas_ps1'] = len(native_plan.fusions)
     blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
+    from .ps1_campaign_quests import quest_settings
+    if quest_settings(project)['ativado']:
+        if native_profile and wa_pinned:
+            supported.append('Quests de doação na campanha PS1, geradas pelas fontes do BIN/CUE')
+        else:
+            blocked.append('Quests de campanha exigem o BIN/CUE Original Drop x15 importado no projeto.')
     from .ps1_expansion import PS1_CARD_CAPACITY, compile_expansion
     from .ps1_supreme import supreme_cards, validate_slot
     try:

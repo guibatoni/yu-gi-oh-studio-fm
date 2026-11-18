@@ -1,3 +1,15 @@
+## v1.9.10 — Quests de doação na campanha PS1
+
+- Aba **Quests da campanha** em **Edição do Mod** com ativação por projeto,
+  seed, prévia de origens e importação de requisitos JSON.
+- Requisitos para 38 duelistas gerados com os drops e decks iniciais que
+  serão gravados no BIN/CUE. As sobras do baú entram na oferta e a reserva
+  completa faltas durante a entrega.
+- Exportação `_QUESTS` pelo botão normal do Studio. Releitura do SLUS e
+  do WA e confirmação no relatório de **Verificar BIN/CUE**.
+- Comandos de vitória e doação conferidos na CPU MIPS com Original Drop x15.
+  A apresentação do diálogo no ePSXe está em teste.
+
 ## v1.9.9 — Deck dos oponentes com base na ISO original
 
 - Botão **Criar deck da ISO original** com prévia rolável de IDs,

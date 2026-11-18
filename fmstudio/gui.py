@@ -3010,10 +3010,14 @@ class Studio(tk.Tk):
             return
         pending=report['pendente_de_motor']
         god_cards=ps1_god24_card_ids(self.project) if ps1_supports_god24(self.project) else []
+        from .ps1_campaign_quests import quest_settings
+        quests_enabled = quest_settings(self.project)['ativado']
         question = ('Será criada ou atualizada a cópia de teste do disco, sem modificar o original.\n'
                     'Mesmo nome de origem: substitui o teste anterior. Outro nome: cria outro arquivo.\n'
                     'Se o ePSXe estiver usando a imagem anterior, feche o jogo antes de substituí-la.\n\n'
                     'Consulte as alterações compatíveis no relatório do projeto.\n'
+                    + ('Quests de doação ativadas. A cópia de campanha terá o sufixo _QUESTS.\n'
+                       if quests_enabled else '')
                     + ('Ícone Deus na descrição: três caracteres são trocados só na cópia.\n'
                        if description_icon else '')
                     + (f'God (24): {len(god_cards)} carta(s) com nome, ícone e jogabilidade de monstro.\n'
@@ -3073,6 +3077,7 @@ class Studio(tk.Tk):
             'perfil_incompativel': 'Rank no HUD do PS1 requer a imagem original Drop x15 compatível.\n',
         }.get(manifest.get('rank_hud_ps1', {}).get('status'), '')
         supreme = manifest.get('supreme_ps1', {})
+        quests = manifest.get('quests_campanha_ps1', {})
         simplified=sum(bool(row.get('acentos_simplificados')) for row in manifest['descricoes_aplicadas'])
         reflowed=sum(bool(row.get('quebras_reorganizadas')) and not row.get('resumida')
                      for row in manifest['descricoes_aplicadas'])
@@ -3106,6 +3111,9 @@ class Studio(tk.Tk):
                if mod.get('bloqueio_turno_inicial') else '')
             + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
             + rank_hud
+            + (f'Quests de campanha gravadas para {quests["duelistas"]} duelistas. Seed {quests["seed"]}.\n'
+               'No modo História, vença um duelista para conferir a tela de doação.\n'
+               if quests.get('status') == 'aplicado' else '')
             + (f'Supreme (+700) conferida no BIN em {len(supreme["ids"])} carta(s).\n'
                if supreme.get('status') == 'aplicado' else '')
             + (f'Baú com {manifest["catalogo_bau_ps1"]["cartas"]} cartas, inclusive as sem cópias.\n'
