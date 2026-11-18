@@ -191,6 +191,40 @@ class PS1ImagePipelineTests(unittest.TestCase):
         self.assertTrue(any(rows))
         self.assertTrue(any(raw_clut))
 
+    def test_new_import_enables_auto_and_backs_up_previous_art(self):
+        from fmstudio.core import Project
+        project=Project.create(self.folder/'project','Graphics')
+        project.cards={1:{'id':1,'nome':'A','ataque':0,'defesa':0}}
+        project.attach_art(1,self.png)
+        saved=project.folder/'assets'/'cartas'/'001.png'
+        self.assertEqual(saved.read_bytes(),self.png.read_bytes())
+        self.assertEqual(project.metadata['ps1_image_optimizer']['mode'],'automatico')
+        replacement=png(self.folder/'replacement.png',ART_SIZE,
+                        bytes((0,0,255,255))*(ART_SIZE[0]*ART_SIZE[1]))
+        project.attach_art(1,replacement)
+        backups=list((project.folder/'assets'/'cartas'/'backups').glob('001_*.png'))
+        self.assertEqual(len(backups),1)
+        self.assertEqual(backups[0].read_bytes(),self.png.read_bytes())
+        self.assertEqual(read_png(saved)[2],read_png(replacement)[2])
+
+    def test_jpeg_import_converts_to_png_without_changing_source(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest('JPG exige Pillow')
+        from fmstudio.core import Project
+        import hashlib
+        project=Project.create(self.folder/'jpegproject','Graphics')
+        project.cards={1:{'id':1,'nome':'A','ataque':0,'defesa':0}}
+        jpeg=self.folder/'upload.jpg'
+        Image.new('RGB',(102,96),(220,20,90)).save(jpeg,'JPEG')
+        digest=hashlib.sha256(jpeg.read_bytes()).hexdigest()
+        project.attach_art(1,jpeg)
+        self.assertEqual(hashlib.sha256(jpeg.read_bytes()).hexdigest(),digest)
+        saved=project.folder/'assets'/'cartas'/'001.png'
+        self.assertEqual(read_png(saved)[:2],(102,96))
+        self.assertEqual(project.arts['1'],'assets/cartas/001.png')
+
     def test_invalid_configuration_fails_without_mutating_image(self):
         for config in ({'intensity':5}, {'resample':'unknown'},
                        {'brightness':2}, {'mode':'arbitrario'}):
