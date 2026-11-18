@@ -182,6 +182,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patch_executable, patch_wa, wa_sha,
     )
     from .passwords import validate_ps1_prefix, choose_ps1_prefix, PS1_ID_PREFIX
+    from .tables import PASSWORD_BASE
     from .ps1_economy import (
         chest_show_all, price_overrides, fixed_win_reward, apply_password_prices,
         patch_win_reward, reward_status, read_prices,
@@ -549,6 +550,12 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         written_titles.extend(expansion.ids)
         expansion_report['artes_proprias'] = list(art_reports)
         expansion_report['otimizacao_artes'] = art_reports
+        # Os preços 723–740 foram gravados diretamente nos registros adicionais.
+        price_report.extend({
+            'id': cid, 'estrelas': prices_requested[cid],
+            'offset_wa': PASSWORD_BASE + 18 * 2048 + cid * 8,
+            'expandido': True,
+        } for cid in sorted(prices_requested) if cid > CARD_COUNT)
         if expansion_report['status'] != 'aplicado':
             raise ModError('Expansão incompleta após instalar as tabelas e os adaptadores nativos.')
         chest_catalog_report = inspect_chest_catalog(patched_exe)
