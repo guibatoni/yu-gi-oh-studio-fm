@@ -1,82 +1,64 @@
-# Quests de doação na campanha do PS1
+# Quests antes dos duelos da campanha PS1
 
-1. Abra o projeto vinculado ao **Original Drop x15**.
-2. Entre em **Edição do Mod → Quests da campanha** e marque **Ativar quests no BIN/CUE de teste**.
-3. Informe ou sorteie uma seed. **Gerar prévia** mostra os requisitos dos 38 duelistas, sua origem e o peso em 2048 por carta sorteada.
-4. Clique em **Salvar configuração → Gerar jogo BIN/CUE**. Selecione o Original Drop x15 vinculado ao projeto.
-5. Em **Verificar BIN/CUE**, selecione a cópia de teste com o sufixo `_QUESTS`. Abra essa cópia no ePSXe, inicie uma campanha nova e vença um duelista.
+Simon Muran pode duelar desde o início. Os outros 37 duelistas da história
+solicitam a doação quando você escolhe duelar. A entrega fica disponível
+quando todos os requisitos têm cópias suficientes no baú. Cada cópia
+conta para um critério e o jogo protege as cartas usadas no deck ativo.
+A entrega abre o duelo e fica registrada no save.
 
-A opção começa desativada. O Studio salva a configuração no projeto e escreve
-a cópia com quests em `exportacao/teste_ps1`. Ao lado do BIN/CUE ficam o
-manifesto e os arquivos `.quests.json` e `.quests.bin`.
+## Editar no Studio
 
-## Ofertas
+1. Abra o projeto do **Original Drop x15**.
+2. Em **Edição do Mod → Quests da campanha**, marque **Ativar quests no BIN/CUE de teste**.
+3. Defina a seed e clique em **Gerar prévia**. A tabela mostra a doação de cada NPC, o duelista que pode dropar a carta e o peso no grupo de rank.
+4. Selecione um duelista e clique em **Editar quest**. Você também pode clicar duas vezes na linha da prévia.
+5. Escolha até quatro alvos por carta, tipo, atributo, Guardian Star ou raridade. Informe as quantidades e clique em **Aplicar requisitos**. **Usar a seed deste NPC** restaura a geração automática para ele.
+6. Gere a prévia para validar as fontes, clique em **Salvar configuração** e use **Gerar jogo BIN/CUE**. Abra o arquivo com sufixo `_QUESTS.bin`.
 
-O diálogo de vitória mostra quantas cópias do baú estão disponíveis para cada
-requisito. As cópias usadas no deck ativo ficam protegidas. Quando uma carta
-serve para mais de um requisito, cada cópia cobre uma única parte da oferta.
-**Rever requisitos** reconta o baú. **Confirmar doação** retira as cópias e
-libera o fluxo de história. O save registra a entrega uma vez por duelista.
-Para testar outra seed desde o começo, use uma campanha nova.
+A seed define cada quest separadamente. Editar um NPC mantém as outras
+doações geradas para a mesma seed. A prévia e a exportação usam os
+drops configurados no projeto. Cada requisito precisa de uma fonte
+que o jogador possa enfrentar antes da quest. O Studio valida também
+se o baú comporta as doações com o deck protegido.
 
-O gerador usa os drops e as compras iniciais gravados no BIN de teste.
-Cada requisito deve ter origem no deck inicial ou em um duelista de ID
-menor cuja vitória já é garantida pela rota da campanha. A quantidade
-gerada considera a chance da melhor fonte no grupo de rank. Se faltarem
-cópias, **Entregar com reserva** usa as sobras disponíveis e completa a
-oferta diretamente. A reserva evita que uma campanha fique travada por
-um sorteio desfavorável.
+## Voltar ao Card Shop
 
-A exportação usa os IDs 1–722 para os requisitos e permite combinar o
-sistema com a expansão de cartas e os efeitos nativos do Studio.
+Antes de duelar, escolha **Voltar ao Card Shop** para adiar a entrega.
+No Egito, o jogo retorna ao mapa. Na reta final, ele posiciona o
+jogador no **Hiding**, onde fica o Card Shop. Durante o torneio, ele
+abre a loja da rodada atual.
 
-## Requisitos manuais
+Na loja, você pode salvar, editar o deck ou escolher **Return to Title**
+para buscar cartas no **Free Duel**. Simon aparece no Free Duel quando
+a primeira quest é apresentada. Ao entrar novamente na campanha,
+escolha **Leave Shop** para retomar o duelo pendente. O save conserva o
+confronto exato, inclusive no Labirinto, diante de Seto 2nd e na reta final.
 
-Salve um JSON como o abaixo e selecione **Importar requisitos JSON**. A
-seed preenche os duelistas que ficaram de fora.
+## Requisitos em JSON
+
+**Importar requisitos JSON** continua disponível. O exemplo exige 50
+cartas do tipo Fairy antes do duelo com Teana:
 
 ```json
 {
-  "1": [
-    {"tipo": "carta", "alvo": 387, "quantidade": 10},
-    {"tipo": "carta", "alvo": 192, "quantidade": 5},
-    {"tipo": "carta", "alvo": 123, "quantidade": 20}
-  ],
-  "2": [
-    {"tipo": "tipo", "alvo": 8, "quantidade": 50}
-  ]
+  "2": [{"tipo": "tipo", "alvo": 8, "quantidade": 50}]
 }
 ```
 
-Simon exige Mystic Lamp, Key Mace e Dark Plant. Teana aceita 50 Fairy.
-Há até quatro requisitos por duelista, com quantidades de 1 a 255. O alvo
-pode ser um ID de carta, tipo, atributo, Guardian Star ou raridade. Use
-`carta`, `tipo`, `atributo`, `guardian_star` ou `raridade`. Para raridade,
-o ID começa em zero na ordem de `fmstudio/rarities.py`. A prévia valida
-cada fonte antes da geração.
+Arquivos de quests da versão anterior podem ser importados. Os requisitos
+de Simon são descartados e os demais são revalidados com as fontes
+disponíveis antes de cada duelo.
 
-## Implementação e verificação
+## Verificação
 
-| Arquivo | Função |
-| --- | --- |
-| `fmstudio/campaign_quests.py` | Catálogo, parser CSV, validação de fontes, gerador por seed e tabela binária. |
-| `fmstudio/quest_gui.py` | Configuração no editor do mod e prévia. |
-| `fmstudio/ps1_campaign_quests.py` | Persistência, instalação e verificação do carregador e da tabela. |
-| `fmstudio/disc_build.py` e `fmstudio/disc_verify.py` | Montagem e releitura do BIN/CUE pelo fluxo normal do Studio. |
-| `tools/ps1/campaign_quests.c` e `tools/ps1/campaign_quest_loader.S` | Diálogo, contagem, doação e retomada da campanha. |
+**Verificar BIN/CUE** confirma a tabela das 37 quests e o carregador.
+O teste MIPS usou os 59 descritores de duelo do Original Drop x15
+e conferiu a proteção do deck, a saída para a loja, o save e a
+retomada com os parâmetros nativos do confronto. A apresentação do
+diálogo ainda precisa de uma partida no ePSXe.
 
-O Studio insere o módulo no `DATA/WA_MRG.MRG`. O carregador usa a área de
-transferência do console somente durante o diálogo de vitória e preserva
-as reservas fixas do motor de duelo. Em uma cópia expandida, o módulo fica
-antes da arte adicional e o adaptador existente ajusta o setor do pedido.
-A releitura verifica os comandos do SLUS, a tabela binária de quests e as
-origens gravadas no BIN.
-
-Para recompilar, use Zig 0.13 e `nm` com
+O módulo reside no `DATA/WA_MRG.MRG` e carrega durante o diálogo
+pré-duelo. Os comandos nativos F8 0D e F8 12 ligam a entrada e a
+resposta ao módulo. O opcode de saída do mapa reconhece a loja pelo
+bytecode verificado. Para recompilar com Zig 0.13 e `nm`, rode
 `python tools/compile_ps1_campaign_quests.py --zig caminho/zig`.
-`python -m unittest discover -s tests -p test_campaign_quests.py` inclui o
-teste da CPU MIPS quando Unicorn está instalado. A verificação com os
-38 comandos nativos do disco conferiu a leitura do setor, a escolha no
-diálogo, as flags de vitória, as cartas adicionais e o retorno no Free Duel.
-A apresentação do diálogo e a campanha completa ainda precisam ser
-testadas no ePSXe.

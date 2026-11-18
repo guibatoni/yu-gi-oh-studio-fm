@@ -3111,8 +3111,8 @@ class Studio(tk.Tk):
                if mod.get('bloqueio_turno_inicial') else '')
             + (f'Configurações do mod aplicadas: {len(mod["aplicado"])}.\n' if mod.get('aplicado') else '')
             + rank_hud
-            + (f'Quests de campanha gravadas para {quests["duelistas"]} duelistas. Seed {quests["seed"]}.\n'
-               'No modo História, vença um duelista para conferir a tela de doação.\n'
+            + (f'Quests antes do duelo gravadas para {quests["duelistas"]} duelistas. Seed {quests["seed"]}.\n'
+               'No modo História, desafie um duelista após Simon para testar a doação.\n'
                if quests.get('status') == 'aplicado' else '')
             + (f'Supreme (+700) conferida no BIN em {len(supreme["ids"])} carta(s).\n'
                if supreme.get('status') == 'aplicado' else '')

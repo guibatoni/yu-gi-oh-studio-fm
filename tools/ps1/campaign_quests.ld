@@ -1,5 +1,5 @@
 OUTPUT_ARCH(mips)
-ENTRY(QuestAfterWin)
+ENTRY(QuestBeforeDuel)
 SECTIONS
 {
     /* 16-byte header precedes the code on disc. */
@@ -12,7 +12,8 @@ SECTIONS
         . = ALIGN(4);
         QuestConfiguration = .;
     }
-    .quest_win : { *(.quest_win) }
+    .quest_before : { *(.quest_before) }
     .quest_answer : { *(.quest_answer) }
+    .quest_shop : { *(.quest_shop) }
     /DISCARD/ : { *(.comment .note.* .MIPS.abiflags .reginfo .pdr .mdebug.* .eh_frame* .got) }
 }

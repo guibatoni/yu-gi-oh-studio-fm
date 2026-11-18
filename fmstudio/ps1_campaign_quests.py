@@ -13,15 +13,24 @@ from .deep_extract import exe_pos, extract_texts, glyph_map
 from .tables import CARD_COUNT, LEVEL_ADDR, decode_cards, decode_pools, decode_starters
 
 COMMAND_TABLE = 0x80090EAC
-HOOKS = {0x19: 0x80038AB0, 0x12: 0x80038888}
+SCRIPT_COMMAND_TABLE = 0x80090C50
+HOOKS = {
+    'duel': (COMMAND_TABLE + 4 * 0x0D, 0x80038530),
+    'answer': (COMMAND_TABLE + 4 * 0x12, 0x80038888),
+    'shop': (SCRIPT_COMMAND_TABLE + 4 * 8, 0x8002EB48),
+}
 SETTINGS_KEY = 'ps1_campaign_quests'
 SECTOR_BYTES = 2048
-OVERLAY_MAGIC = b'QOV1'
+OVERLAY_MAGIC = b'QOV2'
 OVERLAY_SECTORS = 8
 OVERLAY_SIZE = OVERLAY_SECTORS * SECTOR_BYTES
 OVERLAY_START = 0x801DC000
 OVERLAY_HEADER = struct.Struct('<4sI8x')
 INSTALLABLE_PROFILE = 'Quests PS1 exigem o BIN/CUE Original Drop x15 reconhecido pelo Studio.'
+# The resident shop hook recognizes the three Leave Shop operands in this
+# script. Validate the exact bytecode in both the input and the exported BIN.
+CAMPAIGN_SCRIPT_SECTOR = 0x1E68
+CAMPAIGN_SCRIPT_HASH = '3fad8492631848e6074de293b809057644beaadf932af410c9500aa6dc2f73b1'
 
 
 def quest_settings(project):
@@ -58,6 +67,13 @@ def validate_quest_source(project, wa, *, native_profile):
     expected = wa_sha(project)
     if wa is None or not expected or hashlib.sha256(wa).hexdigest() != expected:
         raise ModError('Importe o BIN/CUE Original Drop x15 para vincular o WA_MRG das quests ao projeto.')
+    if not _shop_script_matches(wa):
+        raise ModError('O mapa e os diálogos da loja da imagem divergem do perfil das quests.')
+
+
+def _shop_script_matches(wa, *, shift=0):
+    start = (CAMPAIGN_SCRIPT_SECTOR + shift) * SECTOR_BYTES
+    return hashlib.sha256(wa[start:start + 2 * SECTOR_BYTES]).hexdigest() == CAMPAIGN_SCRIPT_HASH
 
 
 def project_quest_catalog(project, wa, *, exe=None, level_address=LEVEL_ADDR, supreme=False):
@@ -109,10 +125,11 @@ def build_quest_overlay(exe: bytes, catalog: QuestCatalog, settings: dict, *, le
 
 
 def reserve_quest_handlers(exe, regions):
-    """Use a pair of small free intervals shared with the description allocator."""
+    """Use free intervals shared with the description allocator."""
     free = list(regions)
     addresses = {}
-    for opcode, loader in ((0x19, overlay.WIN_LOADER), (0x12, overlay.ANSWER_LOADER)):
+    for name, loader in (('duel', overlay.DUEL_LOADER), ('answer', overlay.ANSWER_LOADER),
+                         ('shop', overlay.SHOP_LOADER)):
         size = len(loader)
         for index, (lo, hi) in sorted(enumerate(free), key=lambda item: item[1][1] - item[1][0]):
             address = (hi - size) & ~3
@@ -121,7 +138,7 @@ def reserve_quest_handlers(exe, regions):
             at = exe_pos(address, exe, size)
             if any(exe[at:at + size]):
                 continue
-            addresses[opcode] = address
+            addresses[name] = address
             free[index:index + 1] = [(start, end) for start, end in
                                      ((lo, address), (address + size, hi)) if start < end]
             break
@@ -130,25 +147,31 @@ def reserve_quest_handlers(exe, regions):
     return addresses, free
 
 
-def _loader_payloads(sector):
+def _loader_payloads(sector, addresses):
     if not 0 < sector <= 65535:
         raise ModError('Setor das quests fora do intervalo do carregador.')
-    win = bytearray(overlay.WIN_LOADER)
+    duel = bytearray(overlay.DUEL_LOADER)
     pos = overlay.SECTOR_OFFSET
-    if struct.unpack_from('<I', win, pos)[0] != 0x34060000:
+    if struct.unpack_from('<I', duel, pos)[0] != 0x34060000:
         raise ModError('Operando de setor do carregador de quests divergente.')
-    struct.pack_into('<I', win, pos, 0x34060000 | sector)
-    return {0x19: bytes(win), 0x12: overlay.ANSWER_LOADER}
+    struct.pack_into('<I', duel, pos, 0x34060000 | sector)
+    shop = bytearray(overlay.SHOP_LOADER)
+    pos = overlay.RELAY_OFFSET
+    if struct.unpack_from('<I', shop, pos)[0] != 0x08000000:
+        raise ModError('Salto de retorno da loja divergente.')
+    struct.pack_into('<I', shop, pos, 0x08000000 | ((addresses['duel'] >> 2) & 0x3FFFFFF))
+    return {'duel': bytes(duel), 'answer': overlay.ANSWER_LOADER, 'shop': bytes(shop)}
 
 
 def install_quest_handlers(exe, addresses, sector):
     result = bytearray(exe)
-    for opcode, loader in _loader_payloads(sector).items():
-        at = exe_pos(COMMAND_TABLE + 4 * opcode, exe, 4)
-        start = exe_pos(addresses[opcode], exe, len(loader))
-        if struct.unpack_from('<I', exe, at)[0] != HOOKS[opcode] or any(exe[start:start + len(loader)]):
-            raise ModError(f'Conflito no carregador do comando de diálogo F8 {opcode:02X}.')
-        struct.pack_into('<I', result, at, addresses[opcode])
+    for name, loader in _loader_payloads(sector, addresses).items():
+        hook, expected = HOOKS[name]
+        at = exe_pos(hook, exe, 4)
+        start = exe_pos(addresses[name], exe, len(loader))
+        if struct.unpack_from('<I', exe, at)[0] != expected or any(exe[start:start + len(loader)]):
+            raise ModError(f'Conflito no carregador de quests em 0x{hook:08X}.')
+        struct.pack_into('<I', result, at, addresses[name])
         result[start:start + len(loader)] = loader
     return bytes(result)
 
@@ -159,21 +182,29 @@ def inspect_quest_overlay(exe, wa=None, *, expanded=False):
     from .ps1_runtime import BANK_END, DUEL_STATE
 
     try:
-        addresses = {op: struct.unpack_from('<I', exe, exe_pos(COMMAND_TABLE + 4 * op, exe, 4))[0]
-                     for op in HOOKS}
-        if addresses == HOOKS:
+        addresses = {name: struct.unpack_from('<I', exe, exe_pos(hook, exe, 4))[0]
+                     for name, (hook, _) in HOOKS.items()}
+        if addresses == {name: expected for name, (_, expected) in HOOKS.items()}:
             return {'status': 'ausente'}
+        if (addresses['duel'] == HOOKS['duel'][1] and addresses['shop'] == HOOKS['shop'][1]
+                and DUEL_STATE <= addresses['answer'] < BANK_END):
+            previous = exe_pos(COMMAND_TABLE + 4 * 0x19, exe, 4)
+            if DUEL_STATE <= struct.unpack_from('<I', exe, previous)[0] < BANK_END:
+                return {'status': 'pos_vitoria'}
         if any(not DUEL_STATE <= addr < BANK_END or addr & 3 for addr in addresses.values()):
             return {'status': 'não reconhecido'}
-        pos = exe_pos(addresses[0x19] + overlay.SECTOR_OFFSET, exe, 4)
+        pos = exe_pos(addresses['duel'] + overlay.SECTOR_OFFSET, exe, 4)
         sector = struct.unpack_from('<H', exe, pos)[0]
-        for op, loader in _loader_payloads(sector).items():
-            at = exe_pos(addresses[op], exe, len(loader))
+        for name, loader in _loader_payloads(sector, addresses).items():
+            at = exe_pos(addresses[name], exe, len(loader))
             if exe[at:at + len(loader)] != loader:
                 return {'status': 'divergente'}
         if wa is None:
             return {'status': 'aguardando_wa'}
-        sector += EXTRA_SLOTS if expanded else 0
+        shift = EXTRA_SLOTS if expanded else 0
+        if not _shop_script_matches(wa, shift=shift):
+            return {'status': 'divergente'}
+        sector += shift
         at = sector * SECTOR_BYTES
         payload = wa[at:at + OVERLAY_SIZE]
         level_address = EXPANDED_LEVELS if expanded else LEVEL_ADDR
@@ -184,6 +215,7 @@ def inspect_quest_overlay(exe, wa=None, *, expanded=False):
         data = payload[OVERLAY_HEADER.size + overlay.SIZE:-len(OVERLAY_MAGIC)]
         table = data[:table_size(data)]
         return {'status': 'aplicado', 'setor_wa': sector, 'duelistas': len(STORY_DUELISTS),
+                'momento': 'antes_do_duelo', 'retorno_card_shop': True,
                 'sha256_tabela': hashlib.sha256(table).hexdigest(), 'validado_epsxe': False}
     except (ModError, ValueError):
         return {'status': 'divergente'}

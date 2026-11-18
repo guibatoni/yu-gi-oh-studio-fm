@@ -9,23 +9,32 @@ typedef unsigned int u32;
 #define MASKS (1 << CRITERIA)
 #define LABEL_WIDTH 22
 #define QUEST_FLAG_BASE 0x750
+#define SIMON_UNLOCK_FLAG 0x6e1
+#define EGYPT_TWO_FLAG 0x47
+#define HIDING_FLAG 0x5a
 #define TRUNK ((volatile u8 *)0x801d0250)
 #define DECK ((volatile u16 *)0x801d0200)
 #define STATS ((volatile u32 *)0x801d4244)
 #define LEVELS ((volatile u8 *)(*(const u32 *)0x801dc004))
 #define FLAGS ((volatile u8 *)0x801d0618)
 #define MODE (*(volatile u8 *)0x8009b26c)
-#define OPPONENT (*(volatile u8 *)0x8009b361)
-#define OUTCOME (*(volatile u8 *)0x8009b362)
+#define SCENE (*(volatile u8 *)0x8009b27a)
+#define MAP_LOCATION (*(volatile u8 *)0x8009b363)
+#define SCRIPT_CURSOR (*(const u8 *volatile *)0x8009b290)
+#define SCRIPT_COMMAND (*(volatile u16 *)0x8009b27c)
+#define STORY_TEXT_BOX ((u8 *)0x800eb0f8)
 #define TEXT_YIELD (*(volatile u8 *)0x8009b350)
-#define GAME_UNLOCK ((void (*)(u8 *))0x80038ab0)
+#define GAME_DUEL ((void (*)(u8 *))0x80038530)
+#define GAME_MAP ((void (*)(void))0x8002eb48)
+#define GAME_SHOW_DIALOG ((void (*)(void))0x8002e5ac)
+#define PENDING_TAG 0x4d
 
 enum { EXACT_CARD, TYPE, ATTRIBUTE, GUARDIAN, RARITY };
-enum { REVIEW, DONATE, DONATE_WITH_RESERVE };
+enum { REVIEW, DONATE, RETREAT };
 
 struct Criterion {
     u8 kind, quantity;
-    u16 target, reserve;
+    u16 target, source_card;
     char label[LABEL_WIDTH];
 };
 
@@ -44,11 +53,19 @@ struct QuestTable {
 _Static_assert(sizeof(struct Criterion) == 6 + LABEL_WIDTH, "quest record format");
 extern const struct QuestTable QuestConfiguration;
 
+/* Four retail-unused flag bytes 0x780..0x79f. The memory card's native
+   tertiary seal covers this checkpoint. The descriptor remains in the SLUS. */
+struct PendingQuest {
+    u16 offset;
+    u8 opponent, tag;
+};
+#define PENDING ((volatile struct PendingQuest *)0x801d0708)
+
 static struct {
     u8 *channel;
     const u8 *resume;
     const u8 *accept;
-    const u8 *review;
+    const u8 *retreat;
     const struct Quest *quest;
     u8 opponent;
     u8 dialog[256];
@@ -65,6 +82,29 @@ static struct {
 static const u8 **cursor(u8 *channel)
 {
     return &((const u8 **)channel)[channel[0x58]];
+}
+
+static int flag_is_set(unsigned id)
+{
+    return (FLAGS[id >> 3] & (0x80 >> (id & 7))) != 0;
+}
+
+static void set_flag(unsigned id)
+{
+    FLAGS[id >> 3] |= 0x80 >> (id & 7);
+}
+
+static int campaign_challenge(const u8 *entry)
+{
+    /* F8 0D consumes this six-byte descriptor in the stock dialogue bank. */
+    return (unsigned)entry >= 0x801b1102 && (unsigned)entry <= 0x801bfb4a
+        && entry[-2] == 0xf8 && entry[-1] == 0x0d && *entry >= 2 && *entry <= 38;
+}
+
+static void clear_pending(unsigned opponent)
+{
+    if (PENDING->tag == PENDING_TAG && PENDING->opponent == opponent)
+        PENDING->tag = 0;
 }
 
 static const struct Quest *quest_for(u8 opponent)
@@ -222,7 +262,7 @@ static void show_quest(void)
     const struct Quest *quest = active.quest;
     unsigned missing = QuestCountMissing(quest), req;
     u8 *out = active.dialog, *targets;
-    out = text(out, "Doacao - sobras do bau", 30);
+    out = text(out, "Antes do duelo", 24);
     *out++ = 0xfe;
     for (req = 0; req < quest->count; ++req) {
         const struct Criterion *criterion = &quest->criteria[req];
@@ -235,9 +275,9 @@ static void show_quest(void)
     }
     *out++ = 0xfb;
     *out++ = 2;
-    out = text(out, missing ? "Entregar com reserva" : "Confirmar doacao", 24);
+    out = text(out, missing ? "Rever requisitos" : "Doar e duelar", 24);
     *out++ = 0xfe;
-    out = text(out, "Rever requisitos", 24);
+    out = text(out, "Voltar ao Card Shop", 24);
     *out++ = 0xfe;
     *out++ = 0xfb;
     *out++ = 0x80;
@@ -245,23 +285,30 @@ static void show_quest(void)
     out += 4;
     set_target(targets, out);
     active.accept = out + 4;
-    out = choice_command(out, missing ? DONATE_WITH_RESERVE : DONATE);
+    out = choice_command(out, missing ? REVIEW : DONATE);
     set_target(targets + 2, out);
-    active.review = out + 4;
-    choice_command(out, REVIEW);
+    active.retreat = out + 4;
+    choice_command(out, RETREAT);
     *cursor(active.channel) = active.dialog;
     active.channel[0x51] = 2;  /* Clear the previous page in the normal VM. */
     TEXT_YIELD = 1;
 }
 
-void QuestAfterWin(u8 *channel)
+void QuestBeforeDuel(u8 *channel)
 {
     const u8 *entry = *cursor(channel);
-    unsigned id = *entry, flag = QUEST_FLAG_BASE + id;
-    if ((MODE & 31) != 2 || OUTCOME != 0 || id < 1 || id > 38 || id != OPPONENT
-            || ((unsigned)entry >> 16) != 0x801b
-            || (FLAGS[flag >> 3] & (0x80 >> (flag & 7)))) {
-        GAME_UNLOCK(channel);
+    unsigned id;
+    if ((MODE & 31) != 2 || !campaign_challenge(entry)) {
+        GAME_DUEL(channel);
+        return;
+    }
+    id = *entry;
+    /* Provide a renewable source even on the opening path that skips Simon.
+       Only the Free Duel list is unlocked. The campaign win flag is untouched. */
+    set_flag(SIMON_UNLOCK_FLAG);
+    if (flag_is_set(QUEST_FLAG_BASE + id)) {
+        clear_pending(id);
+        GAME_DUEL(channel);
         return;
     }
     active.quest = quest_for(id);
@@ -271,36 +318,68 @@ void QuestAfterWin(u8 *channel)
     show_quest();
 }
 
+static void leave_for_shop(void)
+{
+    unsigned id = active.opponent;
+    active.channel = 0;
+    TEXT_YIELD = 1;
+    if (id >= 9 && id <= 17) {
+        SCENE = 189 + (id - 9);  /* Tournament shops lead to the current round. */
+        MODE = 2;
+        return;
+    }
+    PENDING->tag = 0;
+    PENDING->offset = (unsigned)active.resume;
+    PENDING->opponent = id;
+    PENDING->tag = PENDING_TAG;
+    if (!flag_is_set(EGYPT_TWO_FLAG))
+        MAP_LOCATION = 13;
+    else
+        MAP_LOCATION = (id >= 31 || flag_is_set(HIDING_FLAG)) ? 15 : 12;
+    MODE = 5;
+}
+
 void QuestAnswer(u8 *channel)
 {
     const u8 *operation;
-    unsigned flag, req;
-    if (active.channel != channel)
+    if (active.channel != channel || (MODE & 31) != 2)
         return;
     operation = *cursor(channel);
-    if (operation == active.review) {
-        show_quest();
+    if (operation == active.retreat) {
+        leave_for_shop();
         return;
     }
-    if (operation != active.accept || (MODE & 31) != 2 || OPPONENT != active.opponent)
+    if (operation != active.accept)
         return;
-    if (QuestCountMissing(active.quest) && *operation != DONATE_WITH_RESERVE) {
+    if (*operation != DONATE || QuestCountMissing(active.quest)) {
         show_quest();
         return;
-    }
-    /* Reserve cards go directly to the offering and never enter the chest. */
-    for (req = 0; req < active.quest->count; ++req) {
-        const struct Criterion *criterion = &active.quest->criteria[req];
-        if (inventory.progress[req] < criterion->quantity &&
-                !eligible(criterion->reserve, criterion)) {
-            show_quest();
-            return;
-        }
     }
     take_claimed_cards();
-    flag = QUEST_FLAG_BASE + active.opponent;
-    FLAGS[flag >> 3] |= 0x80 >> (flag & 7);
+    set_flag(QUEST_FLAG_BASE + active.opponent);
     *cursor(channel) = active.resume;
+    clear_pending(active.opponent);
     active.channel = 0;
-    GAME_UNLOCK(channel);
+    GAME_DUEL(channel);
+}
+
+void QuestResumeShop(void)
+{
+    static const u8 dialog_operand[] = {2, 0};
+    const u8 *map_operand = SCRIPT_CURSOR;
+    const u8 *entry = (const u8 *)(0x801b0000 | PENDING->offset);
+    if ((MODE & 31) != 2 || PENDING->tag != PENDING_TAG
+            || !campaign_challenge(entry) || *entry != PENDING->opponent) {
+        PENDING->tag = 0;
+        GAME_MAP();
+        return;
+    }
+    /* Start a native story box inside the shop scene, then give it the saved
+       encounter. Its win/loss scene, terrain and BGM still come from F8 0D. */
+    SCRIPT_CURSOR = dialog_operand;
+    SCRIPT_COMMAND = 2;
+    GAME_SHOW_DIALOG();
+    SCRIPT_CURSOR = map_operand - 1;
+    *cursor(STORY_TEXT_BOX) = entry;
+    QuestBeforeDuel(STORY_TEXT_BOX);
 }
