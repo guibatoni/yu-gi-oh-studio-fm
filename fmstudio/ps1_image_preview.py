@@ -8,15 +8,15 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from .core import ModError
-from .ps1_image_optimizer import (ImageOptions, render_card, png_rgba,
-    rgb555, MODES, PALETTES, FILTERS, DITHERS)
+from .ps1_image_optimizer import (ImageOptions, render_card, png_rgba, rgb555,
+    card_image_options, has_mirrored_thumbnail)
 from .tables import CARD_COUNT
 
 MODES_LABEL = {"automatico": "Automático (recomendado)",
                "maxima_fidelidade": "Máxima fidelidade",
                "compatibilidade": "Compatibilidade original",
                "personalizado": "Personalizado"}
-PALETTE_LABEL = {"automatico": "Automático (seguro)",
+PALETTE_LABEL = {"automatico": "Cores da imagem (auto)",
                  "compatibilidade": "CLUT original",
                  "seguro": "Otimização segura",
                  "personalizada": "Paleta personalizada"}
@@ -38,11 +38,14 @@ class ImageOptimizerDialog(tk.Toplevel):
         self.transient(master)
         self._images = []
         self._source = project.art_path(cid)
-        if not self._source or not self._source.is_file():
+        if not project.arts.get(str(cid)) or not self._source or not self._source.is_file():
             self.destroy()
             raise ModError(f"Carta #{cid}: importe primeiro a imagem original.")
         self._load_cluts(master)
-        defaults = ImageOptions.from_mapping(project.metadata.get("ps1_image_optimizer"))
+        defaults = card_image_options(
+            project.metadata.get("ps1_image_optimizer"),
+            local_palettes=self.verified_layout and has_mirrored_thumbnail(
+                self.art_record, self.thumb_record))
         self.enabled = tk.BooleanVar(value=defaults.enabled)
         self.params = {}
         for field, labels in (("mode", MODES_LABEL), ("palette", PALETTE_LABEL),
@@ -60,7 +63,8 @@ class ImageOptimizerDialog(tk.Toplevel):
         self._refresh()
 
     def _load_cluts(self, parent):
-        from .ps1_mod import read_linked_wa
+        from .ps1_mod import read_linked_wa, wa_sha
+        from .ps1_runtime import SOURCE_SHA256
         source = Path(self.project.metadata.get("base_source") or "")
         if not source.is_file() or source.suffix.lower() not in (".bin", ".cue"):
             filename = filedialog.askopenfilename(
@@ -71,6 +75,8 @@ class ImageOptimizerDialog(tk.Toplevel):
                 raise ModError("Prévia cancelada: é necessário o WA_MRG.MRG de origem.")
             source = Path(filename)
         wa = read_linked_wa(self.project, source)  # confere hashes SLUS/WA
+        self.verified_layout = bool(wa_sha(self.project)) and (
+            self.project.metadata.get("base_sha256", {}).get("slus") == SOURCE_SHA256)
         if self.cid <= CARD_COUNT:
             model = self.cid
             native = True
@@ -81,6 +87,9 @@ class ImageOptimizerDialog(tk.Toplevel):
                 raise ModError(
                     f"Carta #{self.cid}: acima do limite PS1 de {PS1_CARD_CAPACITY}. "
                     "A imagem continuará disponível apenas no Studio.")
+            if not self.verified_layout:
+                self.destroy()
+                raise ModError("A prévia PS1 de cartas adicionais requer o Original Drop x15 vinculado.")
             model = native_model(self.project, self.cid)
             native = False
         self.native = native
@@ -184,7 +193,7 @@ class ImageOptimizerDialog(tk.Toplevel):
             from .ps1_image_optimizer import _scaled_rgba
             self.rendered = render_card(self._source,self.art_record,
                                         self.thumb_record,self._options(),
-                                        private_clut=False)
+                                        verified_layout=self.verified_layout)
             neutral=ImageOptions(mode="maxima_fidelidade",resample="lanczos")
             self.reference_art=_scaled_rgba(self._source,self.rendered.art.size,neutral)[0]
             self.reference_thumb=_scaled_rgba(self._source,self.rendered.thumbnail.size,neutral)[0]
@@ -214,13 +223,15 @@ class ImageOptimizerDialog(tk.Toplevel):
             canvas.configure(scrollregion=(0,0,photo.width(),photo.height()))
         report=resource.report
         source_label=("ID original" if self.native else "ID expandido (723–740)")
-        warnings="; ".join(report["avisos"]) or "CLUT original preservada"
+        palette = ("Paleta da imagem" if report["paleta"] == "privada_adaptativa"
+                   else "Paleta original preservada")
+        warnings = " • ".join(report["avisos"])
         self.info.set(
             f"{source_label} • {report['resolucao']} • "
             f"{report['cores_usadas']}/{report['cores_clut']} índices • "
             f"Dithering: {report['dithering']} • RMSE RGB: {report['rmse_rgb']} • "
             f"Fidelidade indicativa: {report['fidelidade_indicativa']}/100\n"
-            f"{warnings}. A qualidade só é confirmada em jogo após testar o BIN no ePSXe.")
+            f"{palette}" + (f" • {warnings}" if warnings else ""))
         self.palette_canvas.delete("all")
         used=sorted(set(resource.indices))
         for j,idx in enumerate(used[:72]):

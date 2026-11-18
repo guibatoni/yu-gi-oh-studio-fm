@@ -1,4 +1,4 @@
-"""Patches PS1 limitados: nomes curtos e artes usando paletas *existentes*.
+"""Patches PS1 de nomes, descrições e artes.
 
 Não expande tabelas nem modifica o motor. Tudo usa offsets documentados para
 SLUS-01411 e é verificado contra a base importada.
@@ -10,11 +10,8 @@ from pathlib import Path
 import re
 from .core import ModError
 from .deep_extract import BANK_NAMES, BANK_DESC, NAME_TABLE, STRING_TABLE, glyph_map, exe_pos
-from .png_pixels import read_png, resize_rgba
 from .tables import CARD_COUNT
 
-ART_WIDTH, ART_HEIGHT = 102, 96
-THUMB_WIDTH, THUMB_HEIGHT = 40, 32
 WA_SECTOR = 2048
 
 
@@ -72,85 +69,27 @@ def patch_names(exe: bytes, changes: dict[int, str]) -> tuple[bytes, list[dict]]
     return bytes(result),entries
 
 
-def _palette(raw: bytes, offset: int, size: int) -> list[tuple[int,int,int,int]]:
-    if offset < 0 or offset+size*2 > len(raw):
-        raise ModError('Paleta de carta fora de WA_MRG.MRG.')
-    result=[]
-    for i in range(size):
-        v=struct.unpack_from('<H',raw,offset+i*2)[0]
-        result.append(((v&31)*255//31,((v>>5)&31)*255//31,((v>>10)&31)*255//31, v!=0))
-    return result
-
-
-def _rgba_views(png: Path, sizes: tuple[tuple[int, int], ...]) -> tuple[bytes, ...]:
-    """Decode once for the two PS1 renders. Pillow is an optional accelerator."""
-    try:
-        from PIL import Image
-        with Image.open(png) as source:
-            image = source.convert('RGBA')
-            lanczos = getattr(Image, 'Resampling', Image).LANCZOS
-            return tuple((image if image.size == size else image.resize(size, lanczos)).tobytes()
-                         for size in sizes)
-    except (ImportError, OSError, ValueError):
-        try:
-            width, height, pixels = read_png(png)
-            return tuple(resize_rgba(pixels, (width, height), size) for size in sizes)
-        except (OSError, ValueError) as exc:
-            raise ModError(f'Não foi possível ler o PNG {png.name}: {exc}') from exc
-
-
-def _index_art(pixels: bytes, palette: list[tuple[int, int, int, int]]) -> bytes:
-    colors = [(i, red, green, blue) for i, (red, green, blue, used) in enumerate(palette) if used]
-    if not colors:
-        raise ModError('Paleta original vazia, impossível substituir arte com segurança.')
-    indices = bytearray(len(pixels) // 4)
-    cache = {}
-    for i in range(len(indices)):
-        at = i * 4
-        if pixels[at + 3] < 128:
-            continue
-        color = pixels[at:at + 3]
-        index = cache.get(color)
-        if index is None:
-            red, green, blue = color
-            index = min(colors, key=lambda p: (red - p[1]) ** 2 + (green - p[2]) ** 2 + (blue - p[3]) ** 2)[0]
-            cache[color] = index
-        indices[i] = index
-    return bytes(indices)
-
-
-def render_card_art(png: Path, art_record: bytes, thumbnail_record: bytes, *,
-                    options=None, private_clut: bool = False) -> tuple[bytes, bytes]:
-    """Compatibilidade da API antiga; conversão real é centralizada no otimizador."""
+def patch_card_art(wa: bytes, cid: int, png: Path, *, options=None,
+                   verified_layout: bool = False) -> tuple[bytes, list[dict]]:
+    """Grava a arte e miniaturas sem tocar no título ou em cartas vizinhas."""
     from .ps1_image_optimizer import render_card
-    output = render_card(png, art_record, thumbnail_record, options,
-                         private_clut=private_clut)
-    return output.art.indices, output.thumbnail.indices
 
-
-def patch_card_art(wa: bytes, cid: int, png:Path, *, options=None) -> tuple[bytes, list[dict]]:
-    """Aplica apenas pixels indexados, preservando paletas e tiras originais.
-
-    Arte principal: 102x96 em 8bpp. Miniatura: 40x32, paleta 64 cores.
-    O uso de paletas existentes evita recolorir faixas compartilhadas.
-    """
-    if not 1<=cid<=CARD_COUNT:
+    if not 1 <= cid <= CARD_COUNT:
         raise ModError('Artes de cartas adicionais exigem expansão de arquivos do PS1.')
-    base=((cid-1)*7+722)*WA_SECTOR
-    thumb=(cid-1)*WA_SECTOR
-    from .ps1_image_optimizer import render_card
-    output = render_card(Path(png), wa[base:base+7*WA_SECTOR],
-                         wa[thumb:thumb+WA_SECTOR], options,
-                         private_clut=False)
-    result=bytearray(wa);modified=[]
-    for kind, offset, resource in (('arte', base, output.art),
-                                   ('miniatura', thumb, output.thumbnail)):
-        pixels = resource.indices
-        if bytes(result[offset:offset+len(pixels)]) != pixels:
-            result[offset:offset+len(pixels)]=pixels
-            modified.append({'id':cid,'regiao':kind,'offset_wa':offset,'bytes':len(pixels),
-                                 'otimizacao':resource.report})
-    return bytes(result),modified
+    base = ((cid - 1) * 7 + CARD_COUNT) * WA_SECTOR
+    thumb = (cid - 1) * WA_SECTOR
+    output = render_card(Path(png), wa[base:base + 7 * WA_SECTOR],
+                         wa[thumb:thumb + WA_SECTOR], options,
+                         verified_layout=verified_layout)
+    result = bytearray(wa)
+    modified = []
+    for kind, offset, payload, report in output.regions(base, thumb):
+        end = offset + len(payload)
+        if result[offset:end] != payload:
+            result[offset:end] = payload
+            modified.append({'id': cid, 'regiao': kind, 'offset_wa': offset,
+                             'bytes': len(payload), 'otimizacao': report})
+    return bytes(result), modified
 
 
 _TEXT_CONTROL = re.compile(r'\{(f8 0[AB] [0-9A-Fa-f]{2}|color:[a-z]+|/color|card:[0-9]+|icon:[a-z0-9_]+)\}')

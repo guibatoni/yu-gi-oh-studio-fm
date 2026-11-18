@@ -1,11 +1,7 @@
-"""Otimizador de imagens indexadas PS1: Pillow opcional, pixels e CLUT verificáveis.
-
-Compatibilidade: jamais sobrescreve uma CLUT de registros originais.
-Novas CLUTs só são permitidas em registros privados acrescentados pela
-expansão nativa, onde arte e miniatura possuem sua própria cópia.
-"""
+"""Converte imagens para os pixels e as paletas RGB555 dos registros PS1."""
 from __future__ import annotations
 
+from collections import Counter
 import math
 import struct
 import zlib
@@ -17,6 +13,10 @@ from .png_pixels import read_png, resize_rgba
 
 ART_SIZE = (102, 96)
 THUMB_SIZE = (40, 32)
+ART_CLUT_OFFSET = 0x2640
+THUMB_CLUT_OFFSET = 0x500
+EMBEDDED_THUMB_OFFSET = 0x2AE0
+THUMB_BLOCK_SIZE = 0x580
 LIMITS = {"arte": (ART_SIZE, 256), "miniatura": (THUMB_SIZE, 64),
           "icone": ((16, 16), 16)}
 MODES = ("automatico", "maxima_fidelidade", "compatibilidade", "personalizado")
@@ -121,8 +121,9 @@ def _pillow():
         return None
 
 
-def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions):
-    """Renderiza com proporção preservada, fundo transparente e filtros suaves."""
+def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions, *,
+                 padding: tuple[int, int, int, int] = (0, 0, 0, 0)):
+    """Renderiza no tamanho nativo e mantém a transparência do desenho."""
     lib = _pillow()
     if lib is None:
         try:
@@ -135,7 +136,7 @@ def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions):
         dimensions = (max(1, min(size[0], round(width * ratio))),
                       max(1, min(size[1], round(height * ratio))))
         data = resize_rgba(source, (width, height), dimensions)
-        output = bytearray(size[0] * size[1] * 4)
+        output = bytearray(bytes(padding) * (size[0] * size[1]))
         x0, y0 = (size[0] - dimensions[0]) // 2, (size[1] - dimensions[1]) // 2
         for y in range(dimensions[1]):
             begin = 4 * ((y + y0) * size[0] + x0)
@@ -158,8 +159,8 @@ def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions):
         if options.mode == "automatico":
             sample = img.copy()
             sample.thumbnail((64, 64))
-            rgb = sample.getdata()
-            values = [(r, g, b) for r, g, b, a in rgb if a >= 128]
+            rgba = sample.tobytes()
+            values = [rgba[i:i + 3] for i in range(0, len(rgba), 4) if rgba[i + 3] >= 128]
             if values:
                 luma = [(.2126*r+.7152*g+.0722*b) for r,g,b in values]
                 avg = sum(luma) / len(luma)
@@ -203,9 +204,9 @@ def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions):
         return img.resize(size, filters[method]).tobytes(), ()
     # ImageOps.contain mantém a arte inteira; não recorta elementos importantes.
     result = ImageOps.contain(img, size, method=filters[method])
-    canvas = Image.new("RGBA", size, (0, 0, 0, 0))
-    canvas.alpha_composite(result, ((size[0] - result.width) // 2,
-                                    (size[1] - result.height) // 2))
+    canvas = Image.new("RGBA", size, padding)
+    canvas.paste(result, ((size[0] - result.width) // 2,
+                         (size[1] - result.height) // 2))
     return canvas.tobytes(), ()
 
 
@@ -239,29 +240,57 @@ def _choose_dither(pixels: bytes, width: int, height: int, options: ImageOptions
     return "bayer4" if total and smooth / total > .22 else "nenhum"
 
 
-def _palette_from_image(pixels: bytes, limit: int) -> tuple[int, ...] | None:
-    lib = _pillow()
-    if not lib:
-        return None
-    Image = lib[0]
+def _palette_from_image(pixels: bytes, limit: int) -> tuple[int, ...]:
     rgb = [tuple(pixels[i:i + 3]) for i in range(0, len(pixels), 4)
            if pixels[i + 3] >= 128]
     if not rgb:
-        return None
-    strip = Image.new("RGB", (len(rgb), 1))
-    strip.putdata(rgb)
-    quantized = strip.quantize(colors=min(limit - 1, 255),
-                               method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-    color_counts = quantized.getcolors(maxcolors=len(rgb) + 1) or []
-    palette = quantized.getpalette()
-    words = [0]
-    for _, idx in sorted(color_counts, reverse=True):
-        word = pack_rgb555(*palette[idx * 3:idx * 3 + 3])
-        if word not in words:
-            words.append(word)
-        if len(words) == limit:
-            break
+        return (0,) * limit
+    histogram = Counter(pack_rgb555(*pixel) for pixel in rgb)
+    lib = _pillow()
+    if len(histogram) <= limit - 1:
+        colors = [color for color, _ in histogram.most_common()]
+    elif lib is not None:
+        Image = lib[0]
+        strip = Image.new("RGB", (len(rgb), 1))
+        strip.putdata(rgb)
+        quantized = strip.quantize(colors=limit - 1, method=Image.Quantize.MEDIANCUT,
+                                   dither=Image.Dither.NONE)
+        color_counts = quantized.getcolors() or []
+        palette = quantized.getpalette()
+        colors = [pack_rgb555(*palette[idx * 3:idx * 3 + 3])
+                  for _, idx in sorted(color_counts, reverse=True)]
+    else:
+        colors = _median_cut_colors(histogram, limit - 1)
+    words = [0, *dict.fromkeys(colors)]
     return tuple(words + [0] * (limit - len(words)))
+
+
+def _median_cut_colors(histogram: Counter, capacity: int) -> list[int]:
+    """Split RGB555 color ranges by pixel weight without optional libraries."""
+    def bucket(colors):
+        population = sum(color[3] for color in colors)
+        spans = [max(c[k] for c in colors) - min(c[k] for c in colors) for k in range(3)]
+        channel = spans.index(max(spans))
+        return population * spans[channel] ** 2, channel, population, colors
+
+    boxes = [bucket([(*rgb555(word)[:3], count) for word, count in histogram.items()])]
+    while len(boxes) < capacity:
+        i = max(range(len(boxes)), key=lambda index: boxes[index][0])
+        score, channel, population, colors = boxes.pop(i)
+        if not score:
+            boxes.append((score, channel, population, colors))
+            break
+        colors.sort(key=lambda color: color[channel])
+        weight = 0
+        for cut, color in enumerate(colors[:-1], 1):
+            weight += color[3]
+            if weight * 2 >= population:
+                break
+        boxes.extend((bucket(colors[:cut]), bucket(colors[cut:])))
+    return [
+        pack_rgb555(*(round(sum(c[k] * c[3] for c in colors) / population) for k in range(3)))
+        for _, _, population, colors in boxes
+    ]
 
 
 def _index_rgba(pixels: bytes, size: tuple[int, int], clut: tuple[int, ...],
@@ -269,6 +298,8 @@ def _index_rgba(pixels: bytes, size: tuple[int, int], clut: tuple[int, ...],
     w, h = size
     colors = [(i, rgb555(value)[:3]) for i, value in enumerate(clut) if value != 0]
     if not colors:
+        if not any(a >= 128 for a in pixels[3::4]):
+            return bytes(w * h), 0.0
         raise ModError("CLUT sem cores visíveis; operação bloqueada.")
     result = bytearray(w * h)
     errors = [[0.0, 0.0, 0.0] for _ in range(w * h)] if dither == "floyd" else None
@@ -327,14 +358,26 @@ class RenderedResource:
     def preview_png(self) -> bytes:
         return png_rgba(self.preview_rgba, self.size)
 
+    def ps1_bytes(self) -> bytes:
+        return self.indices + struct.pack(f"<{len(self.clut)}H", *self.clut)
+
 
 @dataclass
 class RenderedCard:
     art: RenderedResource
     thumbnail: RenderedResource
+    mirror_thumbnail: bool
 
     def diagnostics(self):
         return {"arte": self.art.report, "miniatura": self.thumbnail.report}
+
+    def regions(self, art_offset: int, thumbnail_offset: int):
+        thumbnail = self.thumbnail.ps1_bytes()
+        yield "arte", art_offset, self.art.ps1_bytes(), self.art.report
+        yield "miniatura", thumbnail_offset, thumbnail, self.thumbnail.report
+        if self.mirror_thumbnail:
+            yield ("miniatura_embutida", art_offset + EMBEDDED_THUMB_OFFSET,
+                   thumbnail, self.thumbnail.report)
 
 
 def render_resource(png: Path, original_clut: tuple[int, ...],
@@ -343,21 +386,18 @@ def render_resource(png: Path, original_clut: tuple[int, ...],
     opts = ImageOptions.from_mapping(options)
     if len(original_clut) not in (16, 64, 256):
         raise ModError("Número de entradas de CLUT não é suportado.")
-    raw, warnings = _scaled_rgba(Path(png), size, opts)
     requested = opts.palette
     replace = (private_clut and opts.enabled and opts.mode != "compatibilidade"
                and requested in ("automatico", "seguro", "personalizada"))
-    new_clut = _palette_from_image(raw, len(original_clut)) if replace else None
-    clut = new_clut if new_clut is not None else original_clut
+    padding = (0, 0, 0, 0) if replace else rgb555(original_clut[0])
+    raw, warnings = _scaled_rgba(Path(png), size, opts, padding=padding)
+    clut = _palette_from_image(raw, len(original_clut)) if replace else original_clut
     if clut[0] != 0 and any(raw[i] < 128 for i in range(3, len(raw), 4)):
         raise ModError("O índice zero desta CLUT é opaco; transparência não pode "
                        "ser gravada sem alterar uma paleta compartilhada.")
     if not private_clut and requested in ("seguro", "personalizada"):
         warnings += ("CLUT original preservada: não foi comprovada exclusividade; "
                      "a troca de paleta foi bloqueada.",)
-    if replace and new_clut is None:
-        warnings += ("Paleta privada mantida: otimização adaptativa requer Pillow "
-                     "e pixels opacos na imagem.",)
     method = "nenhum" if not opts.enabled or opts.mode == "compatibilidade" else _choose_dither(
         raw, size[0], size[1], opts)
     strength = opts.intensity if method != "nenhum" else 0
@@ -373,20 +413,31 @@ def render_resource(png: Path, original_clut: tuple[int, ...],
          "cores_clut": len(clut), "rmse_rgb": round(rmse, 2),
          "fidelidade_indicativa": round(max(0, 100 - rmse * .75), 1),
          "dithering": method,
-         "paleta": "privada_adaptativa" if new_clut is not None else "original_preservada",
+         "paleta": "privada_adaptativa" if replace else "original_preservada",
          "pillow": _pillow() is not None, "avisos": list(warnings)})
 
 
+def has_mirrored_thumbnail(art_record: bytes, thumb_record: bytes) -> bool:
+    return (len(art_record) == 7 * 2048 and len(thumb_record) == 2048
+            and art_record[EMBEDDED_THUMB_OFFSET:EMBEDDED_THUMB_OFFSET + THUMB_BLOCK_SIZE]
+            == thumb_record[:THUMB_BLOCK_SIZE])
+
+
+def card_image_options(options, *, local_palettes: bool) -> ImageOptions:
+    if options is None and not local_palettes:
+        return ImageOptions(enabled=False, mode="compatibilidade",
+                            palette="compatibilidade", dither="nenhum")
+    return ImageOptions.from_mapping(options)
+
+
 def render_card(png: Path, art_record: bytes, thumb_record: bytes, options=None, *,
-                private_clut: bool = False) -> RenderedCard:
-    """Mesmos pixels/CLUT para prévia e exportação, sem alterar regiões adjacentes."""
-    # Projetos antigos sem configuração continuam pixel-identical no modo
-    # legível original. Novos imports registram automatico por padrão.
-    if options is None:
-        options = {"enabled": False, "mode": "compatibilidade",
-                   "palette": "compatibilidade", "dither": "nenhum"}
-    art_clut = clut_words(art_record, 0x2640, 256)
-    thumb_clut = clut_words(thumb_record, 0x500, 64)
+                verified_layout: bool = False) -> RenderedCard:
+    """Use separate local CLUTs on the verified retail game layout."""
+    local = verified_layout and has_mirrored_thumbnail(art_record, thumb_record)
+    options = card_image_options(options, local_palettes=local)
+    art_clut = clut_words(art_record, ART_CLUT_OFFSET, 256)
+    thumb_clut = clut_words(thumb_record, THUMB_CLUT_OFFSET, 64)
     return RenderedCard(
-        art=render_resource(png, art_clut, ART_SIZE, options, private_clut=private_clut),
-        thumbnail=render_resource(png, thumb_clut, THUMB_SIZE, options, private_clut=private_clut))
+        art=render_resource(png, art_clut, ART_SIZE, options, private_clut=local),
+        thumbnail=render_resource(png, thumb_clut, THUMB_SIZE, options, private_clut=local),
+        mirror_thumbnail=local)

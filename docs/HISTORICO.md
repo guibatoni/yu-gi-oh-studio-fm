@@ -1,3 +1,14 @@
+## v1.9.5 — Cores das artes no BIN/CUE
+
+- Calcula paletas RGB555 a partir das imagens das cartas originais e
+  adicionais no Original Drop x15. A arte usa 256 entradas e cada
+  miniatura usa 64, incluindo o índice reservado para transparência.
+- Grava a miniatura no setor individual e no registro de arte da carta.
+  O título usa a faixa e a paleta próprias do jogo.
+- A prévia e a exportação usam o mesmo conversor. PNGs já vinculados
+  funcionam com o perfil Automático, inclusive sem Pillow.
+- O perfil Compatibilidade original mantém as paletas de origem.
+
 ## v1.9.3 — Exportação de artes PS1 sem Pillow
 
 - Grava arte principal e miniatura de cartas originais e adicionais a partir

@@ -275,7 +275,7 @@ def require_original_source(exe):
                        'ser aberta no ePSXe ou em Verificar BIN/CUE.')
 
 
-def expand_archive(wa, project, plan, *, prefix):
+def expand_archive(wa, project, plan, *, prefix, art_reports=None):
     """Insert only thumbnail slots; append full art without moving old records.
 
     The transfer adapter moves subsequent resource requests by 18 sectors.
@@ -284,7 +284,7 @@ def expand_archive(wa, project, plan, *, prefix):
     from .core import ModError
     from .passwords import validate_ps1_prefix
     from .tables import PASSWORD_BASE
-    from .ps1_content import render_card_art
+    from .ps1_image_optimizer import render_card
     if not plan.enabled:
         return wa
     if len(wa) % 2048 or len(wa) < 5776 * 2048:
@@ -304,15 +304,15 @@ def expand_archive(wa, project, plan, *, prefix):
             png = (project.folder / rel).resolve()
             if not png.is_relative_to(project.folder.resolve()) or not png.is_file():
                 raise ModError(f'#{cid}: PNG ausente ou fora da pasta do projeto.')
-            # Mesmo pipeline das cartas originais. A CLUT do registro novo
-            # também colore as faixas/título herdados do modelo; portanto
-            # não podemos substituí-la sem mapear todos os consumidores.
-            art_pixels, thumb_pixels = render_card_art(
+            converted = render_card(
                 png, art, thumb,
                 options=project.metadata.get('ps1_image_optimizer'),
-                private_clut=False)
-            art[:len(art_pixels)] = art_pixels
-            thumb[:len(thumb_pixels)] = thumb_pixels
+                verified_layout=True)
+            for kind, offset, payload, _ in converted.regions(0, 0):
+                target = thumb if kind == 'miniatura' else art
+                target[offset:offset + len(payload)] = payload
+            if art_reports is not None:
+                art_reports[cid] = converted.diagnostics()
         if cid in models:
             art[0x2840:0x2AE0] = _title_bitmap(project.get(cid).get('nome') or f'Carta {cid}')
         thumbs.append(thumb)

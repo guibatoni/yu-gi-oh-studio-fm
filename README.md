@@ -1,11 +1,11 @@
-## Otimização de imagens PS1 — implementação em revisão
+# Studio FM v1.9.5 — Cores das artes no PS1
 
-O conversor Pillow (opcional) permite importação de PNG/JPG/WEBP/BMP/TIFF,
-filtros de redimensionamento, dithering, comparação lado a lado com a
-CLUT/pixels reais e zoom. Aplica o mesmo pipeline às artes originais e às
-cartas nativas expandidas #723–740. Preserva CLUTs compartilhadas e não
-regrava regiões de títulos/faixas. Projetos antigos sem opção de otimização
-mantêm o conversor legado. Consulte [a documentação técnica](docs/OTIMIZACAO_PS1_PILLOW.md).
+No **Original Drop x15** reconhecido, **Gerar jogo BIN/CUE** cria paletas a
+partir do PNG de cada carta editada, incluindo os IDs **#723–#740**.
+A arte do Slifer, por exemplo, usa os vermelhos e dourados da imagem
+importada. O Studio grava as duas cópias da miniatura e exibe a mesma
+conversão na prévia PS1. Imagens já vinculadas são convertidas ao gerar
+um novo BIN/CUE. [Documentação da otimização](docs/OTIMIZACAO_PS1_PILLOW.md)
 
 ---
 

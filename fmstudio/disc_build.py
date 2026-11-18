@@ -353,7 +353,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 raise ModError(f'PNG não encontrado para carta #{cid}: {path.name}')
             patched_wa,regions=patch_card_art(
                 patched_wa,cid,path,
-                options=project.metadata.get('ps1_image_optimizer'))
+                options=project.metadata.get('ps1_image_optimizer'),
+                verified_layout=native_profile)
             written_arts.extend(regions)
 
     native_written=[]
@@ -495,13 +496,16 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             expected_wa = wa_sha(project)
         if not expected_wa or hashlib.sha256(original_wa).hexdigest() != expected_wa:
             raise ModError('Expansão: WA_MRG precisa ter o hash de origem registrado pelo extrator.')
+        art_reports = {}
         patched_wa = expand_archive(patched_wa if patched_wa is not None else original_wa,
-                                    project, expansion, prefix=native_plan.password_prefix)
+                                    project, expansion, prefix=native_plan.password_prefix,
+                                    art_reports=art_reports)
         patched_exe = patch_expansion(original_exe, patched_exe, project, expansion,
                                       wa_sectors=len(original_wa) // PAYLOAD)
         expansion_report.update(inspect_expansion(patched_exe))
         expansion_report['titulos_gravados'] = list(expansion.ids)
-        expansion_report['artes_proprias'] = [cid for cid in expansion.ids if str(cid) in project.arts]
+        expansion_report['artes_proprias'] = list(art_reports)
+        expansion_report['otimizacao_artes'] = art_reports
         if expansion_report['status'] != 'aplicado':
             raise ModError('Expansão incompleta após instalar as tabelas e os adaptadores nativos.')
         chest_catalog_report = inspect_chest_catalog(patched_exe)
