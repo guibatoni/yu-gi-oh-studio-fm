@@ -152,14 +152,27 @@ class PS1ImagePipelineTests(unittest.TestCase):
         self.assertEqual(art[-1],4)
         self.assertEqual(len(set(art)),4)
 
-    def test_proportion_preserved_and_no_cropping_in_auto(self):
+    def test_imagem_inteira_keeps_the_borders_when_selected(self):
         wide=png(self.folder/'wide.png',(80,20),bytes((255,0,0,255))*1600)
         result=render_card(wide,self.art,self.thumb,
-                           {'mode':'automatico','dither':'nenhum'})
+                           {'mode':'automatico','dither':'nenhum','framing':'inteira'})
         w,h=ART_SIZE
         self.assertEqual(result.art.indices[0],0)
         self.assertEqual(result.art.indices[(h//2)*w+(w//2)],1)
         self.assertTrue(any(result.art.indices[y*w] == 0 for y in range(h//4)))
+
+    def test_automatic_center_crop_fills_both_texture_sizes_with_and_without_pillow(self):
+        portrait = png(self.folder/'wide-vs-tall.png', (32, 128),
+                       (b'\xff\0\0\xff' * 32 * 40 + b'\0\xff\0\xff' * 32 * 48
+                        + b'\0\0\xff\xff' * 32 * 40))
+        for with_pillow in (True, False):
+            with self.subTest(pillow=with_pillow), patch.dict(
+                    sys.modules, {} if with_pillow else {'PIL': None}):
+                result = render_card(portrait, self.art, self.thumb, {'dither':'nenhum'})
+                for resource in (result.art, result.thumbnail):
+                    self.assertEqual(set(resource.indices), {2})
+                    self.assertEqual(set(resource.preview_rgba[3::4]), {255})
+                    self.assertEqual(resource.report['enquadramento'], 'preencher')
 
     def test_original_compatibility_does_not_add_letterboxing(self):
         wide=png(self.folder/'wide.png',(80,20),bytes((255,0,0,255))*1600)
@@ -185,7 +198,7 @@ class PS1ImagePipelineTests(unittest.TestCase):
     def test_portrait_padding_respects_opaque_palette_without_altering_it(self):
         path = png(self.folder/'portrait-opaque.png', (10, 20), b'\xff\0\0\xff' * 200)
         palette = (0x8000, 31) + (0,) * 254
-        result = render_resource(path, palette, ART_SIZE, {'dither':'nenhum'})
+        result = render_resource(path, palette, ART_SIZE, {'dither':'nenhum','framing':'inteira'})
         self.assertEqual(result.clut, palette)
         self.assertEqual(result.preview_rgba[:4], bytes((0, 0, 0, 255)))
         self.assertEqual(result.indices[ART_SIZE[0] // 2], 1)

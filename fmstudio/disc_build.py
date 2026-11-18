@@ -188,6 +188,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     texts={int(cid):project.get(int(cid)).get('descricao','')
            for cid,rows in getattr(project,'edits',{}).items()
            if 'descricao' in rows and 1<=int(cid)<=722}
+    names={int(cid):project.get(int(cid)).get('nome','')
+           for cid,rows in getattr(project,'edits',{}).items()
+           if 'nome' in rows and 1<=int(cid)<=CARD_COUNT}
     descriptions_studio_only=sorted(
         {int(cid) for cid,rows in getattr(project,'edits',{}).items()
          if 'descricao' in rows and int(cid)>722}
@@ -235,6 +238,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             native_terrain=metadata.get('ps1_terrain_boosts',{})
             needs_wa=(expansion.enabled or requested_art or native_equips or replacements or native_rituals or mod_plan.needs_wa
                       or god_icon_card or god24_enabled or supreme_ids or native_plan.password_prefix is not None
+                      or (native_profile and names)
                       or (native_profile and any('{icon:' in desc for desc in texts.values())))
             original_wa=b''.join(reader.read_entry(wa_entry)) if needs_wa and wa_entry else None
             if expansion.enabled:
@@ -283,13 +287,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if len(patched_exe)!=exe.size:
         raise ModError('Executável mudou de tamanho; gravação de disco bloqueada.')
     written_names=[];written_descriptions=[]
-    if hasattr(project,'edits'):
+    if names:
         from .ps1_content import patch_names
-        edits={int(cid):project.get(int(cid)).get('nome','') for cid,rows in project.edits.items()
-               if 'nome' in rows and int(cid)<=722}
         # Nomes que não cabem ficam apenas no projeto; cada tentativa gera
         # relatório separado sem gravar parcialmente uma string inválida.
-        for cid,name in sorted(edits.items()):
+        for cid,name in sorted(names.items()):
             try:
                 patched_exe,items=patch_names(patched_exe,{cid:name})
                 written_names.extend(items)
@@ -331,6 +333,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_exe, None if mod_plan.has_lp else metadata.get('ps1_starting_lp'))
 
     written_arts=[]
+    written_titles=[]
     patched_wa=None
     if requested_art:
         if original_wa is None or wa_entry is None:
@@ -356,6 +359,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 options=project.metadata.get('ps1_image_optimizer'),
                 verified_layout=native_profile)
             written_arts.extend(regions)
+
+    if native_profile and written_names and original_wa is not None:
+        if requested_art or hashlib.sha256(original_wa).hexdigest() == wa_sha(project):
+            from .ps1_content import patch_card_titles
+            patched_wa, written_titles = patch_card_titles(
+                patched_wa if patched_wa is not None else original_wa,
+                {row['id']: names[row['id']] for row in written_names})
 
     native_written=[]
     if native_equips or replacements:
@@ -504,6 +514,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                                       wa_sectors=len(original_wa) // PAYLOAD)
         expansion_report.update(inspect_expansion(patched_exe))
         expansion_report['titulos_gravados'] = list(expansion.ids)
+        written_titles.extend(expansion.ids)
         expansion_report['artes_proprias'] = list(art_reports)
         expansion_report['otimizacao_artes'] = art_reports
         if expansion_report['status'] != 'aplicado':
@@ -627,6 +638,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'sha256_slus_modificado':hashlib.sha256(patched_exe).hexdigest(),
                 'setores_modificados':len(changed),'lbas':sorted(changed),
                 'nomes_aplicados':written_names,
+                'titulos_gravados_ps1':written_titles,
                 'descricoes_aplicadas':written_descriptions,
                 'descricoes_confirmadas_no_bin':confirmed_descriptions,
                 'descricoes_nao_gravadas':descriptions_not_written,

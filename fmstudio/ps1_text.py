@@ -20,6 +20,11 @@ ICON_CODES = {name: 0x40 + index for index, name in enumerate(
 ICON_CODES['god'] = 0x31
 MAX_ROWS, COLUMN_WIDTH = 9, 21
 MAX_TEXT_BYTES = 2048  # Includes the terminator read by the BIN verifier.
+COLOR_CONTROL = b'\xf8\x0a'
+ICON_CONTROL = b'\xf8\x0b'
+PUNCTUATION = str.maketrans({'–': '-', '—': '-', '−': '-', '’': "'", '‘': "'",
+                            '“': '"', '”': '"', '…': '...', '×': 'x', '\xa0': ' '})
+TEXT_ICON_LABELS = {'vinculo_vida': 'Vinculo de vida', 'restaurar_lp': 'Restaura LP'}
 
 
 def _text_tokens(raw: bytes):
@@ -68,29 +73,47 @@ def _measure(raw: bytes) -> set[int]:
 
 
 def _reflow(raw: bytes) -> bytes:
-    """Collapse manual line breaks and keep icon commands together."""
-    out = bytearray()
-    gap, visible = False, False
-    rows, column = 1, 0
+    """Collapse manual line breaks and move whole words to the next line."""
+    words = []
+    word = []
     for token in _text_tokens(raw):
         if token in (b'\x00', b'\xfe'):
-            gap = visible
-            continue
-        width = _columns(token)
-        if width and gap:
-            if column < COLUMN_WIDTH:
+            if word:
+                words.append(word)
+                word = []
+        else:
+            word.append(token)
+    if word:
+        words.append(word)
+
+    out = bytearray()
+    column = 0
+    for word in words:
+        width = sum(map(_columns, word))
+        if width and column:
+            if column + 1 + min(width, COLUMN_WIDTH) <= COLUMN_WIDTH:
                 out.append(0)
                 column += 1
             else:
                 out.append(0xFE)
-                rows, column = rows + 1, 0
-            gap = False
-        next_row, next_column = _cursor(rows, column, token)
-        if width == 2 and next_row != rows:
-            out.append(0xFE)  # The icon renderer itself does not wrap.
+                column = 0
+        for token in word:
+            wrapped, column = _cursor(0, column, token)
+            if wrapped and token.startswith(ICON_CONTROL):
+                out.append(0xFE)
+            out.extend(token)
+    return bytes(out)
+
+
+def _wrap_icons(raw: bytes) -> bytes:
+    """The native renderer wraps glyphs but draws a two-column icon in place."""
+    column = 0
+    out = bytearray()
+    for token in _text_tokens(raw):
+        wrapped, column = _cursor(0, column, token)
+        if wrapped and token.startswith(ICON_CONTROL):
+            out.append(0xFE)
         out.extend(token)
-        rows, column = next_row, next_column
-        visible |= bool(width)
     return bytes(out)
 
 
@@ -102,7 +125,7 @@ def compile_description(value: str, cmap: dict, cards: dict) -> tuple[bytes, str
     def normalize(text):
         result = []
         for char in text:
-            fallback = ''.join(base for base in unicodedata.normalize('NFD', char)
+            fallback = ''.join(base for base in unicodedata.normalize('NFKD', char.translate(PUNCTUATION))
                                if not unicodedata.combining(base))
             if char not in font and fallback and all(base in font for base in fallback):
                 simplified.add(char)
@@ -113,32 +136,86 @@ def compile_description(value: str, cmap: dict, cards: dict) -> tuple[bytes, str
 
     raw = _encode_description(value.replace('\r\n', '\n').replace('\r', '\n'),
                               cmap, cards, icon_codes=ICON_CODES, normalize=normalize)
-    reflowed = _reflow(raw) if _layout(raw)[0] > MAX_ROWS else raw
+    reflowed = _reflow(raw) if _layout(raw)[0] > MAX_ROWS else _wrap_icons(raw)
     return reflowed, ''.join(sorted(simplified)), reflowed != raw
 
 
-def preview_description(raw: bytes, cmap: dict, byte_limit: int) -> bytes | None:
-    """Fit a prefix plus an ellipsis in the given payload and screen budget."""
-    dot = next((code for code, char in cmap.items() if char == '.'), None)
-    if dot is None:
-        return None
-    suffix = bytes([dot]) * 3 + b'\xf8\x0a\x00'
-    budget = min(byte_limit, MAX_TEXT_BYTES - 1) - len(suffix)
-    rows, column, used = 1, 0, 0
+def compile_compatible_description(value: str, cmap: dict, cards: dict):
+    """Spell out Studio icons with no mapped PS1 sprite when necessary."""
+    try:
+        return (*compile_description(value, cmap, cards), False)
+    except ModError as original:
+        adapted = value
+        for icon, label in TEXT_ICON_LABELS.items():
+            adapted = adapted.replace('{icon:' + icon + '}', label)
+        if adapted == value:
+            raise
+        try:
+            return (*compile_description(adapted, cmap, cards), True)
+        except ModError as exc:
+            raise original from exc
+
+
+def _preview_prefix(raw: bytes, dots: bytes, budget: int) -> bytes | None:
+    rows, column, used, color = 1, 0, 0, 0
     prefix = []
     for token in _text_tokens(raw):
         next_row, next_column = _cursor(rows, column, token)
-        if (used + len(token) > budget or next_row > MAX_ROWS
-                or next_row == MAX_ROWS and next_column > COLUMN_WIDTH - 3):
+        next_color = token[2] if token.startswith(COLOR_CONTROL) else color
+        length = used + len(token) + len(dots) + (3 if next_color else 0)
+        if (length > budget or next_row > MAX_ROWS
+                or next_row == MAX_ROWS and next_column > COLUMN_WIDTH - len(dots)):
+            # Avoid ending in the middle of a later word when a whole word fits.
+            if token not in (b'\x00', b'\xfe') and _columns(token):
+                for gap in range(len(prefix) - 1, 0, -1):
+                    if prefix[gap] in (b'\x00', b'\xfe'):
+                        prefix = prefix[:gap]
+                        break
             break
         prefix.append(token)
         rows, column = next_row, next_column
         used += len(token)
+        color = next_color
     while prefix and (prefix[-1] in (b'\x00', b'\xfe') or _columns(prefix[-1]) == 0):
         prefix.pop()
-    if not prefix or used == len(raw):
+    if not prefix:
         return None
-    return b''.join(prefix) + suffix
+    last_color = next((token[2] for token in reversed(prefix) if token.startswith(COLOR_CONTROL)), 0)
+    return b''.join(prefix) + dots + (COLOR_CONTROL + b'\x00' if last_color else b'')
+
+
+def preview_description(raw: bytes, cmap: dict, byte_limit: int) -> bytes | None:
+    """Fit the most readable prefix, using the original colors/icons when space allows."""
+    budget = min(byte_limit, MAX_TEXT_BYTES - 1)
+    if budget <= 0 or (len(raw) <= budget and _layout(raw)[0] <= MAX_ROWS):
+        return None
+    dot = next((code for code, char in cmap.items() if char == '.'), None)
+    tokens = list(_text_tokens(raw))
+    text_codes = {code for code, char in cmap.items() if char.isalnum()}
+    first_line_text = next((i for i, token in enumerate(tokens)
+                            if len(token) == 1 and token[0] not in (0, 0xFE)), len(tokens))
+    variants = [raw]
+    if first_line_text < len(tokens):
+        variants.append(_reflow(b''.join(t for t in tokens if not t.startswith(COLOR_CONTROL))))
+        variants.append(_reflow(b''.join(t for i, t in enumerate(tokens)
+                                         if not t.startswith(COLOR_CONTROL)
+                                         and (i >= first_line_text or not t.startswith(ICON_CONTROL)))))
+    candidates = []
+    for variant in dict.fromkeys(variants):
+        if len(variant) <= budget and _layout(variant)[0] <= MAX_ROWS:
+            candidates.append(variant)
+        elif dot is not None:
+            prefix = _preview_prefix(variant, bytes([dot]) * 3, budget)
+            if prefix:
+                candidates.append(prefix)
+
+    def readable(value):
+        return sum(len(t) == 1 and t[0] in text_codes for t in _text_tokens(value))
+
+    best = max(candidates, key=readable, default=None)
+    if best and (readable(best) or not readable(raw)):
+        return best
+    return None
 
 
 def description_regions(plan, *, has_lp: bool) -> list[tuple[int, int]]:
@@ -235,7 +312,13 @@ def patch_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
         try:
             if not 1 <= cid <= PS1_CARD_CAPACITY:
                 raise ModError('Edição PS1 requer ID de 1 a 740.')
-            raw, simplified, reflowed = compile_description(value, cmap, cards)
+            reason = ''
+            if preview_new and cid > CARD_COUNT:
+                raw, simplified, reflowed, adapted = compile_compatible_description(value, cmap, cards)
+                if adapted:
+                    reason = 'Ícone sem sprite PS1 foi gravado como texto.'
+            else:
+                raw, simplified, reflowed = compile_description(value, cmap, cards)
             try:
                 offset, capacity = description_slot(exe, cid)
             except ModError:
@@ -248,9 +331,9 @@ def patch_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
             except ModError as exc:
                 if not preview_new or cid <= CARD_COUNT:
                     raise
-                deferred.append((cid, raw, simplified, reflowed, str(exc)))
+                deferred.append((cid, raw, simplified, reflowed, ' '.join(filter(None, (reason, str(exc))))))
                 continue
-            write_text(cid, raw, offset, relocated, icons, simplified, reflowed)
+            write_text(cid, raw, offset, relocated, icons, simplified, reflowed, reason)
         except ModError as exc:
             pending[cid] = str(exc)
 

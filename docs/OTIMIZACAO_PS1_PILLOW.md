@@ -35,7 +35,9 @@ Uma imagem que usa transparência real precisa de um índice transparente.
 ## Filtros e modos
 
 * **Automático:** LANCZOS para arte, BOX por área em reduções intensas de
-  miniatura. Preserva proporção com padding transparente, sem recortar a arte.
+  miniatura. **Preencher (recorte central)** mantém a proporção e ocupa toda
+  a área de destino. **Imagem inteira** preserva o enquadramento completo
+  com margens quando a proporção do PNG é diferente.
 * **Máxima fidelidade:** mantém as dimensões nativas; permite escolher o filtro.
 * **Compatibilidade original:** a imagem ocupa a região de destino como no
   conversor legado, com busca euclidiana e sem dithering.

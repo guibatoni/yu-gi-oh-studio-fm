@@ -23,6 +23,7 @@ MODES = ("automatico", "maxima_fidelidade", "compatibilidade", "personalizado")
 PALETTES = ("automatico", "compatibilidade", "seguro", "personalizada")
 FILTERS = ("automatico", "lanczos", "bicubic", "bilinear", "nearest", "box")
 DITHERS = ("automatico", "nenhum", "floyd", "bayer2", "bayer4", "bayer8")
+FRAMINGS = ("preencher", "inteira")
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class ImageOptions:
     gamma: float = 1.0
     sharpness: float = 1.0
     denoise: bool = False
+    framing: str = "preencher"
 
     @classmethod
     def from_mapping(cls, data=None):
@@ -52,6 +54,7 @@ class ImageOptions:
             options = cls(**items)
             if (options.mode not in MODES or options.palette not in PALETTES
                 or options.resample not in FILTERS or options.dither not in DITHERS
+                or options.framing not in FRAMINGS
                 or type(options.enabled) is not bool or type(options.denoise) is not bool):
                 raise ValueError("opção desconhecida")
             for label, value, lo, hi in (
@@ -121,17 +124,34 @@ def _pillow():
         return None
 
 
+def _cover_box(source: tuple[int, int], target: tuple[int, int]) -> tuple[int, int, int, int]:
+    """Center crop to fill the target at the artwork's original proportions."""
+    width, height = source
+    target_width, target_height = target
+    crop_width = min(width, max(1, round(height * target_width / target_height)))
+    crop_height = min(height, max(1, round(width * target_height / target_width)))
+    left, top = (width - crop_width) // 2, (height - crop_height) // 2
+    return left, top, left + crop_width, top + crop_height
+
+
 def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions, *,
                  padding: tuple[int, int, int, int] = (0, 0, 0, 0)):
     """Renderiza no tamanho nativo e mantém a transparência do desenho."""
     lib = _pillow()
+    legacy = not options.enabled or options.mode == "compatibilidade"
     if lib is None:
         try:
             width, height, source = read_png(path)
         except (OSError, ValueError) as exc:
             raise ModError(f"PNG {path.name}: {exc}") from exc
-        if not options.enabled or options.mode == "compatibilidade":
+        if legacy:
             return resize_rgba(source, (width, height), size), ("Pillow ausente: redução por área/bilinear.",)
+        if options.framing == "preencher":
+            x0, y0, x1, y1 = _cover_box((width, height), size)
+            cropped = b"".join(source[4 * (y * width + x0):4 * (y * width + x1)]
+                               for y in range(y0, y1))
+            return resize_rgba(cropped, (x1 - x0, y1 - y0), size), (
+                "Pillow ausente: recorte central e redução por área/bilinear.",)
         ratio = min(size[0] / width, size[1] / height)
         dimensions = (max(1, min(size[0], round(width * ratio))),
                       max(1, min(size[1], round(height * ratio))))
@@ -152,7 +172,6 @@ def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions, *,
             img = source.convert("RGBA")
     except (OSError, ValueError, Image.DecompressionBombError) as exc:
         raise ModError(f"PNG {path.name}: {exc}") from exc
-    legacy = not options.enabled or options.mode == "compatibilidade"
     if not legacy:
         # Ajustes adaptativos brandos apenas no Automático: não reinterpretar
         # a iluminação dramática de uma imagem em Máxima fidelidade.
@@ -202,6 +221,8 @@ def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions, *,
                "box": Image.Resampling.BOX}
     if legacy:
         return img.resize(size, filters[method]).tobytes(), ()
+    if options.framing == "preencher":
+        return img.resize(size, filters[method], box=_cover_box(img.size, size)).tobytes(), ()
     # ImageOps.contain mantém a arte inteira; não recorta elementos importantes.
     result = ImageOps.contain(img, size, method=filters[method])
     canvas = Image.new("RGBA", size, padding)
@@ -413,6 +434,8 @@ def render_resource(png: Path, original_clut: tuple[int, ...],
          "cores_clut": len(clut), "rmse_rgb": round(rmse, 2),
          "fidelidade_indicativa": round(max(0, 100 - rmse * .75), 1),
          "dithering": method,
+         "enquadramento": ("esticar" if not opts.enabled or opts.mode == "compatibilidade"
+                           else opts.framing),
          "paleta": "privada_adaptativa" if replace else "original_preservada",
          "pillow": _pillow() is not None, "avisos": list(warnings)})
 

@@ -1,3 +1,19 @@
+# Studio FM v1.9.6 — Descrição, nome e enquadramento no PS1
+
+O perfil **Automático** preenche a arte e a miniatura por recorte central. A
+prévia PS1 oferece **Imagem inteira** para preservar as bordas do PNG.
+
+Os títulos das cartas novas usam uma linha mais alta e os tons corretos da
+faixa nativa. No Original Drop x15 reconhecido, a faixa também é atualizada
+quando o novo nome de uma carta original é gravado.
+
+As descrições reorganizam quebras que ultrapassam a tela ou deixam um ícone
+no limite da linha. Na exportação com descrições compatíveis, as prévias
+curtas priorizam palavras e ícones de vida sem sprite podem sair por
+extenso nas cartas novas. O texto completo continua no projeto.
+
+---
+
 # Studio FM v1.9.5 — Cores das artes no PS1
 
 No **Original Drop x15** reconhecido, **Gerar jogo BIN/CUE** cria paletas a

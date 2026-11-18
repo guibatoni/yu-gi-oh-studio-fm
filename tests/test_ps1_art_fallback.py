@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 from fmstudio.core import ModError
 from fmstudio.png_pixels import PNG_SIGNATURE, read_png, resize_rgba
-from fmstudio.ps1_content import patch_card_art
+from fmstudio.ps1_content import patch_card_art, patch_card_titles
+from fmstudio.ps1_card_title import TITLE_BYTES, TITLE_OFFSET, TITLE_WIDTH
 from fmstudio.ps1_expansion import _title_bitmap
 
 
@@ -82,3 +83,22 @@ class ArtworkWithoutPillowTests(unittest.TestCase):
         self.assertTrue(any(title))
         self.assertTrue(all((pixel & 0x88) == 0 for pixel in title))
         self.assertNotEqual(title, _title_bitmap('Dragão 724'))
+
+    def test_long_title_uses_the_dark_ink_and_the_full_height(self):
+        title = _title_bitmap('Slifer the Sky Dragon')
+        indices = [ink for value in title for ink in (value & 15, value >> 4)]
+        visible = {i // TITLE_WIDTH for i, pixel in enumerate(indices) if pixel}
+        self.assertGreaterEqual(len(visible), 9)
+        self.assertIn(1, indices)  # Native palette: 1 is the densest ink.
+        self.assertTrue(all(indices[y * TITLE_WIDTH] == 0 and
+                            indices[(y + 1) * TITLE_WIDTH - 1] == 0 for y in visible))
+
+    def test_rename_updates_the_art_title_only(self):
+        title = _title_bitmap('Cronomago')
+        offset = 722 * 2048 + TITLE_OFFSET
+        original = bytes(729 * 2048)
+        updated, ids = patch_card_titles(original, {1: 'Cronomago'})
+        self.assertEqual(ids, [1])
+        self.assertEqual(updated[:offset], original[:offset])
+        self.assertEqual(updated[offset:offset + TITLE_BYTES], title)
+        self.assertEqual(updated[offset + TITLE_BYTES:], original[offset + TITLE_BYTES:])
