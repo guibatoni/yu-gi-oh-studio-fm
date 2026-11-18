@@ -289,9 +289,15 @@ def inspect_chest_catalog(exe):
     return {'status': status, 'cartas': capacity}
 
 
-def patch_chest_catalog(exe):
-    """Show empty rows with the stock dim flag on the verified Drop x15."""
+def patch_chest_catalog(exe, *, show_all=True):
+    """Habilitar catálogo completo ou preservar o comportamento retail do baú."""
+    if type(show_all) is not bool:
+        raise ModError('Visualização do baú precisa ser ativada ou desativada.')
     status = inspect_chest_catalog(exe)['status']
+    if not show_all:
+        if status != 'ausente':
+            raise ModError('Desativar catálogo completo exige o SLUS original (não modificado).')
+        return exe
     if status == 'aplicado':
         return exe
     if status != 'ausente':
