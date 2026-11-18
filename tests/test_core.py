@@ -200,13 +200,15 @@ if __name__ == '__main__': unittest.main()
 
 class ImageAttachmentTests(unittest.TestCase):
     def test_png_attachment(self):
-        import base64
+        from fmstudio.ps1_image_optimizer import png_rgba
         root = Path(tempfile.mkdtemp())
         self.addCleanup(lambda:__import__('shutil').rmtree(root))
         p = Project.create(root/'Mod','Mod')
         p.cards={1:{'id':1, 'valor_hex':'00000000', 'ataque':'0','defesa':'0','nivel':'0','tipo_id':'0','atributo_id':'0','guardian_1_id':'0','guardian_2_id':'0'}}
         imagefile=root/'asset.png'
-        imagefile.write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg=='))
+        # Fixture anterior tinha CRC incorreto no IDAT, mas a importação
+        # antiga só verificava a assinatura PNG. Agora validamos o PNG todo.
+        imagefile.write_bytes(png_rgba(bytes((255,0,0,255)),(1,1)))
         p.attach_art(1,imagefile)
         self.assertEqual(Project.open(p.folder).arts['1'],'assets/cartas/001.png')
         self.assertTrue((p.folder/'assets'/'cartas'/'001.png').is_file())
