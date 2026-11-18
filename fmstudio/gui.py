@@ -9,7 +9,7 @@ import tkinter as tk
 from decimal import Decimal
 from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from pathlib import Path
-from .core import (Project, ModError, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR, FILTER_COMBINATIONS,
+from .core import (Project, ModError, check_effect, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR, FILTER_COMBINATIONS,
                    ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ENTRY_TYPE_EVENT,
                    ONCE_ACTIONS, legacy_god_description_icon_card, ps1_god24_card_ids,
                    ps1_supports_god24)
@@ -127,15 +127,19 @@ class EffectDialog(tk.Toplevel):
         ENTRY_GROW: 'proprio',
         ENTRY_SHRINK: 'aliados_tipo',
     }
-    def __init__(self, master, on_save, *, initial_effect=None):
+    def __init__(self, master, on_save, *, initial_effect=None, batch=False, existing=()):
         super().__init__(master)
         self.on_save=on_save
         self.cards = getattr(master, 'project', None)
         self.initial_effect = dict(initial_effect) if initial_effect is not None else None
-        self.title('Editar efeito — Studio FM' if self.initial_effect else 'Criar efeito — Studio FM')
+        self.batch = bool(batch and self.initial_effect is None)
+        self.pending = []
+        self.existing = [check_effect(entry) for entry in existing]
+        self.title('Adicionar vários efeitos — Studio FM' if self.batch else
+                   'Editar efeito — Studio FM' if self.initial_effect else 'Criar efeito — Studio FM')
         self.configure(bg=BG)
-        self.geometry('650x790')
-        self.minsize(590,670)
+        self.geometry('740x945' if self.batch else '650x790')
+        self.minsize(640 if self.batch else 590, 730 if self.batch else 670)
         self.transient(master)
         self.grab_set()
         form=ttk.Frame(self,padding=14)
@@ -153,6 +157,21 @@ class EffectDialog(tk.Toplevel):
                                        for action in QUICK_ACTIONS)
             self.sources['evento']['regra_deck'] = EVENTS['regra_deck']
         row=0
+        if self.batch:
+            self.all_actions = dict(self.sources['acao'])
+            self.search_action = tk.StringVar()
+            self.category_action = tk.StringVar(value='Todas as categorias')
+            ttk.Label(form,text='Pesquisar efeito (nome ou código)').grid(
+                row=row,column=0,sticky='w',pady=(0,3));row+=1
+            ttk.Entry(form,textvariable=self.search_action).grid(
+                row=row,column=0,sticky='ew',pady=(0,6));row+=1
+            ttk.Label(form,text='Categoria').grid(row=row,column=0,sticky='w');row+=1
+            ttk.Combobox(form,textvariable=self.category_action,state='readonly',
+                values=['Todas as categorias','Contínuos','Ao entrar em campo',
+                        'Equipamentos','Outros'],width=54).grid(
+                row=row,column=0,sticky='ew',pady=(0,8));row+=1
+            self.search_action.trace_add('write',lambda *_:self._filter_actions())
+            self.category_action.trace_add('write',lambda *_:self._filter_actions())
         for key,label in [('evento','Quando ativa'),('acao','O que acontece'),('alvo','Alvo do efeito')]:
             self.labels[key]=ttk.Label(form,text=label)
             self.labels[key].grid(row=row,column=0,sticky='w',pady=(0,3));row+=1
@@ -225,10 +244,26 @@ class EffectDialog(tk.Toplevel):
         ttk.Entry(form,textvariable=self.vars['observacao']).grid(row=row,column=0,sticky='ew',pady=(3,8));row+=1
         self.help=tk.Label(form,text='',bg=BG,fg='#edc47e',font=('Segoe UI',9),justify='left',wraplength=560)
         self.help.grid(row=row,column=0,sticky='w',pady=(0,8));row+=1
+        if self.batch:
+            selected=ttk.LabelFrame(form,text='Efeitos preparados (Aplicar não salva)',padding=5)
+            selected.grid(row=row,column=0,sticky='nsew',pady=(0,8));row+=1
+            self.pending_tree=ttk.Treeview(selected,columns=('num','efeito','valor'),
+                                            show='headings',height=4,selectmode='extended')
+            for key,title,width in (('num','#',34),('efeito','Efeito adicionado',420),
+                                    ('valor','Valor',110)):
+                self.pending_tree.heading(key,text=title)
+                self.pending_tree.column(key,width=width,stretch=key=='efeito')
+            self.pending_tree.pack(fill='both',expand=True)
+            self.pending_label=tk.StringVar(value='Nenhum efeito preparado')
+            ttk.Label(form,textvariable=self.pending_label).grid(row=row,column=0,sticky='w');row+=1
         buttons=ttk.Frame(form)
         buttons.grid(row=row,column=0,sticky='e')
         ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left',padx=6)
-        ttk.Button(buttons,text='Salvar alterações' if self.initial_effect else 'Adicionar efeito',
+        if self.batch:
+            ttk.Button(buttons,text='Remover selecionados',command=self._remove_pending).pack(side='left',padx=6)
+            ttk.Button(buttons,text='Aplicar',command=self._apply_pending).pack(side='left',padx=6)
+        ttk.Button(buttons,text='OK' if self.batch else
+                   'Salvar alterações' if self.initial_effect else 'Adicionar efeito',
                    style='Accent.TButton',command=self._submit).pack(side='left')
         form.columnconfigure(0,weight=1)
         if self.initial_effect:
@@ -242,6 +277,62 @@ class EffectDialog(tk.Toplevel):
     def _set(self,key,value):
         self.vars[key].set(value)
         self.combos[key].current(list(self.sources[key]).index(value))
+
+    def _filter_actions(self):
+        if not self.batch or 'acao' not in self.combos:
+            return
+        term=self.search_action.get().casefold().strip()
+        category=self.category_action.get()
+        def match(action):
+            if action in EFFECT_ACTIONS:
+                kind='Contínuos'
+            elif action in ENTRY_EFFECTS:
+                kind='Ao entrar em campo'
+            elif action in EQUIPMENT_ACTIONS:
+                kind='Equipamentos'
+            else:
+                kind='Outros'
+            return (category=='Todas as categorias' or category==kind)
+        filtered={key:caption for key,caption in self.all_actions.items()
+                  if match(key) and (term in key.casefold() or term in caption.casefold())}
+        if not filtered:
+            return
+        self.sources['acao']=filtered
+        combo=self.combos['acao']
+        combo.configure(values=[f'{key} — {value}' for key,value in filtered.items()])
+        current=self.vars['acao'].get()
+        if current not in filtered:
+            self._choice('acao',next(iter(filtered)))
+        else:
+            combo.current(list(filtered).index(current))
+
+    def _append_pending(self,entry):
+        validated=check_effect(entry)
+        if validated in self.pending or validated in self.existing:
+            raise ModError('Este efeito já foi adicionado. Revise duplicatas.')
+        self.pending.append(validated)
+        self._refresh_pending()
+
+    def _apply_pending(self):
+        try:
+            self._append_pending({key:v.get() for key,v in self.vars.items()})
+        except (ModError,ValueError) as exc:
+            messagebox.showerror('Efeito inválido',str(exc),parent=self)
+
+    def _refresh_pending(self):
+        if not self.batch:
+            return
+        self.pending_tree.delete(*self.pending_tree.get_children())
+        for index,entry in enumerate(self.pending):
+            self.pending_tree.insert('', 'end', iid=str(index),
+                values=(index+1, ACTIONS.get(entry['acao'],entry['acao']),
+                        str(entry.get('valor',0))))
+        self.pending_label.set(f'{len(self.pending)} efeito(s) preparado(s); clique OK para confirmar.')
+
+    def _remove_pending(self):
+        for index in sorted((int(i) for i in self.pending_tree.selection()),reverse=True):
+            self.pending.pop(index)
+        self._refresh_pending()
 
     def _filter_selected(self, key, value):
         self.vars[key].set(value)
@@ -431,14 +522,22 @@ class EffectDialog(tk.Toplevel):
             return
         catalog = {cid:project.get(cid) for cid in project.cards}
         def submit(entry):
-            self.on_save(entry)
-            self.destroy()
+            if self.batch:
+                self._append_pending(entry)
+            else:
+                self.on_save(entry)
+                self.destroy()
         SpecificCardEffectDialog(self, catalog, submit, default_origin='deck')
 
     def _submit(self):
-        entry={key:v.get() for key,v in self.vars.items()}
         try:
-            self.on_save(entry)
+            if self.batch:
+                if not self.pending:
+                    self._append_pending({key:v.get() for key,v in self.vars.items()})
+                self.on_save([dict(entry) for entry in self.pending])
+            else:
+                entry={key:v.get() for key,v in self.vars.items()}
+                self.on_save(entry)
         except (ModError,ValueError) as exc:
             messagebox.showerror('Efeito inválido',str(exc),parent=self)
             return
@@ -2296,13 +2395,13 @@ class Studio(tk.Tk):
             messagebox.showinfo('Selecione uma carta','Escolha uma carta antes de adicionar efeitos.')
             return
         self._stage_current()
-        def submit(entry):
-            self.drafts.add_effect(self.selected_id,entry)
+        def submit(entries):
+            self.drafts.add_effects(self.selected_id,entries)
             self._refresh_effects()
             self._refresh_project()
             self._update_pending_label()
-            self._update_status(f'Efeito pendente para a carta {format_id(self.selected_id)}. Clique Salvar projeto.')
-        EffectDialog(self,submit)
+            self._update_status(f'{len(entries)} efeito(s) pendentes para {format_id(self.selected_id)}. Clique Salvar projeto.')
+        EffectDialog(self,submit,batch=True,existing=self.drafts.get_effects(self.selected_id))
 
     def edit_effect(self):
         """Abre o formulário correto e substitui a regra selecionada no rascunho."""
