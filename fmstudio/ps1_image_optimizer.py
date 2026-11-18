@@ -72,8 +72,8 @@ def rgb555(word: int) -> tuple[int, int, int, int]:
     """Sem STP como alpha: o bit 15 é modo de blend do PS1, não alpha PNG."""
     if word == 0:
         return (0, 0, 0, 0)
-    return tuple((((word >> shift) & 31) * 255 + 15) // 31
-                 for shift in (0, 5, 10)) + (255,)
+    return tuple((level << 3) | (level >> 2)
+                 for level in (((word >> shift) & 31) for shift in (0, 5, 10))) + (255,)
 
 
 def pack_rgb555(r: int, g: int, b: int) -> int:
