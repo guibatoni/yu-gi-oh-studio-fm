@@ -226,10 +226,19 @@ class PasswordsDialog(tk.Toplevel):
         ttk.Label(chest, text='ID, nome, tipo ou descrição').pack(anchor='w')
         ttk.Entry(chest, textvariable=self.chest_search).pack(fill='x')
         self.chest = _tree(chest, [('id', 'ID', 70), ('nome', 'Carta', 290), ('qtd', 'Cópias no baú', 100)],
-                           raw_values=self._chest_sort_value)
+                           raw_values=self._chest_sort_value, selectmode='extended')
+        self.bulk_chest_count=tk.StringVar(value='0 cartas selecionadas')
+        chest_actions=ttk.Frame(chest)
+        chest_actions.pack(fill='x',pady=(5,0))
+        ttk.Button(chest_actions,text='Selecionar todas',command=lambda:self._select_all_visible(self.chest)).pack(side='left')
+        ttk.Button(chest_actions,text='Limpar seleção',command=lambda:self._clear_selection(self.chest)).pack(side='left',padx=(5,0))
+        ttk.Button(chest_actions,text='Editar selecionadas',command=lambda:self._open_bulk('chest')).pack(side='left',padx=(5,0))
+        ttk.Label(chest_actions,textvariable=self.bulk_chest_count).pack(side='right')
         self.chest_search.trace_add('write', lambda *_: self._refresh_chest())
-        self.chest.bind('<Double-1>', lambda _e: reveal(int(self.chest.selection()[0]))
-                        if self.chest.selection() else None)
+        self.chest.bind('<Control-a>',lambda _e:self._select_all_visible(self.chest))
+        self.chest.bind('<<TreeviewSelect>>',lambda _e:self._update_selection_count())
+        self.chest.bind('<Double-1>',lambda _e:reveal(int(self.chest.selection()[0]))
+                        if len(self.chest.selection()) == 1 else None)
         tabs.add(self.original, text='Códigos originais')
         tabs.add(self.ids, text='Códigos por ID')
         tabs.add(chest, text='Baú')
@@ -241,13 +250,21 @@ class PasswordsDialog(tk.Toplevel):
         self.price_tree = _tree(prices,
             [('id','ID',68),('nome','Carta',260),('original','Custo original',125),
              ('novo','Novo custo',125)],
-            raw_values=self._price_sort_value)
+            raw_values=self._price_sort_value, selectmode='extended')
+        self.bulk_price_count=tk.StringVar(value='0 cartas selecionadas')
         self.price_query.trace_add('write',lambda *_:self._refresh_prices())
-        self.price_tree.bind('<Double-1>',lambda _e:self._edit_price())
+        self.price_tree.bind('<Double-1>',lambda _e:self._edit_price()
+                             if len(self.price_tree.selection()) == 1 else None)
+        self.price_tree.bind('<Control-a>',lambda _e:self._select_all_visible(self.price_tree))
+        self.price_tree.bind('<<TreeviewSelect>>',lambda _e:self._update_selection_count())
         actions=ttk.Frame(prices)
         actions.pack(fill='x',pady=(6,0))
         ttk.Button(actions,text='Editar custo da carta',command=self._edit_price).pack(side='left')
         ttk.Button(actions,text='Restaurar preço original',command=self._reset_price).pack(side='left',padx=(8,0))
+        ttk.Button(actions,text='Selecionar todas',command=lambda:self._select_all_visible(self.price_tree)).pack(side='left',padx=(8,0))
+        ttk.Button(actions,text='Limpar seleção',command=lambda:self._clear_selection(self.price_tree)).pack(side='left',padx=(5,0))
+        ttk.Button(actions,text='Editar selecionadas',command=lambda:self._open_bulk('price')).pack(side='left',padx=(5,0))
+        ttk.Label(prices,textvariable=self.bulk_price_count).pack(anchor='e')
         tabs.add(prices,text='Estrelas por carta')
 
         rewards = ttk.Frame(tabs,padding=16)
@@ -295,6 +312,50 @@ class PasswordsDialog(tk.Toplevel):
         if self.studio.project is not self.project or self.studio._extract_running:
             raise ModError('Abra os passwords no projeto disponível.')
 
+    def _update_selection_count(self):
+        self.bulk_chest_count.set(f'{len(self.chest.selection())} cartas selecionadas')
+        self.bulk_price_count.set(f'{len(self.price_tree.selection())} cartas selecionadas')
+
+    def _select_all_visible(self, tree):
+        tree.selection_set(tree.get_children(''))
+        self._update_selection_count()
+        return 'break'
+
+    def _clear_selection(self, tree):
+        tree.selection_remove(tree.selection())
+        self._update_selection_count()
+        return 'break'
+
+    def _open_bulk(self, source):
+        try:
+            self._check_project()
+            ids=[int(cid) for cid in (self.chest.selection() if source=='chest'
+                                      else self.price_tree.selection())]
+            if len(ids)<2:
+                raise ModError('Selecione pelo menos duas cartas com Ctrl+clique, Shift+clique ou Ctrl+A.')
+            from .core import _read_csv
+            from .bulk_gui import BulkEditDialog
+            csv=self.project.folder/'base'/'senhas.csv'
+            originals={}
+            if csv.is_file():
+                for record in _read_csv(csv):
+                    try:
+                        originals[int(record['carta_id'])]=int(record['custo_starchips'])
+                    except (KeyError,TypeError,ValueError):
+                        continue
+            def updated():
+                self._refresh_chest()
+                self._refresh_prices()
+                self.original.records=original_passwords(self.project)
+                self.original.render()
+                if self.changed:
+                    self.changed(None)
+                self.studio.notify(f'Edição em massa salva para {len(ids)} cartas.')
+            BulkEditDialog(self,self.project,self.cards,ids,source=source,
+                           original_prices=originals,on_changed=updated)
+        except (ModError,ValueError,OSError) as exc:
+            messagebox.showerror('Edição em massa',str(exc),parent=self)
+
     def _destination(self):
         self.profile.configure(state='normal' if self.into_starter.get() else 'disabled')
 
@@ -318,9 +379,11 @@ class PasswordsDialog(tk.Toplevel):
                               values=(compact_number(cid), display_name(cid, self.cards), count or '0/0'),
                               tags=card_row_tags(self.chest, card, index))
         self.chest.sort_rows()
-        if selection and self.chest.exists(selection[0]):
-            self.chest.selection_set(selection[0])
+        remain=[cid for cid in selection if self.chest.exists(cid)]
+        if remain:
+            self.chest.selection_set(remain)
         self.profile.configure(values=list(self.project.metadata.get(CONFIG_KEY, {}).get('iniciais', {})))
+        self._update_selection_count()
 
     def _price_sort_value(self, item, field):
         if field == 'id':
@@ -360,13 +423,15 @@ class PasswordsDialog(tk.Toplevel):
                         after if after is not None else '—'),
                 tags=card_row_tags(self.price_tree,card,index))
         self.price_tree.sort_rows()
-        if selected and self.price_tree.exists(selected[0]):
-            self.price_tree.selection_set(selected[0])
+        remain=[cid for cid in selected if self.price_tree.exists(cid)]
+        if remain:
+            self.price_tree.selection_set(remain)
+        self._update_selection_count()
 
     def _selected_price_id(self):
         selection=self.price_tree.selection()
-        if not selection:
-            messagebox.showinfo('Preço Password','Selecione uma carta na tabela.',parent=self)
+        if len(selection)!=1:
+            messagebox.showinfo('Preço Password','Selecione uma única carta ou use Editar selecionadas.',parent=self)
             return None
         return int(selection[0])
 
