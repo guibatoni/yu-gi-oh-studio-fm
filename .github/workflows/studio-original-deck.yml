@@ -1,0 +1,31 @@
+name: Verificar recriação de decks da ISO original
+on:
+  pull_request:
+    paths:
+      - 'fmstudio/original_opponent_decks.py'
+      - 'fmstudio/mod_gui.py'
+      - 'fmstudio/mod_data.py'
+      - 'fmstudio/updates.py'
+      - 'tests/test_original_opponent_decks.py'
+      - '.github/workflows/studio-original-deck.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependências de imagem
+        run: python -m pip install pillow
+      - name: Conferir sintaxe
+        run: python -m compileall -q fmstudio tests app.py updater_main.py
+      - name: Testes dos decks de origem
+        run: python -m unittest discover -s tests -p test_original_opponent_decks.py -v
+      - name: Suíte completa de regressão
+        run: python -m unittest discover -s tests -v
+      - name: Verificar pacote fonte do atualizador
+        run: python tools/package_source.py --out FM-Mod-Studio-Source.zip
