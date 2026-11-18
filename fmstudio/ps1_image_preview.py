@@ -108,8 +108,10 @@ class ImageOptimizerDialog(tk.Toplevel):
         ttk.Scale(controls, from_=0, to=1, variable=self.strength).grid(
             row=3,column=1,sticky="ew",padx=3)
         ttk.Label(controls, text="Visualização").grid(row=3,column=2,sticky="e")
-        ttk.Combobox(controls, values=["Arte 102×96", "Miniatura 40×32"],
-                     textvariable=self.resource,state="readonly",width=17).grid(row=3,column=3,sticky="ew")
+        resources=ttk.Combobox(controls, values=["Arte 102×96", "Miniatura 40×32"],
+                     textvariable=self.resource,state="readonly",width=17)
+        resources.grid(row=3,column=3,sticky="ew")
+        resources.bind("<<ComboboxSelected>>",lambda _e:self._redraw())
         advanced=ttk.LabelFrame(self,text="Ajustes manuais (usados no perfil Personalizado)",padding=7)
         advanced.pack(fill="x",padx=12,pady=3)
         for i, (name, val) in enumerate(self.manual.items()):
