@@ -285,6 +285,8 @@ def expand_archive(wa, project, plan, *, prefix, art_reports=None):
     from .passwords import validate_ps1_prefix
     from .tables import PASSWORD_BASE
     from .ps1_image_optimizer import render_card
+    from .ps1_economy import price_overrides
+    password_prices = price_overrides(project)
     if not plan.enabled:
         return wa
     if len(wa) % 2048 or len(wa) < 5776 * 2048:
@@ -319,7 +321,8 @@ def expand_archive(wa, project, plan, *, prefix, art_reports=None):
         thumbs.append(thumb)
         arts.append(art)
         code = int(f'{prefix:05d}{cid:03d}', 16) if cid in models else 0xFFFFFFFE
-        struct.pack_into('<II', original, PASSWORD_BASE + cid * 8, 1, code)
+        price = password_prices.get(cid, 1) if cid in plan.ids else 1
+        struct.pack_into('<II', original, PASSWORD_BASE + cid * 8, price, code)
     struct.pack_into('<II', original, PASSWORD_BASE + 741 * 8, 0xFFFFFFFF, 0xFFFFFFFE)
     split = 722 * 2048
     return bytes(original[:split] + b''.join(thumbs) + original[split:] + b''.join(arts))
