@@ -1412,11 +1412,19 @@ class ModEditor(ttk.Frame):
                 if latest != original:
                     raise ModError('A extração original mudou. Confira a nova prévia antes de salvar.')
                 rules=restored_rules(self._edit(), opponent)
-                # Não carregar o rascunho anterior na atualização da janela.
-                self._opponent_drafts.pop(opponent, None)
-                self._loaded_opponent=None
-                self._commit(rules, f'Deck original do oponente #{opponent:02d} recriado: '
-                                    f"{summary['cartas_distintas']} IDs e 40 compras.")
+                # Não carregar o rascunho anterior depois de salvar; em caso
+                # de falha no disco, devolver o editor ao estado anterior.
+                old_draft = self._opponent_drafts.pop(opponent, None)
+                old_loaded = self._loaded_opponent
+                self._loaded_opponent = None
+                try:
+                    self._commit(rules, f'Deck original do oponente #{opponent:02d} recriado: '
+                                        f"{summary['cartas_distintas']} IDs e 40 compras.")
+                except Exception:
+                    if old_draft is not None:
+                        self._opponent_drafts[opponent] = old_draft
+                    self._loaded_opponent = old_loaded
+                    raise
                 self._load_duelist()
                 self.opponent_deck.tabs.select(self.opponent_deck.pool_pane)
                 self.opponent_deck.feedback.set(
