@@ -433,3 +433,16 @@ RUNTIME_GRAVE_FILTERS = bytes.fromhex("""
 e8 ff bd 27 14 00 bf af c5 3e 07 0c 25 20 e0 00 ec ff 40 10 00 00 00 00 04 00 02 95 00 00 00 00
 e8 ff 49 10 01 00 42 24 e6 ff 00 10 04 00 02 a5
 """)
+
+# LIFE_ICON_PATCH: one-byte immediate widening of the *compiled* MIPS sltiu.
+# tools/ps1/hooks.S contains the equivalent source change for future rebuilds.
+# The pre-patch runtime hash and instruction bytes are pinned; never patch unknown code.
+import hashlib as _runtime_hashlib
+_life_icon_offset = ENTRY_POINTS['DescriptionIcon'] - RUNTIME_BASE + 4
+if (_runtime_hashlib.sha256(RUNTIME).hexdigest() != '2f862524de78cf30bd987aa9e4f33ce56a021b817c2545ac8de0f6c93583c2d3'
+        or RUNTIME[_life_icon_offset:_life_icon_offset + 4] != bytes.fromhex('09 00 44 2c')):
+    raise RuntimeError('PS1 runtime recompilado ou divergente; revise o suporte aos ícones LP.')
+RUNTIME = (RUNTIME[:_life_icon_offset] + bytes.fromhex('0b 00 44 2c')
+           + RUNTIME[_life_icon_offset + 4:])
+RUNTIME_SHA256 = _runtime_hashlib.sha256(RUNTIME).hexdigest()
+del _runtime_hashlib, _life_icon_offset
