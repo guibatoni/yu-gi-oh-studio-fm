@@ -1160,6 +1160,9 @@ class Studio(tk.Tk):
         effects_scroll.pack(side='right',fill='y')
         self.effect_tree.pack(side='left',fill='x',expand=True,padx=1,pady=1)
         self.effect_tree.bind('<Double-1>',lambda _event:self.edit_effect())
+        self.effect_tree.bind('<Control-c>',lambda _event:self.copy_selected_effects())
+        self.effect_tree.bind('<Control-v>',lambda _event:self.paste_effects())
+        self.effect_tree.bind('<Button-3>',self._effects_context_menu)
         buttons=ttk.Frame(body)
         buttons.pack(fill='x',pady=12)
         effect_actions=ttk.Frame(buttons)
@@ -1172,6 +1175,14 @@ class Studio(tk.Tk):
                    command=self.edit_effect).pack(side='left',padx=8)
         ttk.Button(effect_actions,text='Remover efeito selecionado',
                    command=self.remove_effect).pack(side='left',padx=8)
+        copy_row=ttk.Frame(buttons)
+        copy_row.pack(fill='x',pady=(5,0))
+        ttk.Button(copy_row,text='Copiar efeito(s) Ctrl+C',
+                   command=self.copy_selected_effects).pack(side='left')
+        ttk.Button(copy_row,text='Copiar todos os efeitos',
+                   command=lambda:self.copy_selected_effects(all_effects=True)).pack(side='left',padx=6)
+        ttk.Button(copy_row,text='Colar efeitos Ctrl+V',
+                   command=self.paste_effects).pack(side='left',padx=6)
         ps1_actions=ttk.Frame(buttons)
         ps1_actions.pack(fill='x',pady=(6,0))
         ttk.Button(ps1_actions,text='PS1: permitir Equip em criatura',
@@ -2537,61 +2548,17 @@ class Studio(tk.Tk):
         self.description.configure(height=height)
 
     def choose_description_icon(self):
-        if not self.project: return
-        popup=tk.Toplevel(self)
-        popup.title('Ícones de descrição • 16×16')
-        popup.geometry('780x700')
-        popup.minsize(540,420)
-        popup.resizable(True,True)
-        popup.transient(self)
-        popup.configure(bg=BG)
-        header=ttk.Frame(popup,padding=(12,8))
-        header.pack(fill='x')
-        ttk.Label(header,text='Clique em um ícone para inserir na descrição. Arraste as bordas para ampliar.').pack(side='left')
-        ttk.Button(header,text='Fechar',command=popup.destroy).pack(side='right')
-        pane=tk.Frame(popup,bg=BG);pane.pack(fill='both',expand=True)
-        cv=tk.Canvas(pane,bg=BG,highlightthickness=0)
-        scroll=ttk.Scrollbar(pane,orient='vertical',command=cv.yview)
-        scroll.pack(side='right',fill='y')
-        cv.pack(side='left',fill='both',expand=True)
-        cv.configure(yscrollcommand=scroll.set)
-        body=tk.Frame(cv,bg=BG)
-        wid=cv.create_window((0,0),window=body,anchor='nw')
-        body.bind('<Configure>',lambda e:cv.configure(scrollregion=cv.bbox('all')))
-        cv.bind('<Configure>',lambda e:cv.itemconfigure(wid,width=e.width))
-        def wheel(event):
-            if event.num==4: step=-1
-            elif event.num==5: step=1
-            else: step=-1 if event.delta>0 else 1
-            cv.yview_scroll(step,'units')
-            return 'break'
-        def bind_wheel(_event):
-            popup.bind_all('<MouseWheel>',wheel)
-            popup.bind_all('<Button-4>',wheel)
-            popup.bind_all('<Button-5>',wheel)
-        def unbind_wheel(_event):
-            popup.unbind_all('<MouseWheel>')
-            popup.unbind_all('<Button-4>')
-            popup.unbind_all('<Button-5>')
-        cv.bind('<Enter>',bind_wheel)
-        cv.bind('<Leave>',unbind_wheel)
-        popup.bind('<Destroy>',lambda e:unbind_wheel(e) if e.widget is popup else None)
-        popup._icon_refs=[]
-        tk.Label(body,text='ÍCONES DO STUDIO — 16×16 (ampliados 2× apenas na lista)',
-                 bg=BG,fg=ACCENT).pack(anchor='w',pady=8,padx=12)
-        for name,label in CUSTOM_ICONS.items():
-            row=tk.Frame(body,bg=BG)
-            row.pack(fill='x',padx=12,pady=3)
-            photo=self.get_icon_image(name)
-            enlarged=photo.zoom(2,2) if photo else None
-            if enlarged:
-                popup._icon_refs.append(enlarged)
-                tk.Label(row,image=enlarged,bg=BG,width=40).pack(side='left',padx=(0,8))
-            ttk.Button(row,text=label,command=lambda n=name:(self.insert_description_token('{icon:'+n+'}'),popup.destroy())).pack(side='left',fill='x',expand=True)
-        tk.Label(body,text='ÍCONES NATIVOS (códigos F8 documentados no jogo)',bg=BG,fg=ACCENT).pack(anchor='w',pady=(12,5),padx=12)
-        for name,code in NATIVE_ICONS.items():
-            ttk.Button(body,text=f'{name}   •   {{f8 0B {code:02X}}}',
-                command=lambda code=code:(self.insert_description_token(f'{{f8 0B {code:02X}}}'),popup.destroy())).pack(fill='x',padx=12,pady=2)
+        if not self.project or not self.selected_id:
+            return
+        from .icon_composer import IconComposer
+        insertion=self.description.index('insert')
+        def confirm(items):
+            self.description.insert(insertion,''.join(items))
+            self.render_description()
+            self._stage_current()
+            self._update_pending_label()
+            self.description.see(insertion)
+        IconComposer(self,self.get_icon_image,confirm)
 
     def verify_ps1_description_bin(self):
         """Confere diretamente o texto da imagem selecionada, não apenas o JSON."""
@@ -2719,6 +2686,75 @@ class Studio(tk.Tk):
                 widget.tag_configure(tag,foreground=color)
                 widget.insert('end',chunk,tag)
         widget.configure(state='disabled')
+
+    def copy_selected_effects(self, *, all_effects=False):
+        """Atalhos atuam só na tabela de efeitos, não em campos de texto."""
+        if not self.project or not self.selected_id or not self.drafts:
+            return 'break'
+        from .effects_transfer import encode_effects
+        all_entries=self.drafts.get_effects(self.selected_id)
+        selected=sorted(int(i) for i in self.effect_tree.selection()
+                        if str(i).isdecimal() and 0<=int(i)<len(all_entries))
+        entries=all_entries if all_effects else [all_entries[i] for i in selected]
+        try:
+            text=encode_effects(self.selected_id,entries)
+        except (ModError,ValueError) as exc:
+            messagebox.showinfo('Copiar efeitos',str(exc),parent=self)
+            return 'break'
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self._update_status(f'{len(entries)} efeito(s) copiado(s). Selecione outra carta e pressione Ctrl+V.')
+        return 'break'
+
+    def paste_effects(self):
+        if self._extract_running or not self.project or not self.selected_id or not self.drafts:
+            return 'break'
+        from .effects_transfer import decode_effects, merge_effects, reference_warnings
+        try:
+            raw=self.clipboard_get()
+            source,entries=decode_effects(raw)
+        except (ModError,ValueError,tk.TclError) as exc:
+            messagebox.showwarning('Colar efeitos',str(exc),parent=self)
+            return 'break'
+        self._stage_current()
+        current=self.drafts.get_effects(self.selected_id)
+        answer=messagebox.askyesnocancel(
+            'Colar efeitos',
+            f'{len(entries)} efeito(s) copiado(s) da carta #{source}.\n'
+            f'Destino: carta #{self.selected_id}.\n\n'
+            'Sim = acrescentar ao conjunto existente.\n'
+            'Não = substituir todos os efeitos atuais.\n'
+            'Cancelar = manter os efeitos sem alteração.',parent=self)
+        if answer is None:
+            return 'break'
+        notes=reference_warnings(source,self.selected_id,entries)
+        if notes and not messagebox.askokcancel(
+                'Conferir referências antes de colar','\n'.join(notes[:12]),
+                parent=self):
+            return 'break'
+        try:
+            proposed=merge_effects(current,entries,replace=not answer)
+            self.drafts.set_effects(self.selected_id,proposed)
+        except (ModError,ValueError) as exc:
+            messagebox.showerror('Colar efeitos',str(exc),parent=self)
+            return 'break'
+        self._refresh_effects()
+        self._refresh_project()
+        self._update_pending_label()
+        self._update_status(f'{len(entries)} efeito(s) colado(s) no rascunho. Salve o projeto para persistir.')
+        return 'break'
+
+    def _effects_context_menu(self,event):
+        item=self.effect_tree.identify_row(event.y)
+        if item and item not in self.effect_tree.selection():
+            self.effect_tree.selection_set(item)
+        menu=tk.Menu(self,tearoff=0)
+        menu.add_command(label='Copiar efeito(s) selecionado(s)',command=self.copy_selected_effects)
+        menu.add_command(label='Copiar todos os efeitos',command=lambda:self.copy_selected_effects(all_effects=True))
+        menu.add_command(label='Colar efeitos',command=self.paste_effects)
+        menu.tk_popup(event.x_root,event.y_root)
+        menu.grab_release()
+        return 'break'
 
     def remove_effect(self):
         if self._extract_running:
