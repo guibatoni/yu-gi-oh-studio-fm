@@ -21,6 +21,9 @@ from .mod_data import (
     normalize_rules, save_rules, starting_life, validate_deck,
 )
 from .tables import CARD_COUNT, DUELIST_NAMES_REFERENCE, POOL_TOTAL, TYPE_NAMES
+from .original_opponent_decks import (
+    original_opponent_profile, original_deck_summary, is_original_deck, restored_rules,
+)
 
 WEIGHT_COLUMNS = ('carta', 'nome', 'atk', 'def', 'peso', 'chance', 'chance_ps1')
 
@@ -860,6 +863,9 @@ class ModEditor(ttk.Frame):
         self.generate_button = ttk.Button(opponent_actions, text='Gerar Deck Aleatório',
                                           command=lambda: self.generate_deck(self.opponent_deck))
         self.generate_button.pack(side='left', padx=5)
+        self.original_deck_button = ttk.Button(opponent_actions, text='Criar deck da ISO original',
+                                                command=self.create_deck_from_original_iso)
+        self.original_deck_button.pack(side='left', padx=(2, 5))
         self.save_opponent_button = ttk.Button(opponent_actions, text='Salvar deck', style='Accent.TButton',
                                                command=self.save_opponent)
         self.save_opponent_button.pack(side='right')
@@ -920,7 +926,8 @@ class ModEditor(ttk.Frame):
     def _update_available(self):
         state = 'normal' if self.project else 'disabled'
         for button in (self.password_button, self.duel_button, self.drop_toggle, self.save_opponent_button,
-                       self.generate_button, self.blank_deck_button, self.preset_39_button):
+                       self.generate_button, self.original_deck_button,
+                       self.blank_deck_button, self.preset_39_button):
             button.configure(state=state)
 
     def refresh(self):
@@ -1332,6 +1339,108 @@ class ModEditor(ttk.Frame):
         finally:
             self.configure(cursor='')
 
+    def create_deck_from_original_iso(self):
+        """Restaura o deck de 40 sorteios da ISO, sem converter pesos em cópias.
+
+        Um perfil original sem override usa o próprio WA_MRG no PS1. Isso
+        preserva exatamente os pools, inclusive os que têm poucas cartas.
+        """
+        if not self.project or self.studio._extract_running:
+            return
+        opponent = self._duel_id()
+        try:
+            original = original_opponent_profile(self.project, opponent)
+            summary = original_deck_summary(original)
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Deck da ISO original', str(exc), parent=self)
+            return
+
+        popup = tk.Toplevel(self)
+        popup.title(f'Deck original da ISO — {self.duelist.get()}')
+        popup.geometry('780x620')
+        popup.minsize(650, 460)
+        popup.transient(self.winfo_toplevel())
+        popup.grab_set()
+        body = ttk.Frame(popup, padding=15)
+        body.pack(fill='both', expand=True)
+        ttk.Label(body, text='Recriar deck com os pesos originais da ISO',
+                  font=('Segoe UI', 12, 'bold')).pack(anchor='w')
+        ttk.Label(body, text=(
+            f"Oponente #{opponent:02d} · {summary['cartas_distintas']} cartas distintas "
+            f"· {summary['compras']} compras · peso total {summary['peso_total']}"
+        )).pack(anchor='w', pady=(7, 3))
+        warning = ('Atenção: a soma desta ISO não é 2048. Os pesos serão '
+                   'preservados exatamente como foram extraídos.'
+                   if summary['peso_total'] != POOL_TOTAL else
+                   'A soma dos pesos corresponde à tabela PS1 (2048).')
+        ttk.Label(body, text=warning, foreground=MUTED,
+                  wraplength=720).pack(anchor='w', pady=(0, 6))
+        table = ttk.Frame(body)
+        table.pack(fill='both', expand=True, pady=6)
+        tree = ttk.Treeview(table, columns=('id', 'nome', 'peso', 'chance'),
+                            show='headings', height=14)
+        for key, title, width in (
+                ('id','ID',65), ('nome','Nome da carta',380),
+                ('peso','Peso na ISO',110), ('chance','Chance por sorteio',140)):
+            tree.heading(key, text=title)
+            tree.column(key, width=width, stretch=key=='nome')
+        scroll=ttk.Scrollbar(table, command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        tree.pack(side='left', fill='both', expand=True)
+        scroll.pack(side='right', fill='y')
+        total=summary['peso_total']
+        for cid, weight in summary['pesos_originais'].items():
+            tree.insert('', 'end', iid=str(cid), values=(
+                f'{cid:03d}', display_name(cid, self.cards),
+                weight, f'{100*weight/total:.3f}%',
+            ))
+        ttk.Label(body, text=(
+            'Criar substitui o deck deste oponente no projeto, após confirmação. '
+            'O BIN/CUE original e os pesos da ISO não serão modificados. '
+            'Ao gerar o jogo, sem override, o PS1 usa sua tabela de deck original. '
+            'As edições de drops de rank, cartas, efeitos e fusões são preservadas.'
+        ), wraplength=720, foreground=MUTED).pack(anchor='w', pady=(5, 7))
+        actions=ttk.Frame(body)
+        actions.pack(fill='x')
+        def confirm():
+            try:
+                # Releitura antes de salvar evita aplicar tabelas alteradas
+                # entre a abertura da janela e a confirmação.
+                if self.project is not self.studio.project or self._duel_id() != opponent:
+                    raise ModError('O projeto/oponente mudou. Abra a prévia novamente.')
+                latest=original_opponent_profile(self.project, opponent)
+                if latest != original:
+                    raise ModError('A extração original mudou. Confira a nova prévia antes de salvar.')
+                rules=restored_rules(self._edit(), opponent)
+                # Não carregar o rascunho anterior depois de salvar; em caso
+                # de falha no disco, devolver o editor ao estado anterior.
+                old_draft = self._opponent_drafts.pop(opponent, None)
+                old_loaded = self._loaded_opponent
+                self._loaded_opponent = None
+                try:
+                    self._commit(rules, f'Deck original do oponente #{opponent:02d} recriado: '
+                                        f"{summary['cartas_distintas']} IDs e 40 compras.")
+                except Exception:
+                    if old_draft is not None:
+                        self._opponent_drafts[opponent] = old_draft
+                    self._loaded_opponent = old_loaded
+                    raise
+                self._load_duelist()
+                self.opponent_deck.tabs.select(self.opponent_deck.pool_pane)
+                self.opponent_deck.feedback.set(
+                    'Deck da ISO original carregado com pesos exatos. '
+                    'Para personalizá-lo, altere os pesos e clique Salvar deck.')
+            except (ModError, ValueError, OSError) as exc:
+                messagebox.showerror('Deck da ISO original', str(exc), parent=popup)
+                return
+            popup.destroy()
+        ttk.Button(actions, text='Cancelar', command=popup.destroy).pack(side='right')
+        ttk.Button(actions, text='Criar deck da ISO original', style='Accent.TButton',
+                   command=confirm).pack(side='right', padx=(0, 8))
+        popup.protocol('WM_DELETE_WINDOW', popup.destroy)
+        popup.bind('<Escape>', lambda _event:popup.destroy())
+        popup.wait_window()
+
     def save_opponent(self):
         try:
             rules = self._edit()
@@ -1356,11 +1465,21 @@ class ModEditor(ttk.Frame):
                     store[group] = updated
             rules = normalize_rules(rules, self.cards)
             profile = self._selected_duelist(rules)['deck']
-            if profile['cartas'] or profile['pools']:
+            # Salvar uma cópia idêntica aos pesos de origem deve conservar
+            # a leitura retail, sem injetar um patch redundante no WA do PS1.
+            try:
+                original = original_opponent_profile(self.project, opponent)
+            except ModError:
+                original = None
+            inherited = original is not None and is_original_deck(profile, original)
+            if inherited:
+                rules = restored_rules(rules, opponent)
+            elif profile['cartas'] or profile['pools']:
                 copies = int(self.project.metadata.get('ps1_deck_global_limit', 3))
                 deal_deck(profile, self.cards, self.project.effects, default_copies=copies)
             count = len(profile['cartas']) + sum(pool['compras'] for pool in profile['pools'])
-            caption = f'Deck do oponente salvo com {count}/{MAX_DECK} cartas.'
+            caption = (f'Deck original da ISO preservado com {count}/{MAX_DECK} cartas.'
+                       if inherited else f'Deck do oponente salvo com {count}/{MAX_DECK} cartas.')
             self._commit(rules, caption)
             pending_slot = ps1_supports_god24(self.project) and not profile['pools'] and count < MAX_DECK
             self.opponent_deck.feedback.set('Complete as 40 cartas fixas para gerar o BIN/CUE.' if pending_slot else '')

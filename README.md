@@ -1,3 +1,16 @@
+## Studio FM v1.9.9 — Criar deck do oponente pela ISO original
+
+Na aba **Edição do Mod → Deck do oponente**, selecione o duelista
+e clique em **Criar deck da ISO original**. A prévia mostra os
+IDs, nomes, pesos e chances da tabela original extraída do disco.
+Após confirmar, o PS1 volta a usar o pool nativo de 40 sorteios
+sem sobrescrever o `WA_MRG.MRG`; as outras edições permanecem
+intactas. Você pode editar os pesos e salvar depois.
+
+[Saiba mais e veja os limites](docs/DECK_OPONENTE_ISO_ORIGINAL.md).
+
+---
+
 ## Editor múltiplo, efeitos e ícones PS1 — v1.9.8
 
 - **Baú e Password:** selecione várias cartas usando Ctrl, Shift ou Ctrl+A,
