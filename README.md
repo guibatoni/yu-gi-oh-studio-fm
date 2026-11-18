@@ -1,3 +1,15 @@
+## Editor de economia PS1 — em revisão
+
+Na janela **Edição do Mod → Passwords e baú**, o Studio permite ocultar
+ou exibir no baú do PS1 todas as cartas com 0 cópias, editar o preço
+individual das cartas no menu Password e configurar o ganho fixo de
+Star Chips por vitória (ou manter a distribuição original por rank).
+As configurações são armazenadas no projeto e validadas ao gerar
+um BIN/CUE de teste. Apenas o perfil original Drop x15 é suportado.
+Consulte [a documentação técnica](docs/ECONOMIA_PS1.md).
+
+---
+
 # Studio FM v1.9.6 — Descrição, nome e enquadramento no PS1
 
 O perfil **Automático** preenche a arte e a miniatura por recorte central. A
