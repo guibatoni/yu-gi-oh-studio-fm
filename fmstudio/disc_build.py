@@ -742,7 +742,6 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                     raise ModError('Estrelas por vitória divergentes no SLUS final. '
                                    'A cópia anterior foi preservada.')
             if prices_requested:
-                from .disc import DiscReader
                 with DiscReader(stage_bin) as price_disc:
                     price_entries = {e.path.upper(): e for e in price_disc.files() if not e.is_dir}
                     written_wa = b''.join(price_disc.read_entry(price_entries['DATA/WA_MRG.MRG']))
