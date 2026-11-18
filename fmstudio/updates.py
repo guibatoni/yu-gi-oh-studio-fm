@@ -35,7 +35,7 @@ UPDATER_NAME = 'FM-Mod-Studio-Updater.exe'
 WINDOWS_FILES = frozenset({PROGRAM_NAME, UPDATER_NAME, 'INICIAR.bat', 'LEIA-ME.txt'})
 SOURCE_FILES = frozenset({
     'app.py', 'FM_Mod_Studio.pyw', 'updater_main.py',
-    'fmstudio/png_pixels.py', 'fmstudio/ps1_card_title.py',
+    'fmstudio/png_pixels.py', 'fmstudio/ps1_image_optimizer.py', 'fmstudio/ps1_image_preview.py', 'fmstudio/ps1_card_title.py',
     'fmstudio/__init__.py', 'fmstudio/abilities.py', 'fmstudio/core.py', 'fmstudio/continuous.py', 'fmstudio/duel_engine.py', 'fmstudio/expanded.py', 'fmstudio/richtext.py', 'fmstudio/rarities.py',
     'assets/icons/perfurar.png', 'assets/icons/ataque_2x.png', 'assets/icons/ataque_3x.png',
     'assets/icons/nao_bloqueavel.png', 'assets/icons/infinito.png', 'assets/icons/anti_trap.png',
@@ -61,7 +61,7 @@ SOURCE_FILES = frozenset({
     'docs/MIGRACAO_REPOSITORIO.md', 'docs/COMPAT_PS1.md', 'docs/EXPANSAO_722_GOD_TEXTO.md', 'docs/CLASSES_E_CORES.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md',
 })
 SOURCE_REQUIRED = frozenset({
-    'fmstudio/png_pixels.py', 'fmstudio/ps1_card_title.py',
+    'fmstudio/png_pixels.py', 'fmstudio/ps1_image_optimizer.py', 'fmstudio/ps1_image_preview.py', 'fmstudio/ps1_card_title.py',
     'fmstudio/disc_append.py', 'fmstudio/ps1_expansion.py', 'fmstudio/ps1_expansion_profile.py',
     'fmstudio/ps1_expanded_runtime_blob.py',
     'fmstudio/ps1_supreme.py', 'fmstudio/ps1_supreme_blob.py',
