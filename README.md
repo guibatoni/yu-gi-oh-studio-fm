@@ -1,3 +1,20 @@
+## Editor múltiplo, efeitos e ícones PS1 — v1.9.8
+
+- **Baú e Password:** selecione várias cartas usando Ctrl, Shift ou Ctrl+A,
+  pré-visualize operações Definir/Adicionar/Subtrair/Zerar e aplique tudo
+  em um único salvamento, com backup do projeto.
+- **Efeitos:** pesquisa, categorias, Aplicar sem fechar, OK/Cancelar e
+  copiar/colar 1, vários ou todos os efeitos entre cartas. Valida referências.
+- **Ícones:** composição com Aplicar/OK/Cancelar. Vínculo de Vida e Restaurar LP
+  usam os códigos de descrição PS1 F8 0B 49/4A no perfil Drop x15.
+- **Limites:** a quantidade do baú pertence ao Studio, não ao Memory Card.
+  A mecânica de vínculo LP em duelo, multiplicadores de drops x1–x30 e a
+  comprovação visual das descrições em ePSXe ainda não foram concluídos.
+
+Consulte [o registro técnico e limitações](docs/EDITOR_MULTIPLO_PS1.md).
+
+---
+
 ## Editor de economia PS1 — em revisão
 
 Na janela **Edição do Mod → Passwords e baú**, o Studio permite ocultar
