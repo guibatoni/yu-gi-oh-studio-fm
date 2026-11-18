@@ -1,3 +1,12 @@
+## v1.9.2 — Exportação de descrições para cartas novas
+
+- Reorganiza quebras de linha de textos altos no perfil Drop x15 e aproveita
+  os intervalos livres do banco sem ocupar a área do rank nem dos efeitos.
+- Compartilha textos idênticos e usa o texto vazio nativo para IDs reservados.
+- O modo com descrições compatíveis pode gerar uma prévia para a carta nova
+  ou deixá-la sem descrição no BIN. O texto completo fica no projeto.
+- Verifica bytes e ponteiros de textos completos, prévias e IDs vazios.
+
 ## v1.9.1 — Guardian Star Supreme no BIN/CUE
 
 - Corrige o erro ao gerar a imagem com Supreme em uma carta adicional.

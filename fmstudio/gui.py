@@ -2474,6 +2474,7 @@ class Studio(tk.Tk):
             from .ps1_description_verify import scan_disc_descriptions
             ids = {int(cid) for cid, fields in self.project.edits.items()
                    if 'descricao' in fields}
+            ids.update(int(cid) for cid in self.project.new_cards if self.project.get(int(cid)).get('descricao'))
             ids.add(int(self.selected_id))
             result = scan_disc_descriptions(self.project, Path(filepath), ids=ids)
             output = self.project.folder / 'exportacao'
@@ -2492,6 +2493,8 @@ class Studio(tk.Tk):
             f'BIN escolhido: {result["imagem_analisada"]}\n'
             f'SHA-256 do SLUS: {result["sha256_slus_bin"][:20]}...\n\n'
             f'Descrições confirmadas: {counts["aplicada"]}\n'
+            f'Prévias resumidas: {counts["resumida"]}\n'
+            f'Cartas novas sem descrição: {counts["sem_texto"]}\n'
             f'Ainda originais: {counts["original"]}\n'
             f'Diferentes do Studio: {counts["divergente"]}\n'
             f'Incompatíveis: {counts["incompativel"]}\n'
@@ -2830,12 +2833,10 @@ class Studio(tk.Tk):
                 f'{len(failed)} descrição(ões) editada(s) não cabem na '
                 'imagem selecionada ou usam recursos sem suporte.\n\n'
                 + summary
-                + '\n\nDeseja gerar o BIN/CUE mesmo assim, '
-                  'MANTENDO AS DESCRIÇÕES ORIGINAIS DO PS1 apenas nessas cartas?\n\n'
-                  'As outras descrições válidas serão gravadas. Os textos '
-                  'completos continuarão salvos no Studio e o relatório '
-                  'do BIN registrará cada descrição não exportada.\n\n'
-                  'Se escolher Não, o BIN/CUE anterior continuará preservado.',
+                + '\n\nGerar o BIN/CUE com as descrições compatíveis?\n\n'
+                  'Cartas originais com texto incompatível mantêm a descrição de origem. '
+                  'Cartas novas recebem uma prévia quando possível ou ficam sem texto na cópia. '
+                  'O Studio guarda os textos completos e o relatório lista cada ajuste.',
                 parent=self)
             if not proceed:
                 self._update_status('BIN/CUE preservado: corrija as descrições incompatíveis.')
@@ -2846,7 +2847,7 @@ class Studio(tk.Tk):
                     description_policy='preserve_incompatible')
             except (OSError, ValueError, ModError, DiscError) as retry_exc:
                 messagebox.showerror(
-                    'Falha na exportação com descrições originais',
+                    'Falha na exportação com descrições compatíveis',
                     str(retry_exc), parent=self)
                 return
         except ModuleNotFoundError as exc:
@@ -2871,6 +2872,11 @@ class Studio(tk.Tk):
         }.get(manifest.get('rank_hud_ps1', {}).get('status'), '')
         supreme = manifest.get('supreme_ps1', {})
         simplified=sum(bool(row.get('acentos_simplificados')) for row in manifest['descricoes_aplicadas'])
+        reflowed=sum(bool(row.get('quebras_reorganizadas')) and not row.get('resumida')
+                     for row in manifest['descricoes_aplicadas'])
+        previews = manifest.get('descricoes_resumidas_ps1', [])
+        no_text = manifest.get('cartas_novas_sem_descricao_ps1', [])
+        originals_kept = len(manifest['descricoes_nao_gravadas']) - len(no_text)
         messagebox.showinfo(f'Imagem de teste {action}',
             f'Imagem de teste {action} com sucesso.\n\n'
             f'BIN: {manifest["bin"]}\nCUE: {manifest["cue"]}\n'
@@ -2880,11 +2886,13 @@ class Studio(tk.Tk):
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
             f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
             f'Descrições confirmadas por bytes e ponteiros do BIN: {len(manifest.get("descricoes_confirmadas_no_bin", []))}.\n'
-            + (f'ATENÇÃO: {len(manifest["descricoes_nao_gravadas"])} descrição(ões) '
-               'não exportada(s); o jogo mantém seus textos originais nessas cartas.\n'
-               'Os textos completos continuam no Studio.\n'
+            + (f'Quebras de linha reorganizadas em {reflowed} descrição(ões) completas.\n' if reflowed else '')
+            + (f'Prévias de descrição em {len(previews)} carta(s) nova(s).\n' if previews else '')
+            + (f'Cartas novas sem texto na cópia: {", ".join(f"#{cid}" for cid in no_text)}.\n' if no_text else '')
+            + (f'{originals_kept} carta(s) mantiveram o texto original.\n' if originals_kept else '')
+            + ('Os textos completos continuam no Studio.\n'
                f'Detalhes: {Path(manifest["bin"]).with_suffix(".json")}\n'
-               if manifest.get('descricoes_nao_gravadas') else '')
+               if previews or no_text or originals_kept else '')
             + f'Efeitos gravados no PS1: {len(runtime.get("efeitos",[]))}. '
             f'Ícones de descrição: {len(manifest.get("icones_de_descricao_ps1",[]))}.\n'
             + ('Ataque na abertura restrito pela habilidade da carta.\n'

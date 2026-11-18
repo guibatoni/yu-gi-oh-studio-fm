@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import struct
-import unicodedata
 from pathlib import Path
 
 from .core import ModError
@@ -16,11 +15,8 @@ from .deep_extract import BANK_DESC, STRING_TABLE, decode_text, exe_pos, glyph_m
 from .disc import DiscReader, DiscError
 from .ps1_content import _encode_description
 from .ps1_god24_chest import SOURCE_SHA256
-from .ps1_text import ICON_CODES
+from .ps1_text import MAX_TEXT_BYTES, _measure, compile_description, preview_description
 from .tables import CARD_COUNT
-
-MAX_TEXT_BYTES = 2048
-
 
 def _card_capacity(exe):
     from .ps1_expansion import inspect_expansion
@@ -53,7 +49,7 @@ def _description_bytes(exe: bytes, cid: int):
 def inspect_exe_description(exe: bytes, cid: int, desired: str, cards: dict,
                             *, original_exe: bytes | None = None,
                             native_profile: bool = False) -> dict:
-    """Retorna aplicada/original/divergente/incompativel/somente_studio."""
+    """Lê o texto inteiro, a prévia ou a ausência de descrição na imagem."""
     result = {'id': int(cid), 'status': 'divergente', 'motivo': ''}
     if not 1 <= cid <= _card_capacity(exe):
         result.update(status='somente_studio',
@@ -65,31 +61,31 @@ def inspect_exe_description(exe: bytes, cid: int, desired: str, cards: dict,
                       offset_exe=file_offset,
                       sha256_texto_bin=hashlib.sha256(actual).hexdigest())
         cmap, _ = glyph_map(exe)
-        normalization = None
+        visible, warnings = decode_text(exe, BANK_DESC, address, cmap, limit=MAX_TEXT_BYTES)
+        result['texto_no_bin'] = visible
+        if warnings:
+            result['avisos_leitura'] = warnings
+        if cid > CARD_COUNT and not actual and desired.strip():
+            result.update(status='sem_texto', motivo='A carta nova está sem descrição nesta imagem. '
+                          'O texto completo está no projeto.')
+            return result
         if native_profile:
-            font = set(cmap.values())
-
-            def normalization(text: str) -> str:
-                chars = []
-                for char in text:
-                    substitute = ''.join(
-                        c for c in unicodedata.normalize('NFD', char)
-                        if not unicodedata.combining(c))
-                    chars.append(substitute if char not in font and substitute
-                                 and all(c in font for c in substitute) else char)
-                return ''.join(chars)
-
-        expected = _encode_description(
-            desired.replace('\r\n', '\n'), cmap, cards,
-            icon_codes=ICON_CODES if native_profile else None,
-            normalize=normalization)
-        if native_profile:
-            from .ps1_text import _measure
-            _measure(expected)
-
+            expected, _, reflowed = compile_description(desired, cmap, cards)
+        else:
+            expected = _encode_description(desired.replace('\r\n', '\n'), cmap, cards)
+            reflowed = False
         result['sha256_texto_esperado'] = hashlib.sha256(expected).hexdigest()
+        if native_profile:
+            if cid > CARD_COUNT and actual != expected and actual == preview_description(expected, cmap, len(actual)):
+                _measure(actual)
+                result.update(status='resumida', motivo='A prévia gravada no BIN corresponde ao início '
+                              'da descrição. O Studio guarda o texto completo.')
+                return result
+            _measure(expected)
         if actual == expected:
-            result.update(status='aplicada', motivo='Texto salvo no Studio coincide com os bytes e o ponteiro do BIN.')
+            result.update(status='aplicada', quebras_reorganizadas=reflowed,
+                          motivo='O BIN contém o texto completo com as quebras de linha reorganizadas.'
+                          if reflowed else 'Texto salvo no Studio coincide com os bytes e o ponteiro do BIN.')
         else:
             stock = None
             if original_exe is not None:
@@ -103,10 +99,6 @@ def inspect_exe_description(exe: bytes, cid: int, desired: str, cards: dict,
             else:
                 result.update(status='divergente',
                               motivo='O BIN contém texto diferente do salvo no Studio.')
-        visible, warnings = decode_text(exe, BANK_DESC, address, cmap, limit=1024)
-        result['texto_no_bin'] = visible
-        if warnings:
-            result['avisos_leitura'] = warnings
     except (ModError, ValueError) as exc:
         result.update(status='incompativel', motivo=str(exc))
     return result
@@ -139,7 +131,7 @@ def scan_disc_descriptions(project, image: Path, *, ids=None) -> dict:
     ]
     counts = {status: sum(row['status'] == status for row in results)
               for status in ('aplicada', 'original', 'divergente',
-                             'incompativel', 'somente_studio')}
+                             'incompativel', 'somente_studio', 'resumida', 'sem_texto')}
     return {
         'imagem_analisada': str(bin_path),
         'sha256_slus_bin': hashlib.sha256(exe).hexdigest(),
