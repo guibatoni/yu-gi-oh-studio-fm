@@ -1,3 +1,6 @@
+> Registro histórico da v1.0.0. Para o estado atual, consulte
+> [Expansão PS1 #723–#740](EXPANSAO_PS1_740.md) e [Compatibilidade](COMPAT_PS1.md).
+
 # Studio FM v1.0.0 — Expansão, God e texto com ícones
 
 ## Estado real do PS1

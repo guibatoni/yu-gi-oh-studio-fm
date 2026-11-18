@@ -71,6 +71,7 @@ class EffectPlan:
     fixed_decks: tuple[int, ...] = ()
     name_colors: int = 0
     fusions: tuple[tuple[int, int, int], ...] = ()
+    capacity: int = CARD_COUNT
 
     @property
     def fusion_report(self):
@@ -118,27 +119,39 @@ class EffectPlan:
         return RUNTIME_EXT_BASE if self.gameplay else BANK_END
 
 
-def _name_colors(project, profile):
+def _runtime_bundle(plan):
+    if plan.capacity > CARD_COUNT:
+        from . import ps1_expanded_runtime_blob as bundle
+    else:
+        from . import ps1_runtime_blob as bundle
+    return bundle
+
+
+def _name_colors(project, profile, capacity=CARD_COUNT):
     if not profile:
         return {}
     return {cid: name_style(project.get(cid))[2] for cid, card in getattr(project, 'cards', {}).items()
-            if 1 <= cid <= CARD_COUNT and not card.get('virtual')}
+            if 1 <= cid <= capacity and (capacity > CARD_COUNT or not card.get('virtual'))}
 
 
-def _pack_name_colors(colors):
+def _pack_name_colors(colors, capacity=CARD_COUNT):
     ids = {key: index for index, key in enumerate(NAME_TIERS, 1)}
-    lookup = bytearray(CARD_COUNT + 1)
+    lookup = bytearray(capacity + 1)
     for cid, key in colors.items():
         lookup[cid] = ids[key]
     palette = [0]
     for rgb in NAME_TIERS.values():
         channels = [int(rgb[index:index + 2], 16) for index in (1, 3, 5)]
         palette.append(sum(((value + 1) // 2) << (8 * i) for i, value in enumerate(channels)))
-    return struct.pack(f'<{len(palette)}I', *palette) + bytes(lookup) + b'\0'
+    packed = struct.pack(f'<{len(palette)}I', *palette) + bytes(lookup)
+    return packed + bytes((-len(packed)) % 4)
 
 
 def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -> EffectPlan:
     """Keep the same action vocabulary and value checks as the Studio."""
+    capacity = 740 if profile and any(722 < cid <= 740 for cid in getattr(project, 'cards', {})) else CARD_COUNT
+    extras = 2 + 2 * (capacity + 1)
+    fixed_config, color_config, fusion_config = extras + 8, extras + 10, extras + 12
     metadata = getattr(project, 'metadata', {})
     default = metadata.get('ps1_deck_global_limit')
     try:
@@ -164,39 +177,39 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
         deck_drops, prefix = (), None
 
     fixed_decks = (fixed_decks or {}) if profile else {}
-    colors = _name_colors(project, profile)
+    colors = _name_colors(project, profile, capacity)
     edited_fusions = tuple((a, b, result) for (a, b), result in sorted((fusions or {}).items())) if profile else ()
-    data = bytearray(CONFIG_EXTRAS)
+    data = bytearray(extras)
     data[0] = default
-    if deck_drops or prefix is not None or fixed_decks or colors or edited_fusions:
+    if deck_drops or prefix is not None or fixed_decks or colors or edited_fusions or capacity > CARD_COUNT:
         flags = sum(1 << opponent for opponent in deck_drops)
         data.extend(struct.pack('<H', int(f'{prefix or 0:05d}', 16)))
         data.extend(flags.to_bytes(DUELIST_COUNT // 8, byteorder='little'))
         data.append(0)
-    if deck_drops or fixed_decks or colors or edited_fusions:
+    if deck_drops or fixed_decks or colors or edited_fusions or capacity > CARD_COUNT:
         data.extend(b'\0' * 4)
-        if edited_fusions:
+        if edited_fusions or capacity > CARD_COUNT:
             data.extend(b'\0' * 4)
-            struct.pack_into('<H', data, FUSION_CONFIG, len(data))
+            struct.pack_into('<H', data, fusion_config, len(data))
             for a, b, result in edited_fusions:
                 data.extend(struct.pack('<I', a | (b << 10) | (result << 20)))
             data.extend(b'\0' * 4)
         if fixed_decks:
             directory = len(data)
-            struct.pack_into('<H', data, FIXED_DECK_CONFIG, directory)
+            struct.pack_into('<H', data, fixed_config, directory)
             data.extend(b'\0' * (DUELIST_COUNT * 2))
             for opponent, deck in sorted(fixed_decks.items()):
                 struct.pack_into('<H', data, directory + opponent * 2, len(data))
                 data.extend(struct.pack(f'<{DECK_SIZE}H', *deck))
         if colors:
-            struct.pack_into('<H', data, NAME_COLOR_CONFIG, len(data))
-            data.extend(_pack_name_colors(colors))
+            struct.pack_into('<H', data, color_config, len(data))
+            data.extend(_pack_name_colors(colors, capacity))
     offsets, grave_filters = {}, {}
     for key, effects in sorted(getattr(project, 'effects', {}).items(), key=lambda pair: int(pair[0])):
         cid = int(key)
         if not effects:
             continue
-        if not profile or not 1 <= cid <= CARD_COUNT:
+        if not profile or not 1 <= cid <= capacity:
             pending.append(f'#{cid}: {len(effects)} efeito(s) requerem carta original e perfil Drop x15.')
             continue
         card_type = int(project.get(cid)['tipo_id'])
@@ -232,7 +245,7 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
             if action in EFFECT_ACTIONS or action in ENTRY_EFFECTS:
                 if action == 'bonus_por_carta_id':
                     match = effect['carta_referencia_id']
-                    if match > CARD_COUNT:
+                    if match > capacity:
                         pending.append(f'#{cid}: o bônus referencia carta #{match}, fora do catálogo PS1.')
                         continue
                     code = 4 if effect['origem_contagem'] == 'campo' else 5
@@ -297,9 +310,9 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
             data.extend(struct.pack('<BBHHH', 0, predicate, kind, 0, 0))
         data.extend(bytes(8))
     data[1] = any(action in ENTRY_EFFECTS for _, action in accepted)
-    configured = accepted or deck_drops or prefix is not None or fixed_decks or colors or edited_fusions
+    configured = accepted or deck_drops or prefix is not None or fixed_decks or colors or edited_fusions or capacity > CARD_COUNT
     plan = EffectPlan(bytes(data) if configured else b'', tuple(accepted), tuple(pending), default,
-                      deck_drops, prefix, tuple(sorted(fixed_decks)), len(colors), edited_fusions)
+                      deck_drops, prefix, tuple(sorted(fixed_decks)), len(colors), edited_fusions, capacity)
     if plan.data_end > plan.bank_end:
         raise ModError('As regras nativas excedem a área reservada do perfil Drop x15.')
     return plan
@@ -353,6 +366,7 @@ MARKER_CALLS = (
 
 
 def _rule_patches(plan: EffectPlan):
+    ENTRY_POINTS = _runtime_bundle(plan).ENTRY_POINTS
     if plan.gameplay:
         marker_wrappers = {'FieldActions': 'FieldActionsWithMarkers',
                            'ResetCards': 'ResetCardsWithMarkers'} if plan.entry_markers else {}
@@ -383,7 +397,7 @@ def _option_calls(plan):
     if plan.name_colors:
         yield (*TEXT_DRAW, 0x800849F0, 'SortTierGlyph')
         yield (*TEXT_DRAW, 0x80084320, 'SortTierPolygon')
-    if plan.fusions:
+    if plan.fusions or plan.capacity > CARD_COUNT:
         for start, end in FUSION_CALLERS:
             yield start, end, RETAIL_FUSION, 'CheckEditedFusion'
 
@@ -412,6 +426,8 @@ def _valid_original_drop_entry(raw):
 
 
 def _mod_program(plan, drop_entry):
+    bundle = _runtime_bundle(plan)
+    RUNTIME_MOD, ENTRY_POINTS = bundle.RUNTIME_MOD, bundle.ENTRY_POINTS
     if not plan.deck_drops:
         return RUNTIME_MOD
     if not _valid_original_drop_entry(drop_entry):
@@ -428,8 +444,31 @@ def _valid_call_count(key, count):
 
 def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = None) -> dict:
     """Read the resident code, rules and hooks from the selected BIN/CUE."""
+    bundle = _runtime_bundle(plan)
+    ENTRY_POINTS = bundle.ENTRY_POINTS
+    RUNTIME = bundle.RUNTIME
+    RUNTIME_END = bundle.RUNTIME_END
+    RUNTIME_SHA256 = bundle.RUNTIME_SHA256
+    RUNTIME_EXT = bundle.RUNTIME_EXT
+    RUNTIME_EXT_END = bundle.RUNTIME_EXT_END
+    RUNTIME_EXT_SHA256 = bundle.RUNTIME_EXT_SHA256
+    RUNTIME_PASSWORD = bundle.RUNTIME_PASSWORD
+    RUNTIME_PASSWORD_END = bundle.RUNTIME_PASSWORD_END
+    RUNTIME_PASSWORD_SHA256 = bundle.RUNTIME_PASSWORD_SHA256
+    RUNTIME_MOD = bundle.RUNTIME_MOD
+    RUNTIME_MOD_END = bundle.RUNTIME_MOD_END
+    RUNTIME_MOD_SHA256 = bundle.RUNTIME_MOD_SHA256
+    RUNTIME_MARKERS = bundle.RUNTIME_MARKERS
+    RUNTIME_MARKERS_END = bundle.RUNTIME_MARKERS_END
+    RUNTIME_MARKERS_SHA256 = bundle.RUNTIME_MARKERS_SHA256
+    RUNTIME_GRAVE_FILTERS = bundle.RUNTIME_GRAVE_FILTERS
+    RUNTIME_GRAVE_FILTERS_END = bundle.RUNTIME_GRAVE_FILTERS_END
+    RUNTIME_GRAVE_FILTERS_SHA256 = bundle.RUNTIME_GRAVE_FILTERS_SHA256
     code_start, cfg_start = RUNTIME_BASE - EXE_DELTA, CONFIG_ADDRESS - EXE_DELTA
     code_ok = exe[code_start:code_start+len(RUNTIME)] == RUNTIME
+    if plan.capacity > CARD_COUNT:
+        from .ps1_expansion import inspect_expansion
+        code_ok = code_ok and inspect_expansion(exe)['status'] == 'aplicado'
     if plan.gameplay:
         ext_start = RUNTIME_EXT_BASE - EXE_DELTA
         code_ok = code_ok and exe[ext_start:ext_start+len(RUNTIME_EXT)] == RUNTIME_EXT
@@ -439,7 +478,7 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     if plan.grave_filters:
         start = RUNTIME_GRAVE_FILTERS_BASE - EXE_DELTA
         code_ok = code_ok and exe[start:start + len(RUNTIME_GRAVE_FILTERS)] == RUNTIME_GRAVE_FILTERS
-    if plan.password_prefix is not None:
+    if plan.password_prefix is not None and plan.capacity == CARD_COUNT:
         password_start = RUNTIME_PASSWORD_BASE - EXE_DELTA
         code_ok = code_ok and exe[password_start:password_start+len(RUNTIME_PASSWORD)] == RUNTIME_PASSWORD
     if plan.mod_features:
@@ -481,6 +520,26 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
 
 def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
                     description_icons: bool) -> tuple[bytes, dict | None]:
+    bundle = _runtime_bundle(plan)
+    ENTRY_POINTS = bundle.ENTRY_POINTS
+    RUNTIME = bundle.RUNTIME
+    RUNTIME_END = bundle.RUNTIME_END
+    RUNTIME_SHA256 = bundle.RUNTIME_SHA256
+    RUNTIME_EXT = bundle.RUNTIME_EXT
+    RUNTIME_EXT_END = bundle.RUNTIME_EXT_END
+    RUNTIME_EXT_SHA256 = bundle.RUNTIME_EXT_SHA256
+    RUNTIME_PASSWORD = bundle.RUNTIME_PASSWORD
+    RUNTIME_PASSWORD_END = bundle.RUNTIME_PASSWORD_END
+    RUNTIME_PASSWORD_SHA256 = bundle.RUNTIME_PASSWORD_SHA256
+    RUNTIME_MOD = bundle.RUNTIME_MOD
+    RUNTIME_MOD_END = bundle.RUNTIME_MOD_END
+    RUNTIME_MOD_SHA256 = bundle.RUNTIME_MOD_SHA256
+    RUNTIME_MARKERS = bundle.RUNTIME_MARKERS
+    RUNTIME_MARKERS_END = bundle.RUNTIME_MARKERS_END
+    RUNTIME_MARKERS_SHA256 = bundle.RUNTIME_MARKERS_SHA256
+    RUNTIME_GRAVE_FILTERS = bundle.RUNTIME_GRAVE_FILTERS
+    RUNTIME_GRAVE_FILTERS_END = bundle.RUNTIME_GRAVE_FILTERS_END
+    RUNTIME_GRAVE_FILTERS_SHA256 = bundle.RUNTIME_GRAVE_FILTERS_SHA256
     if not plan.data and not description_icons:
         return exe, None
     if hashlib.sha256(original).hexdigest() != SOURCE_SHA256 or len(exe) != len(original):
@@ -521,7 +580,7 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
         if any(exe[begin:end]):
             raise ModError('Extensão dos filtros de cemitério PS1 conflita com a área reservada.')
         out[begin:end] = RUNTIME_GRAVE_FILTERS
-    if plan.password_prefix is not None:
+    if plan.password_prefix is not None and plan.capacity == CARD_COUNT:
         password_start = RUNTIME_PASSWORD_BASE - EXE_DELTA
         password_end = RUNTIME_PASSWORD_END - EXE_DELTA
         if (not RUNTIME_PASSWORD or password_end - password_start != len(RUNTIME_PASSWORD)
@@ -563,7 +622,7 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
         observed = struct.unpack_from('<28I', out, original_renderer)
         if observed not in (SPRITE_ORIGINAL, SPRITE_PATCHED):
             raise ModError('Extensão PS1 encontrou um renderizador de ícones incompatível.')
-        patch(SPRITE_RAM, observed, extended_sprite_words())
+        patch(SPRITE_RAM, observed, extended_sprite_words(ENTRY_POINTS))
 
     if plan.data:
         config = CONFIG_ADDRESS - EXE_DELTA

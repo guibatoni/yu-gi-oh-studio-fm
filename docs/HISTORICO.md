@@ -1,3 +1,23 @@
+## v1.9.0 — Cartas PS1 #723–#740 (experimental)
+
+- Dezoito IDs adicionais com baú de 740 posições, atributos/textos próprios,
+  imagens e títulos nativos, mantendo a estrutura e os checksums do save.
+- Cadastro com modelo PS1 por tipo e edição posterior em **Modelo PS1**.
+  Magias, traps, equipamentos e rituais herdam o comportamento escolhido.
+- Diretório de efeitos, cores de tier, fusões, limites de cópias e decks fixos
+  de 40 cartas dos oponentes aceitam os novos IDs no perfil Original Drop x15.
+- Arquivo WA_MRG ampliado e anexado ao BIN com diretório ISO9660, volume,
+  endereçamento de recursos e EDC/ECC atualizados; XA e vídeos não são movidos.
+- Passwords adicionais por ID com proteção das flags da campanha, quantidades
+  do baú preservadas e campos nativos que não cabem recusados sem truncamento.
+- Validação: 365 testes, dez verificações MIPS, imagem real com os cinco tipos,
+  #740/God, PNG e ícone de descrição; rotinas nativas do baú, sete ordenações,
+  save/CRC, trap, equipamento e ritual executadas em RAM isolada.
+- Limites: #741+, Supreme, expansão de pools/drops e Library separada ainda
+  não entram nesta extensão nativa. Comportamentos inéditos e a IA dos novos
+  suportes continuam sujeitos à compatibilidade. Teste completo no ePSXe pendente.
+- Backup: `backup/studio-v1.8.15-before-ps1-expansion`.
+
 ## v1.8.8 — Catálogo completo no baú
 
 - A aba **Baú** mostra todas as cartas do projeto, inclusive as

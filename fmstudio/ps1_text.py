@@ -76,8 +76,8 @@ def patch_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
             return ''.join(result)
 
         try:
-            if not 1 <= cid <= CARD_COUNT:
-                raise ModError('Edição PS1 requer carta original.')
+            if not 1 <= cid <= 740:
+                raise ModError('Edição PS1 requer ID de 1 a 740.')
             raw = _encode_description(value.replace('\r\n', '\n'), cmap, cards,
                                       icon_codes=ICON_CODES, normalize=normalize)
             icons = _measure(raw)

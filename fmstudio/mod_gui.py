@@ -1504,12 +1504,21 @@ class NewCardDialog(tk.Toplevel):
         name.pack(fill='x')
         ttk.Label(pane, text='Tipo').pack(anchor='w', pady=(5, 0))
         ttk.Combobox(pane, state='readonly', textvariable=self.kind, values=TYPE_NAMES).pack(fill='x')
+        ttk.Label(pane, text='Modelo de comportamento / animação no PS1').pack(anchor='w', pady=(7, 0))
+        self.native_model = tk.StringVar()
+        self.native_choices = ttk.Combobox(pane, state='readonly', textvariable=self.native_model, width=44)
+        self.native_choices.pack(fill='x')
+        ttk.Label(pane, text='IDs #723–#740: expansão PS1 experimental. O modelo fornece o comportamento; '
+                  'a carta conserva nome, atributos e arte próprios.', foreground=MUTED,
+                  wraplength=340).pack(anchor='w', pady=(3, 5))
         if self.template is not None:
             card = self.project.get(self.template)
             typ = int(card['tipo_id'])
             self.kind.set(TYPE_NAMES[typ] if 0 <= typ < len(TYPE_NAMES) else TYPE_NAMES[0])
             ttk.Checkbutton(pane, text=f'Usar #{self.template} como modelo de atributos',
                             variable=self.clone).pack(anchor='w', pady=7)
+        self.kind.trace_add('write', lambda *_: self._native_models())
+        self._native_models()
         self.feedback = tk.StringVar()
         ttk.Label(pane, textvariable=self.feedback, foreground=ACCENT, wraplength=320).pack(anchor='w', pady=(5, 0))
         actions = ttk.Frame(pane)
@@ -1521,6 +1530,18 @@ class NewCardDialog(tk.Toplevel):
         self.grab_set()
         name.focus_set()
 
+    def _native_models(self):
+        from .ps1_expansion import model_candidates, native_model
+        kind = TYPE_NAMES.index(self.kind.get())
+        candidates = model_candidates(self.project, kind)
+        self.native_choices['values'] = [f'#{cid:03d} {display_name(cid, self.project.cards)}' for cid in candidates]
+        current = self.native_model.get().split()[0].lstrip('#') if self.native_model.get() else ''
+        chosen = int(current) if current.isdecimal() and int(current) in candidates else None
+        if chosen is None:
+            preferred = {20: 337, 21: 686, 22: 666, 23: 301}.get(kind)
+            chosen = preferred if preferred in candidates else next(iter(candidates), None)
+        self.native_model.set(f'#{chosen:03d} {display_name(chosen, self.project.cards)}' if chosen else '')
+
     def create(self):
         try:
             if self.project is not self.studio.project or self.studio._extract_running:
@@ -1528,6 +1549,7 @@ class NewCardDialog(tk.Toplevel):
             cid = self.project.add_card(self.template if self.clone.get() else None,
                                         name=self.name.get().strip() or None,
                                         type_id=TYPE_NAMES.index(self.kind.get()),
+                                        native_model_id=int(self.native_model.get().split()[0].lstrip('#')) if self.native_model.get() else None,
                                         card_id=positive_int(self.card_id.get().strip().lstrip('#'), 'ID da carta'))
         except (ModError, ValueError, OSError) as exc:
             self.feedback.set(str(exc))
@@ -1552,6 +1574,25 @@ class CardRelationsDialog(tk.Toplevel):
         tabs.add(fusions, text='Fusões')
         tabs.add(ritual, text='Ritual')
         tabs.add(equip, text='Equipamentos')
+        if cid > CARD_COUNT:
+            from .ps1_expansion import model_candidates, native_model
+            native = ttk.Frame(tabs, padding=9)
+            tabs.add(native, text='Modelo PS1')
+            ttk.Label(native, text='Comportamento original e animação usados pela nova carta. '
+                      'As edições da carta e seu ID permanecem independentes.', wraplength=580).pack(anchor='w')
+            self.native_template = tk.StringVar()
+            candidates = model_candidates(studio.project, studio.project.get(cid)['tipo_id'])
+            options = [f'#{i:03d} {display_name(i, studio.project.cards)}' for i in candidates]
+            selector = ttk.Combobox(native, state='readonly', values=options, textvariable=self.native_template, width=50)
+            selector.pack(fill='x', pady=9)
+            try:
+                selected = native_model(studio.project, cid)
+                self.native_template.set(options[candidates.index(selected)])
+            except ModError:
+                pass
+            self.native_feedback = tk.StringVar()
+            ttk.Label(native, textvariable=self.native_feedback, foreground=ACCENT).pack(anchor='w')
+            ttk.Button(native, text='Salvar modelo PS1', style='Accent.TButton', command=self._save_native_model).pack(anchor='e')
         self.fusion_tree = ttk.Treeview(fusions, columns=('a','b','result'), show='headings', height=6)
         for key, caption in zip(('a','b','result'), ('Material 1','Material 2','Resultado')):
             self.fusion_tree.heading(key, text=caption)
@@ -1572,7 +1613,7 @@ class CardRelationsDialog(tk.Toplevel):
             self.fusion_values.append(variable)
         self.fusion_status = tk.StringVar()
         if ps1_supports_god24(studio.project):
-            self.fusion_status.set('Receitas com IDs originais entram na próxima cópia BIN/CUE do Drop x15.')
+            self.fusion_status.set('Receitas #001–#740 entram na cópia Drop x15; IDs adicionais usam a expansão experimental.')
         else:
             self.fusion_status.set('Receitas salvas ficam disponíveis no simulador do Studio.')
         ttk.Label(fusions, textvariable=self.fusion_status, foreground=MUTED,
@@ -1596,6 +1637,15 @@ class CardRelationsDialog(tk.Toplevel):
         if typ == 23:
             tabs.select(equip)
         self._refresh()
+
+    def _save_native_model(self):
+        try:
+            value = int(self.native_template.get().split()[0].lstrip('#'))
+            self.studio.project.set_card(self.cid, {'modelo_ps1_id': value})
+        except (ModError, ValueError, IndexError, OSError) as exc:
+            self.native_feedback.set(str(exc) or 'Selecione um modelo compatível.')
+            return
+        self.native_feedback.set('Modelo PS1 salvo.')
 
     def _refresh(self):
         pr = self.studio.project

@@ -49,33 +49,35 @@ class ModProjectionTests(unittest.TestCase):
     def test_full_fixed_deck_keeps_exact_ids_and_counts(self):
         cards = {cid: {'tipo_id': 0} for cid in (*range(1, 41), 722)}
         cards[723] = {'tipo_id': 24, 'virtual': True}
+        cards[741] = {'tipo_id': 0, 'virtual': True}
         deck = [*range(1, 38), 722, 722, 722]
         project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={'edicao_mod': {
             'duelistas': {
                 '1': {'deck': {'cartas': deck}},
                 '2': {'deck': {'cartas': deck[:-1]}},
                 '3': {'deck': {'cartas': [*deck[:-1], 723]}},
+                '4': {'deck': {'cartas': [*deck[:-1], 741]}},
             }
         }})
         plan = compile_mod(project, profile=True, wa_verified=False)
-        self.assertEqual(plan.fixed_decks, {1: tuple(deck)})
+        self.assertEqual(plan.fixed_decks, {1: tuple(deck), 3: (*deck[:-1], 723)})
         self.assertFalse(plan.needs_wa)
         self.assertTrue(any('39/40' in note for note in plan.pending))
-        self.assertTrue(any('IDs originais #001–#722' in note for note in plan.pending))
+        self.assertTrue(any('#001–#740' in note for note in plan.pending))
         self.assertEqual(compile_mod(project, profile=False, wa_verified=True).fixed_decks, {})
 
-    def test_saved_fusions_export_only_when_ids_belong_to_the_original_catalog(self):
-        cards = {cid: {'tipo_id': 9} for cid in (16, 56, 72, 723)}
+    def test_saved_fusions_export_for_supported_expanded_ids(self):
+        cards = {cid: {'tipo_id': 9} for cid in (16, 56, 72, 723, 741)}
         cards[16]['tipo_id'] = 24
         cards[723]['virtual'] = True
         project = SimpleNamespace(cards=cards, get=cards.__getitem__, metadata={'edicao_mod': {
-            'receitas': {'fusoes': {'56,16': 72, '56,72': 723}}
+            'receitas': {'fusoes': {'56,16': 72, '56,72': 723, '16,72': 741}}
         }})
         plan = compile_mod(project, profile=True, wa_verified=False)
-        self.assertEqual(plan.fusions, {(16, 56): 72})
-        self.assertIn('Fusões personalizadas (1)', plan.applied)
+        self.assertEqual(plan.fusions, {(16, 56): 72, (56, 72): 723})
+        self.assertIn('Fusões personalizadas (2)', plan.applied)
         self.assertFalse(plan.needs_wa)
-        self.assertTrue(any('#723' in item for item in plan.pending))
+        self.assertTrue(any('#741' in item for item in plan.pending))
         self.assertFalse(compile_mod(project, profile=False, wa_verified=True).fusions)
 
     def test_edited_native_pools_skip_banned_ids_and_report_unsupported_limits(self):

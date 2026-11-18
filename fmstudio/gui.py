@@ -2370,8 +2370,11 @@ class Studio(tk.Tk):
         window.transient(self)
         content=ttk.Frame(window,padding=12)
         content.pack(fill='both',expand=True)
-        for label,command in [('Tipo jogável no PS1',self.choose_playable_monster_type),
-                              ('Glifo God na descrição',self.toggle_god_icon_ps1)]:
+        actions = ([('Modelo PS1 e relações', self.edit_card_rules),
+                    ('Ícones na descrição', self.choose_description_icon)] if self.selected_id > 722 else
+                   [('Tipo jogável no PS1', self.choose_playable_monster_type),
+                    ('Glifo God na descrição', self.toggle_god_icon_ps1)])
+        for label,command in actions:
             ttk.Button(content,text=label,command=command).pack(fill='x',pady=4)
 
     def insert_description_token(self, token: str):
@@ -2492,7 +2495,7 @@ class Studio(tk.Tk):
             f'Ainda originais: {counts["original"]}\n'
             f'Diferentes do Studio: {counts["divergente"]}\n'
             f'Incompatíveis: {counts["incompativel"]}\n'
-            f'Somente Studio (ID > 722): {counts["somente_studio"]}\n\n'
+            f'Fora do catálogo nativo desta imagem: {counts["somente_studio"]}\n\n'
         )
         if chosen:
             summary += (f'Carta #{chosen["id"]}: {chosen["status"].upper()}\n'
@@ -2736,7 +2739,7 @@ class Studio(tk.Tk):
             'cópia BIN/CUE de teste para abrir no ePSXe?\n\n'
             'Você escolherá o mesmo BIN/CUE importado no projeto. '
             'O arquivo original NÃO será sobrescrito.\n'
-            'ATENÇÃO: efeitos novos e cartas extras ainda não funcionam no PS1.',
+            'A cópia informa os recursos aplicados. No Drop x15, a expansão experimental aceita #723–#740.',
             parent=self):
             self.build_disc()
 
@@ -2889,6 +2892,8 @@ class Studio(tk.Tk):
             + rank_hud
             + (f'Baú com {manifest["catalogo_bau_ps1"]["cartas"]} cartas, inclusive as sem cópias.\n'
                if manifest.get('catalogo_bau_ps1', {}).get('status') == 'aplicado' else '')
+            + (f'Cartas novas gravadas: {len(manifest["expansao_cartas_ps1"]["ids_adicionais"])}. Expansão experimental até #740.\n'
+               if manifest.get('expansao_cartas_ps1', {}).get('status') == 'aplicado' else '')
             + (f'Fusões personalizadas gravadas: {len(runtime["fusoes"])}.\n'
                if runtime.get('fusoes') else '')
             + (f'Decks fixos de 40 cartas: {len(runtime["decks_fixos"])} duelista(s).\n'
@@ -2901,7 +2906,7 @@ class Studio(tk.Tk):
                if runtime.get('password_id_prefix') is not None else '')
             + (f'Fonte PS1 simplificou acentos em {simplified} descrição(ões).\n' if simplified else '')
             + (f'ATENÇÃO: descrições dos IDs {", ".join(map(str, manifest["descricoes_somente_studio"][:8]))} '
-               'ficam apenas no Studio (cartas acima de 722).\n'
+               'ficam apenas no Studio nesta imagem.\n'
                if manifest.get('descricoes_somente_studio') else '')
             + f'Recursos pendentes: {len(manifest["recursos_pendentes"])}.\n'
             + (f'God (24) aplicado a {len(manifest["god24_cartas"])} carta(s). '

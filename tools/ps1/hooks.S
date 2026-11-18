@@ -76,13 +76,20 @@ CollectOriginal:
 
 /* a0/a1 hold the unchanged material IDs for the retail fallback.
    Each record is 10 bits per ID, with the result in bits 20-29. */
+#ifdef FM_EXPANDED
+#define FUSION_LIMIT 740
+#define FUSION_OFFSET 1496
+#else
+#define FUSION_LIMIT 722
+#define FUSION_OFFSET 1460
+#endif
 .globl CheckEditedFusion
 CheckEditedFusion:
     addiu $t0, $a0, -1
-    sltiu $t0, $t0, 722
+    sltiu $t0, $t0, FUSION_LIMIT
     beq $t0, $zero, .Lretail_fusion
     addiu $t0, $a1, -1
-    sltiu $t0, $t0, 722
+    sltiu $t0, $t0, FUSION_LIMIT
     beq $t0, $zero, .Lretail_fusion
     sltu $t0, $a1, $a0
     addu $t1, $a0, $zero
@@ -95,7 +102,7 @@ CheckEditedFusion:
     or $t1, $t1, $t2
     lui $t0, 0x801C
     ori $t0, $t0, 0xD7A0
-    lhu $t2, 1460($t0)  /* FUSION_CONFIG in ps1_runtime.py */
+    lhu $t2, FUSION_OFFSET($t0)  /* FUSION_CONFIG in ps1_runtime.py */
     lui $t3, 0x000F
     ori $t3, $t3, 0xFFFF
     addu $t0, $t0, $t2
@@ -109,8 +116,20 @@ CheckEditedFusion:
     jr $ra
     srl $v0, $v0, 20
 .Lretail_fusion:
+#ifdef FM_EXPANDED
+    sltiu $t0, $a0, 723
+    sltiu $t1, $a1, 723
+    and $t0, $t0, $t1
+    beq $t0, $zero, .Lno_fusion
+    nop
+#endif
     j 0x80019A60
     nop
+#ifdef FM_EXPANDED
+.Lno_fusion:
+    jr $ra
+    addu $v0, $zero, $zero
+#endif
 
 .section .runtime.mod,"ax",@progbits
 .align 2

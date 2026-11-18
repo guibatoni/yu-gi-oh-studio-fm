@@ -40,6 +40,8 @@ SOURCE_FILES = frozenset({
     'assets/icons/nao_bloqueavel.png', 'assets/icons/infinito.png', 'assets/icons/anti_trap.png',
     'assets/icons/anti_magia.png', 'assets/icons/indestrutivel.png', 'assets/icons/god.png',
     'assets/icons/atlas_16x16.png', 'assets/icons/ataque_primeiro_turno.png',
+    'fmstudio/disc_append.py', 'fmstudio/ps1_expansion.py', 'fmstudio/ps1_expansion_profile.py',
+    'fmstudio/ps1_expanded_runtime_blob.py',
     'assets/icons/vinculo_vida.png', 'assets/icons/restaurar_lp.png',
     'fmstudio/disc_build.py', 'fmstudio/ps1_description_verify.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'fmstudio/ps1_god_icon.py', 'fmstudio/ps1_god24_hook.py', 'fmstudio/ps1_god24_chest.py', 'fmstudio/ps1_god24_row_patch.py', 'fmstudio/ps1_god24_duel.py', 'fmstudio/ps1_god24_hand.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
     'fmstudio/disc.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_effects_lab.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
@@ -51,11 +53,14 @@ SOURCE_FILES = frozenset({
     'fmstudio/deck_generator.py', 'fmstudio/mod_tools_gui.py', 'fmstudio/passwords.py', 'fmstudio/ps1_rank_hud.py',
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
     'PUBLICAR_GITHUB.bat', 'PUBLICAR_GITHUB.ps1', 'LEIA-ME.txt',
+    'docs/EXPANSAO_PS1_740.md', 'tools/verify_expanded_bau_mips.py',
     'README.md', 'docs/HISTORICO.md', 'docs/ATUALIZACOES_GITHUB.md',
     'docs/ORIGEM_E_VALIDACAO.md', 'docs/ROADMAP_EFEITOS.md',
     'docs/MIGRACAO_REPOSITORIO.md', 'docs/COMPAT_PS1.md', 'docs/EXPANSAO_722_GOD_TEXTO.md', 'docs/CLASSES_E_CORES.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md',
 })
 SOURCE_REQUIRED = frozenset({
+    'fmstudio/disc_append.py', 'fmstudio/ps1_expansion.py', 'fmstudio/ps1_expansion_profile.py',
+    'fmstudio/ps1_expanded_runtime_blob.py',
     'fmstudio/ps1_god24_play.py', 'fmstudio/ps1_god24_display.py',
     'fmstudio/ps1_runtime.py', 'fmstudio/ps1_runtime_blob.py', 'fmstudio/ps1_text.py',
     'fmstudio/duel_match.py', 'fmstudio/duel_ai.py', 'fmstudio/duel_gui.py', 'fmstudio/duel_rank.py', 'fmstudio/guardian.py',

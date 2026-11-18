@@ -35,13 +35,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cc', default='mipsel-linux-gnu-gcc')
     parser.add_argument('--prefix', default='mipsel-linux-gnu-')
+    parser.add_argument('--expanded', action='store_true', help='Compile the save-compatible 740-card variant')
     args = parser.parse_args()
     with tempfile.TemporaryDirectory() as temporary:
         work = Path(temporary)
         objects = []
-        for src in (SOURCES / 'runtime.c', SOURCES / 'hooks.S', SOURCES / 'rank_hud.c'):
+        flags = (*FLAGS, *(('-DFM_EXPANDED', '-DFM_CARD_CAPACITY=740', '-DFM_LEVEL_ADDRESS=0x801BFD18')
+                          if args.expanded else ()))
+        inputs = [SOURCES / 'runtime.c', SOURCES / 'hooks.S', SOURCES / 'rank_hud.c']
+        if args.expanded:
+            inputs.append(SOURCES / 'expansion.S')
+        for src in inputs:
             obj = work / (src.stem + '.o')
-            subprocess.run([args.cc, *FLAGS, '-c', str(src), '-o', str(obj)], check=True)
+            subprocess.run([args.cc, *flags, '-c', str(src), '-o', str(obj)], check=True)
             objects.append(obj)
         elf = work / 'runtime.elf'
         subprocess.run([args.prefix + 'ld', '-T', str(SOURCES / 'runtime.ld'),
@@ -62,21 +68,30 @@ def main():
         rank_hud = section_bytes('.runtime_rank_hud')
         markers = section_bytes('.runtime_markers')
         grave_filters = section_bytes('.runtime_grave_filters')
+        expansion = section_bytes('.runtime_expansion') if args.expanded else b''
+        expansion_aux = section_bytes('.runtime_expansion_aux') if args.expanded else b''
 
     pieces = ['"""Gerado por tools/compile_ps1_runtime.py a partir de tools/ps1."""\n',
               f'RUNTIME_SHA256 = {hashlib.sha256(content).hexdigest()!r}',
               f'RUNTIME_BASE = 0x{symbols["__runtime_start"]:08X}',
               f'RUNTIME_END = 0x{symbols["__runtime_end"]:08X}', 'ENTRY_POINTS = {']
-    for name in ENTRIES:
+    names = (*ENTRIES, *(('ExpandedTransfer', 'ExpandedModel', 'ExpandedEffect', 'ExpandedSeen',
+                         'MapNewCard', 'OriginalEffect', 'AttackTrapId', 'SpellTrapId', 'FakeTrapId',
+                         'EquipBonusId', 'EquipAnimationId', 'EquipSwordId', 'EquipSecondAnimationId') if args.expanded else ()))
+    for name in names:
         pieces.append(f'    {name!r}: 0x{symbols[name]:08X},')
     pieces.extend(('}', 'RUNTIME = bytes.fromhex("""'))
     pieces.extend(content[i:i+32].hex(' ') for i in range(0, len(content), 32))
-    for label, binary, symbol in (('RUNTIME_EXT', extension, '__runtime_ext'),
+    sections = [('RUNTIME_EXT', extension, '__runtime_ext'),
                                   ('RUNTIME_PASSWORD', password, '__password'),
                                   ('RUNTIME_MOD', mod, '__runtime_mod'),
                                   ('RUNTIME_RANK_HUD', rank_hud, '__rank_hud'),
                                   ('RUNTIME_MARKERS', markers, '__markers'),
-                                  ('RUNTIME_GRAVE_FILTERS', grave_filters, '__grave_filters')):
+                                  ('RUNTIME_GRAVE_FILTERS', grave_filters, '__grave_filters')]
+    if args.expanded:
+        sections.extend((('RUNTIME_EXPANSION', expansion, '__expansion'),
+                         ('RUNTIME_EXPANSION_AUX', expansion_aux, '__expansion_aux')))
+    for label, binary, symbol in sections:
         pieces.extend(('""")', '',
                        f'{label}_SHA256 = {hashlib.sha256(binary).hexdigest()!r}',
                        f'{label}_BASE = 0x{symbols[symbol + "_start"]:08X}',
@@ -84,7 +99,8 @@ def main():
                        f'{label} = bytes.fromhex("""'))
         pieces.extend(binary[i:i+32].hex(' ') for i in range(0, len(binary), 32))
     pieces.append('""")\n')
-    OUTPUT.write_text('\n'.join(pieces), encoding='utf-8', newline='\n')
+    output = OUTPUT.with_name('ps1_expanded_runtime_blob.py') if args.expanded else OUTPUT
+    output.write_text('\n'.join(pieces), encoding='utf-8', newline='\n')
     print(f'{len(content)} bytes de código, reserva até 0x{symbols["__runtime_end"]:08X}')
 
 

@@ -1,6 +1,7 @@
 """Diagnóstico de texto realmente presente no BIN, inclusive realocação PS1."""
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -51,6 +52,22 @@ class DescriptionReadbackTests(unittest.TestCase):
     def test_custom_card_above_722_remains_studio_only(self):
         result = inspect_exe_description(sample_exe(), 723, 'Teste', {})
         self.assertEqual(result['status'], 'somente_studio')
+
+    def test_expanded_description_readback_follows_actual_pointer_through_740(self):
+        modified, rows, _, errors = patch_extended(
+            sample_exe(), {723: 'AA', 740: 'A'}, {},
+            start=0x801CD5A0, end=0x801D0000)
+        self.assertFalse(errors)
+        with patch('fmstudio.ps1_expansion.inspect_expansion',
+                   return_value={'status': 'aplicado', 'capacidade': 740}):
+            for row in rows:
+                text = 'AA' if row['id'] == 723 else 'A'
+                result = inspect_exe_description(modified, row['id'], text, {}, native_profile=True)
+                self.assertEqual(result['status'], 'aplicada')
+                self.assertEqual(result['offset_exe'], row['offset_exe'])
+                self.assertEqual(result['texto_no_bin'], text)
+            outside = inspect_exe_description(modified, 741, 'A', {}, native_profile=True)
+            self.assertEqual(outside['status'], 'somente_studio')
 
     def test_comparison_reads_selected_bin_without_writing_to_it(self):
         with tempfile.TemporaryDirectory() as tmp:

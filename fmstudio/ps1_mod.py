@@ -112,7 +112,9 @@ def quantize_weights(weights, last_id):
 
 
 def fusion_uses_original_ids(cards, *ids):
-    return all(1 <= cid <= CARD_COUNT and cid in cards and not cards[cid].get('virtual') for cid in ids)
+    from .ps1_expansion import PS1_CARD_CAPACITY
+    return all(1 <= cid <= PS1_CARD_CAPACITY and cid in cards
+               and (cid > CARD_COUNT or not cards[cid].get('virtual')) for cid in ids)
 
 
 def compile_mod(project, *, profile, wa_verified):
@@ -172,8 +174,8 @@ def compile_mod(project, *, profile, wa_verified):
                         raise ModError('requer o executável Drop x15.')
                     if len(fixed) != DECK_SIZE:
                         raise ModError(f'complete as {DECK_SIZE} vagas ({len(fixed)}/{DECK_SIZE}).')
-                    if any(cid > CARD_COUNT or cards[cid].get('virtual') for cid in fixed):
-                        raise ModError('o BIN/CUE aceita os IDs originais #001–#722.')
+                    if not fusion_uses_original_ids(cards, *fixed):
+                        raise ModError('o BIN/CUE aceita #001–#740; IDs extras exigem a expansão nativa.')
                     validate_deck(cards, effects, fixed, copies)
                 except ModError as exc:
                     plan.pending.append(f'{name}: {exc}')
@@ -241,12 +243,19 @@ def compile_mod(project, *, profile, wa_verified):
         if profile and fusion_uses_original_ids(cards, a, b, result):
             plan.fusions[a, b] = result
         else:
-            plan.pending.append(f'{label}: o BIN/CUE exige o perfil Drop x15 e IDs originais #001–#722.')
+            plan.pending.append(f'{label}: o BIN/CUE exige o perfil Drop x15 e IDs #001–#740.')
     if plan.fusions:
         plan.applied.append(f'Fusões personalizadas ({len(plan.fusions)})')
     for kind in ('rituais', 'equipamentos'):
-        if recipes.get(kind):
-            plan.pending.append(f'Relações de cartas ({kind}): compatíveis com as partidas do Studio.')
+        for key, value in recipes.get(kind, {}).items():
+            cid = int(key)
+            ids = (*value['tributos'], value['resultado']) if kind == 'rituais' else value
+            expands = cid > CARD_COUNT or kind == 'equipamentos' and any(i > CARD_COUNT for i in ids)
+            if (profile and wa_verified and expands and fusion_uses_original_ids(cards, cid, *ids)
+                    and (kind != 'rituais' or len(value['tributos']) == 3)):
+                plan.applied.append(f'Relação nativa experimental ({kind}) da carta #{cid}')
+            else:
+                plan.pending.append(f'Relações de cartas ({kind}, #{cid}): compatíveis com as partidas do Studio.')
     return plan
 
 
@@ -272,7 +281,12 @@ def inspect_chest_catalog(exe):
         status = 'divergente'
     else:
         status = {retail: 'ausente', visible: 'aplicado'}.get(bytes(observed), 'divergente')
-    return {'status': status, 'cartas': CARD_COUNT if status == 'aplicado' else 0}
+    from .ps1_expansion import inspect_expansion
+    expansion = inspect_expansion(exe) if status == 'aplicado' else {'capacidade': 0, 'status': 'ausente'}
+    if expansion['status'] == 'divergente':
+        status = 'divergente'
+    capacity = expansion['capacidade'] if status == 'aplicado' else 0
+    return {'status': status, 'cartas': capacity}
 
 
 def patch_chest_catalog(exe):

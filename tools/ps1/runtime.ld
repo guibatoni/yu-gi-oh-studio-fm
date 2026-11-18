@@ -59,5 +59,19 @@ SECTIONS {
         __rank_hud_end = .;
     }
     ASSERT(__rank_hud_end <= 0x801CF500, "PS1 rank HUD conflicts with decks and name colors")
+    .runtime_expansion 0x801D53C8 : {
+        __expansion_start = .;
+        KEEP(*(.runtime.expansion))
+        . = ALIGN(4);
+        __expansion_end = .;
+    }
+    ASSERT(__expansion_end <= 0x801D5608, "PS1 card extension conflicts with password scratch")
+    .runtime_expansion_aux 0x801BFB50 : {
+        __expansion_aux_start = .;
+        KEEP(*(.runtime.expansion_aux))
+        . = ALIGN(4);
+        __expansion_aux_end = .;
+    }
+    ASSERT(__expansion_aux_end <= 0x801BFD18, "PS1 card extension conflicts with card levels")
     /DISCARD/ : { *(.MIPS.abiflags .reginfo .pdr .comment .note.* .gnu.attributes .mdebug.*) }
 }
