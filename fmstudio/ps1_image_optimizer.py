@@ -354,6 +354,11 @@ def render_resource(png: Path, original_clut: tuple[int, ...],
 def render_card(png: Path, art_record: bytes, thumb_record: bytes, options=None, *,
                 private_clut: bool = False) -> RenderedCard:
     """Mesmos pixels/CLUT para prévia e exportação, sem alterar regiões adjacentes."""
+    # Projetos antigos sem configuração continuam pixel-identical no modo
+    # legível original. Novos imports registram automatico por padrão.
+    if options is None:
+        options = {"enabled": False, "mode": "compatibilidade",
+                   "palette": "compatibilidade", "dither": "nenhum"}
     art_clut = clut_words(art_record, 0x2640, 256)
     thumb_clut = clut_words(thumb_record, 0x500, 64)
     return RenderedCard(
