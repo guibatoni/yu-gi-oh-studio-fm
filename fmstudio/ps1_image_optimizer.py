@@ -188,7 +188,7 @@ def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions):
                 r, g, b, a = img.split()
                 img = Image.merge("RGBA", (r.point(curve), g.point(curve),
                                            b.point(curve), a))
-        if img.width > size[0] * 2:
+        if options.mode in ("automatico", "personalizado") and img.width > size[0] * 2:
             img = img.filter(ImageFilter.UnsharpMask(radius=.6, percent=55, threshold=3))
     method = options.resample
     if method == "automatico":
