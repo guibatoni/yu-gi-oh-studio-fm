@@ -2960,6 +2960,13 @@ class Studio(tk.Tk):
                if supreme.get('status') == 'aplicado' else '')
             + (f'Baú com {manifest["catalogo_bau_ps1"]["cartas"]} cartas, inclusive as sem cópias.\n'
                if manifest.get('catalogo_bau_ps1', {}).get('status') == 'aplicado' else '')
+            + ('Baú PS1 no comportamento original (apenas cartas obtidas).\n'
+               if manifest.get('catalogo_bau_ps1', {}).get('status') == 'ausente'
+               and not manifest.get('catalogo_bau_completo_ativado', True) else '')
+            + (f'Preços de Password alterados: {len(manifest.get("precos_password_ps1", []))} carta(s).\n'
+               if manifest.get('precos_password_ps1') else '')
+            + (f'Estrelas por vitória: {manifest["estrelas_por_vitoria_ps1"]["estrelas"]} (valor fixo).\n'
+               if manifest.get('estrelas_por_vitoria_ps1', {}).get('status') == 'fixo' else '')
             + (f'Cartas novas gravadas: {len(manifest["expansao_cartas_ps1"]["ids_adicionais"])}. Expansão experimental até #740.\n'
                if manifest.get('expansao_cartas_ps1', {}).get('status') == 'aplicado' else '')
             + (f'Fusões personalizadas gravadas: {len(runtime["fusoes"])}.\n'
