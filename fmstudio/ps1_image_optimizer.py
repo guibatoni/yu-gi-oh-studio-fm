@@ -153,7 +153,26 @@ def _scaled_rgba(path: Path, size: tuple[int, int], options: ImageOptions):
         raise ModError(f"PNG {path.name}: {exc}") from exc
     legacy = not options.enabled or options.mode == "compatibilidade"
     if not legacy:
-        # Somente ajuste adaptativo discreto; controles explícitos no Personalizado.
+        # Ajustes adaptativos brandos apenas no Automático: não reinterpretar
+        # a iluminação dramática de uma imagem em Máxima fidelidade.
+        if options.mode == "automatico":
+            sample = img.copy()
+            sample.thumbnail((64, 64))
+            rgb = sample.getdata()
+            values = [(r, g, b) for r, g, b, a in rgb if a >= 128]
+            if values:
+                luma = [(.2126*r+.7152*g+.0722*b) for r,g,b in values]
+                avg = sum(luma) / len(luma)
+                spread = (sum((v-avg)**2 for v in luma) / len(luma)) ** .5
+                if avg < 57 and spread < 50:
+                    img = Enhance.Brightness(img).enhance(1.055)
+                elif avg > 215 and spread < 45:
+                    img = Enhance.Brightness(img).enhance(.965)
+                if spread < 30 and 65 < avg < 195:
+                    img = Enhance.Contrast(img).enhance(1.035)
+                chroma = sum(max(c)-min(c) for c in values) / len(values)
+                if chroma < 28 and spread > 25:
+                    img = Enhance.Color(img).enhance(1.025)
         if options.mode == "personalizado":
             if options.denoise:
                 img = img.filter(ImageFilter.MedianFilter(3))
@@ -344,6 +363,8 @@ def render_resource(png: Path, original_clut: tuple[int, ...],
     strength = opts.intensity if method != "nenhum" else 0
     mapped, rmse = _index_rgba(raw, size, clut, method, strength,
                                legacy=not opts.enabled or opts.mode == "compatibilidade")
+    if rmse > 65:
+        warnings += ("Aviso: paleta original distante das cores do PNG (perda alta de fidelidade).",)
     decoded = rgba_from_indices(mapped, clut)
     used = len(set(mapped))
     return RenderedResource(
