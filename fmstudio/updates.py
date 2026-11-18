@@ -42,6 +42,7 @@ SOURCE_FILES = frozenset({
     'assets/icons/atlas_16x16.png', 'assets/icons/ataque_primeiro_turno.png',
     'fmstudio/disc_append.py', 'fmstudio/ps1_expansion.py', 'fmstudio/ps1_expansion_profile.py',
     'fmstudio/ps1_expanded_runtime_blob.py',
+    'fmstudio/ps1_supreme.py', 'fmstudio/ps1_supreme_blob.py',
     'assets/icons/vinculo_vida.png', 'assets/icons/restaurar_lp.png',
     'fmstudio/disc_build.py', 'fmstudio/ps1_description_verify.py', 'fmstudio/ps1_content.py', 'fmstudio/ps1_compat.py', 'fmstudio/ps1_god_icon.py', 'fmstudio/ps1_god24_hook.py', 'fmstudio/ps1_god24_chest.py', 'fmstudio/ps1_god24_row_patch.py', 'fmstudio/ps1_god24_duel.py', 'fmstudio/ps1_god24_hand.py', 'tools/gerar_bin_teste.py', 'fmstudio/lab_gui.py', 'fmstudio/drafts.py',
     'fmstudio/disc.py', 'fmstudio/disc_verify.py', 'fmstudio/ps1_equip.py', 'fmstudio/ps1_equip_bitmap.py', 'fmstudio/ps1_native.py', 'fmstudio/ps1_effects_lab.py', 'fmstudio/tables.py', 'fmstudio/deep_extract.py',
@@ -61,6 +62,7 @@ SOURCE_FILES = frozenset({
 SOURCE_REQUIRED = frozenset({
     'fmstudio/disc_append.py', 'fmstudio/ps1_expansion.py', 'fmstudio/ps1_expansion_profile.py',
     'fmstudio/ps1_expanded_runtime_blob.py',
+    'fmstudio/ps1_supreme.py', 'fmstudio/ps1_supreme_blob.py',
     'fmstudio/ps1_god24_play.py', 'fmstudio/ps1_god24_display.py',
     'fmstudio/ps1_runtime.py', 'fmstudio/ps1_runtime_blob.py', 'fmstudio/ps1_text.py',
     'fmstudio/duel_match.py', 'fmstudio/duel_ai.py', 'fmstudio/duel_gui.py', 'fmstudio/duel_rank.py', 'fmstudio/guardian.py',

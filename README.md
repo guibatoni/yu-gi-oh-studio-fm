@@ -1,3 +1,16 @@
+# Studio FM v1.9.1 — Supreme no PS1
+
+O botão **Gerar jogo BIN/CUE** aceita Supreme nos dois campos de Guardian Star
+de cartas originais e das novas **#723–#740**. No **Original Drop x15** reconhecido
+pelo Studio, o BIN recebe nome, ícone e bônus de **+700** em ATK/DEF no confronto
+com as dez estrelas originais. Supreme contra Supreme tem bônus zero. O
+projeto mantém a seleção existente e **Verificar BIN/CUE** confirma a gravação.
+
+A extensão PS1 é experimental. A geração da imagem e as rotinas MIPS foram
+conferidas, com validação de partida completa no ePSXe pendente.
+
+---
+
 # Studio FM v1.9.0 — Expansão PS1 experimental até #740
 
 O **Original Drop x15** pode receber **18 cartas adicionais reais**, com IDs
@@ -11,8 +24,8 @@ no PS1**. Salve e gere um novo **BIN/CUE** da imagem original. A seção
 Use **Verificar BIN/CUE** para conferir os IDs e os atributos aplicados.
 
 A expansão foi testada por releitura da imagem e execução de rotinas MIPS;
-a partida completa no ePSXe ainda precisa ser validada. #741+ e Supreme seguem
-no Studio. Pools ponderados/drops e o álbum Library do PS1 conservam 722 entradas.
+a partida completa no ePSXe ainda precisa ser validada. #741+ segue no Studio.
+Pools ponderados/drops e o álbum Library do PS1 conservam 722 entradas.
 
 Detalhes e limites: [Expansão PS1 #723–#740](docs/EXPANSAO_PS1_740.md).
 As seções seguintes registram recursos e limitações das versões anteriores.

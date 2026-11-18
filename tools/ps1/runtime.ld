@@ -73,5 +73,12 @@ SECTIONS {
         __expansion_aux_end = .;
     }
     ASSERT(__expansion_aux_end <= 0x801BFD18, "PS1 card extension conflicts with card levels")
+    .runtime_supreme 0x801D9800 : {
+        __supreme_start = .;
+        KEEP(*(.runtime.supreme))
+        . = ALIGN(4);
+        __supreme_end = .;
+    }
+    ASSERT(__supreme_end <= 0x801D9B00, "PS1 Supreme code conflicts with the new name")
     /DISCARD/ : { *(.MIPS.abiflags .reginfo .pdr .comment .note.* .gnu.attributes .mdebug.*) }
 }

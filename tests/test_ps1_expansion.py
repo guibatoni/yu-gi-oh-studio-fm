@@ -10,7 +10,8 @@ from fmstudio.ps1_expansion import (
     PS1_CARD_CAPACITY, SAVE_DUELIST, SAVE_QUANTITIES, MODEL_KEY, EXPANDED_LEVELS,
     EXPANDED_SORT, compile_expansion, model_candidates, pack_stats, relocate_tables, _title_bitmap,
 )
-from fmstudio.tables import CARD_COUNT, EXE_DELTA, LEVEL_ADDR, STATS_ADDR
+from fmstudio.tables import (CARD_COUNT, EXE_DELTA, GUARDIAN_FIELDS, LEVEL_ADDR,
+                             PS1_SUPREME, STATS_ADDR, SUPREME, decode_cards)
 
 
 class ExpandedCardsTests(unittest.TestCase):
@@ -95,6 +96,24 @@ class ExpandedCardsTests(unittest.TestCase):
         self.project.set_card(cid, {MODEL_KEY: 48})
         self.project.set_card(cid, {'nome': 'Monstro editado', 'ataque': 2400})
         self.assertEqual(Project.open(self.project.folder).get(cid)[MODEL_KEY], 48)
+
+    def test_supreme_in_either_slot_keeps_the_project_value_and_fits_the_bin(self):
+        choices = {723: (SUPREME, 9), 740: (8, SUPREME)}
+        original = self.fixture.file.read_bytes()
+        for cid, stars in choices.items():
+            self.project.add_card(24, card_id=cid)
+            self.project.set_card(cid, dict(zip(GUARDIAN_FIELDS, stars)))
+        plan = compile_expansion(self.project, profile=True)
+        exe = relocate_tables(original, original, self.project, plan)
+        reopened = Project.open(self.project.folder)
+        raw_cards, _ = decode_cards(exe, capacity=PS1_CARD_CAPACITY, level_address=EXPANDED_LEVELS)
+        cards, _ = decode_cards(exe, capacity=PS1_CARD_CAPACITY, level_address=EXPANDED_LEVELS,
+                                supreme=True)
+        for cid, stars in choices.items():
+            self.assertEqual(tuple(reopened.get(cid)[k] for k in GUARDIAN_FIELDS), stars)
+            self.assertEqual(tuple(cards[cid - 1][k] for k in GUARDIAN_FIELDS), stars)
+            self.assertEqual(tuple(raw_cards[cid - 1][k] for k in GUARDIAN_FIELDS),
+                             tuple(PS1_SUPREME if star == SUPREME else star for star in stars))
 
     def test_native_titles_have_4bpp_size_and_real_ink(self):
         title = _title_bitmap('Dragão personalizado')

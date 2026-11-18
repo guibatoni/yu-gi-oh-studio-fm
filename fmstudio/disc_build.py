@@ -181,7 +181,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patch_executable, patch_wa, wa_sha,
     )
     from .passwords import validate_ps1_prefix, choose_ps1_prefix, PS1_ID_PREFIX
-    from .ps1_expansion import compile_expansion, expand_archive, patch_expansion, inspect_expansion
+    from .ps1_expansion import (PS1_CARD_CAPACITY, compile_expansion, expand_archive,
+                                patch_expansion, inspect_expansion)
+    from .ps1_supreme import patch_supreme, supreme_cards, validate_slot
     texts={int(cid):project.get(int(cid)).get('descricao','')
            for cid,rows in getattr(project,'edits',{}).items()
            if 'descricao' in rows and 1<=int(cid)<=722}
@@ -206,6 +208,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             native_profile=source_digest==SOURCE_SHA256
             god24_enabled=native_profile and bool(god_cards)
             expansion = compile_expansion(project, profile=native_profile)
+            capacity = PS1_CARD_CAPACITY if expansion.enabled else CARD_COUNT
+            supreme_ids = supreme_cards(project, capacity) if native_profile else []
+            if supreme_ids:
+                validate_slot(project, capacity)
             wa_entry=entries.get('DATA/WA_MRG.MRG')
             requested_art={int(k):v for k,v in getattr(project,'arts',{}).items() if int(k)<=722}
             metadata=getattr(project,'metadata',{})
@@ -227,7 +233,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             native_traps=metadata.get('ps1_trap_thresholds',{})
             native_terrain=metadata.get('ps1_terrain_boosts',{})
             needs_wa=(expansion.enabled or requested_art or native_equips or replacements or native_rituals or mod_plan.needs_wa
-                      or god_icon_card or god24_enabled or native_plan.password_prefix is not None
+                      or god_icon_card or god24_enabled or supreme_ids or native_plan.password_prefix is not None
                       or (native_profile and any('{icon:' in desc for desc in texts.values())))
             original_wa=b''.join(reader.read_entry(wa_entry)) if needs_wa and wa_entry else None
             if expansion.enabled:
@@ -476,6 +482,15 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             raise ModError('As tabelas de duelistas exigem o WA_MRG vinculado ao projeto.')
         patched_wa=patch_wa(patched_wa if patched_wa is not None else original_wa,mod_plan)
 
+    if supreme_ids:
+        if original_wa is None:
+            raise ModError('Supreme exige DATA/WA_MRG.MRG do BIN de origem para gravar o ícone.')
+        linked_wa = wa_sha(project)
+        if linked_wa and hashlib.sha256(original_wa).hexdigest() != linked_wa:
+            raise ModError('Supreme: o WA_MRG da imagem escolhida diverge do projeto vinculado.')
+        patched_exe, patched_wa = patch_supreme(
+            original_exe, patched_exe, patched_wa if patched_wa is not None else original_wa)
+
     expansion_report = expansion.report()
     if expansion.enabled:
         if not expected_wa:
@@ -644,6 +659,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         if hasattr(project,'edits') and hasattr(project,'cards') and hasattr(project,'get'):
             from .disc_verify import verify_image_stats
             checked=verify_image_stats(project,stage_bin)
+            if supreme_ids and (checked['supreme_ps1']['status'] != 'aplicado'
+                                or checked['supreme_ps1']['ids'] != supreme_ids):
+                raise ModError('Supreme: Guardian Stars, código ou textura divergentes no BIN final. '
+                               'A cópia anterior foi preservada.')
             if checked['divergentes'] or not checked['god24_tipos_conferem']:
                 raise ModError('BIN de teste diverge dos atributos do projeto. '
                                'A cópia anterior foi preservada.')
@@ -669,6 +688,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                                'do BIN final. Cópia anterior preservada.')
             checked['imagem']=str(bin_file)
             result['verificacao_atributos']=checked
+            result['supreme_ps1'] = checked['supreme_ps1']
         stage_meta.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
 
         # CUE e manifesto são pequenos: preservamos cópias deles para rollback.

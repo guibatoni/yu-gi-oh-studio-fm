@@ -6,7 +6,7 @@ from pathlib import Path
 from .core import ModError, ps1_god24_card_ids, ps1_supports_god24
 from .disc import DiscReader, DiscError
 from .expanded import GOD_TYPE_ID
-from .tables import decode_cards, CARD_COUNT
+from .tables import decode_cards, CARD_COUNT, GUARDIAN_FIELDS, LEVEL_ADDR, SUPREME
 
 FIELDS = ('ataque', 'defesa', 'tipo_id', 'atributo_id', 'nivel',
           'guardian_1_id', 'guardian_2_id')
@@ -54,7 +54,9 @@ def verify_image_stats(project, source):
     from .ps1_runtime import compile_effects, verify_effects
     from .ps1_mod import compile_mod, inspect_chest_catalog, verify_executable, verify_wa, wa_sha
     from .ps1_rank_hud import inspect_rank_hud
-    from .ps1_expansion import inspect_expansion, EXPANDED_LEVELS, retail_archive_view
+    from .ps1_expansion import (inspect_expansion, EXPANDED_LEVELS, PS1_CARD_CAPACITY,
+                                retail_archive_view)
+    from .ps1_supreme import inspect_supreme, supreme_cards
     config=getattr(project,'metadata',{}) or {}
     profile=ps1_supports_god24(project)
     mod_plan=compile_mod(project,profile=profile,
@@ -68,16 +70,22 @@ def verify_image_stats(project, source):
             exe = b''.join(image.read_entry(entries['SLUS_014.11']))
             expansion = inspect_expansion(exe)
             expanded = expansion['status'] == 'aplicado'
-            cards, _ = decode_cards(exe, capacity=740 if expanded else CARD_COUNT,
-                                    level_address=EXPANDED_LEVELS if expanded else 0x801D5332)
+            capacity = PS1_CARD_CAPACITY if expanded else CARD_COUNT
             god_display = inspect_god_display(exe)
-            if god_display['status'] == 'aguardando_textura' or mod_plan.needs_wa or expanded:
+            supreme = inspect_supreme(exe)
+            if ('aguardando_textura' in (god_display['status'], supreme['status'])
+                    or mod_plan.needs_wa or expanded):
                 entry = entries.get('DATA/WA_MRG.MRG')
                 wa = b''.join(image.read_entry(entry)) if entry else b''
                 if expanded:
                     wa = retail_archive_view(wa)
             if god_display['status'] == 'aguardando_textura':
                 god_display = inspect_god_display(exe, wa)
+            if supreme['status'] == 'aguardando_textura':
+                supreme = inspect_supreme(exe, wa)
+            cards, _ = decode_cards(exe, capacity=capacity,
+                                    level_address=EXPANDED_LEVELS if expanded else LEVEL_ADDR,
+                                    supreme=supreme['status'] == 'aplicado')
             image_path = str(image.path.resolve())
     except DiscError as exc:
         raise ModError(f'Imagem de disco inválida: {exc}') from exc
@@ -85,10 +93,12 @@ def verify_image_stats(project, source):
     requests = dict(getattr(project, 'edits', {}))
     if expanded:
         requests.update({str(cid): dict.fromkeys(FIELDS) for cid in expansion['ids_adicionais']})
+    supreme['ids'] = [card['id'] for card in cards if any(card[key] == SUPREME for key in GUARDIAN_FIELDS)]
+    supreme['ids_esperados'] = supreme_cards(project, PS1_CARD_CAPACITY if profile else CARD_COUNT)
     for key, edits in sorted(requests.items(),
                              key=lambda pair:int(pair[0])):
         cid = int(key)
-        if cid < 1 or cid > (740 if expanded else CARD_COUNT):
+        if cid < 1 or cid > capacity:
             continue
         requested = project.get(cid)
         if requested.get('virtual') and cid <= CARD_COUNT:
@@ -132,7 +142,7 @@ def verify_image_stats(project, source):
             original = original_exe.read_bytes()
     runtime = verify_effects(exe, plan, original=original)
     opening_lock, life=verify_executable(exe,mod_plan)
-    tested=cards[expected_gods[0]-1] if expected_gods else None
+    tested=cards[verified_gods[0]-1] if verified_gods else None
     chest=inspect_god24_chest_mips(exe)
     from .ps1_god24_chest import audit_god24_build_deck_rows
     row_renderer=audit_god24_build_deck_rows(exe)
@@ -152,6 +162,7 @@ def verify_image_stats(project, source):
             'god24_exibicao_tipo':god_display,
             'efeitos_nativos_ps1':runtime,
             'rank_hud_ps1':inspect_rank_hud(exe),
+            'supreme_ps1':supreme,
             'expansao_cartas_ps1':expansion,
             'catalogo_bau_ps1':inspect_chest_catalog(exe) if profile else {'status':'perfil_incompativel','cartas':0},
             'edicao_do_mod_ps1':{'bloqueio_turno_inicial':opening_lock if profile else None,
@@ -175,6 +186,11 @@ def describe(result):
     text = [f'Imagem selecionada: {result["imagem"]}', '',
             f'Cartas numéricas conferidas: {result["total"]}',
             f'Corretas: {result["corretas"]} | Divergentes: {result["divergentes"]}']
+    supreme = result.get('supreme_ps1', {})
+    if supreme.get('status') == 'aplicado' and supreme['ids'] == supreme['ids_esperados']:
+        text.append(f'Supreme com bônus de +700 confirmado no BIN em {len(supreme["ids"])} carta(s).')
+    elif supreme.get('ids_esperados') or supreme.get('status') in ('divergente', 'textura_divergente'):
+        text.append('Supreme ausente ou divergente na imagem selecionada. Gere um novo BIN/CUE.')
     runtime=result.get('efeitos_nativos_ps1',{})
     chest = result.get('catalogo_bau_ps1', {})
     if chest.get('status') == 'aplicado':
