@@ -2929,6 +2929,8 @@ class Studio(tk.Tk):
         previews = manifest.get('descricoes_resumidas_ps1', [])
         no_text = manifest.get('cartas_novas_sem_descricao_ps1', [])
         originals_kept = len(manifest['descricoes_nao_gravadas']) - len(no_text)
+        art_ids = {row['id'] for row in manifest['artes_aplicadas']}
+        art_ids.update(manifest.get('expansao_cartas_ps1', {}).get('artes_proprias', []))
         messagebox.showinfo(f'Imagem de teste {action}',
             f'Imagem de teste {action} com sucesso.\n\n'
             f'BIN: {manifest["bin"]}\nCUE: {manifest["cue"]}\n'
@@ -2936,7 +2938,8 @@ class Studio(tk.Tk):
             f'{manifest.get("verificacao_atributos",{}).get("corretas","não disponível")}\n'
             f'Setores modificados: {manifest["setores_modificados"]}\n\n'
             'No ePSXe, selecione File > Run ISO e a cópia .BIN gerada.\n'
-            f'Nomes: {len(manifest["nomes_aplicados"])}; descrições: {len(manifest["descricoes_aplicadas"])}; artes: {len(manifest["artes_aplicadas"])}.\n'
+            f'Nomes gravados em {len(manifest["nomes_aplicados"])} carta(s). '
+            f'Descrições em {len(manifest["descricoes_aplicadas"])}. Artes em {len(art_ids)}.\n'
             f'Descrições confirmadas por bytes e ponteiros do BIN: {len(manifest.get("descricoes_confirmadas_no_bin", []))}.\n'
             + (f'Quebras de linha reorganizadas em {reflowed} descrição(ões) completas.\n' if reflowed else '')
             + (f'Prévias de descrição em {len(previews)} carta(s) nova(s).\n' if previews else '')

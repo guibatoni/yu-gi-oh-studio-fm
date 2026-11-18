@@ -1,7 +1,6 @@
 """Regressão da conversão PS1 real: index, RGB555, CLUT, miniatura e fallback."""
 from __future__ import annotations
 
-import os
 import struct
 import sys
 import tempfile
@@ -11,12 +10,13 @@ from unittest.mock import patch
 
 from fmstudio.core import ModError
 from fmstudio.png_pixels import read_png
-from fmstudio.ps1_content import patch_card_art, render_card_art
+from fmstudio.ps1_content import patch_card_art
 from fmstudio.ps1_image_optimizer import (
-    ART_SIZE, THUMB_SIZE, ImageOptions, clut_words, pack_rgb555, png_rgba,
+    ART_SIZE, THUMB_SIZE, ART_CLUT_OFFSET, THUMB_CLUT_OFFSET,
+    EMBEDDED_THUMB_OFFSET, THUMB_BLOCK_SIZE, clut_words, pack_rgb555, png_rgba,
     render_card, render_resource, rgba_from_indices, rgb555,
 )
-from fmstudio.deep_extract import _indexed_png_bytes, _colors
+from fmstudio.deep_extract import _indexed_png_bytes
 
 
 def png(path, size, pixels):
@@ -97,6 +97,51 @@ class PS1ImagePipelineTests(unittest.TestCase):
         self.assertEqual(changed[1280:art_off],before[1280:art_off])
         self.assertTrue(any('bloqueada' in w for w in regions[0]['otimizacao']['avisos']))
 
+    def test_verified_art_uses_its_own_colors_without_pillow_or_new_project_settings(self):
+        art, thumb = bytearray(self.art), bytearray(self.thumb)
+        # Reproduce a card model whose palettes only contain blue.
+        for record, offset, count in ((art, ART_CLUT_OFFSET, 256),
+                                      (thumb, THUMB_CLUT_OFFSET, 64)):
+            struct.pack_into(f'<{count}H', record, offset, 0x8000, 31 << 10, *([0] * (count - 2)))
+        art[EMBEDDED_THUMB_OFFSET:EMBEDDED_THUMB_OFFSET + THUMB_BLOCK_SIZE] = thumb[:THUMB_BLOCK_SIZE]
+        base = 722 * 2048
+        before = bytes(thumb) + bytes(base - len(thumb)) + bytes(art)
+        path = png(self.folder/'portrait.png', (24, 32),
+                   b''.join(bytes((170 + x * 3, y * 7, y % 8 * 4, 255))
+                            for y in range(32) for x in range(24)))
+        with patch.dict(sys.modules, {'PIL': None}):
+            updated, regions = patch_card_art(before, 1, path, verified_layout=True)
+            preview = render_card(path, art, thumb, verified_layout=True)
+        self.assertEqual([r['regiao'] for r in regions],
+                         ['arte', 'miniatura', 'miniatura_embutida'])
+        for part in (preview.art, preview.thumbnail):
+            self.assertEqual(part.report['paleta'], 'privada_adaptativa')
+            self.assertEqual(part.clut[0], 0)
+            self.assertGreater(len(set(part.indices)), 35)
+            self.assertLess(part.report['rmse_rgb'], 14)
+        self.assertEqual(updated[base:base + 0x2840], preview.art.ps1_bytes())
+        self.assertEqual(updated[base + 0x2840:base + EMBEDDED_THUMB_OFFSET],
+                         before[base + 0x2840:base + EMBEDDED_THUMB_OFFSET])
+        self.assertEqual(updated[:THUMB_BLOCK_SIZE],
+                         updated[base + EMBEDDED_THUMB_OFFSET:
+                                 base + EMBEDDED_THUMB_OFFSET + THUMB_BLOCK_SIZE])
+        self.assertEqual(updated[:THUMB_BLOCK_SIZE], preview.thumbnail.ps1_bytes())
+        self.assertEqual(updated[THUMB_BLOCK_SIZE:base], before[THUMB_BLOCK_SIZE:base])
+        self.assertEqual(updated[base + EMBEDDED_THUMB_OFFSET + THUMB_BLOCK_SIZE:],
+                         before[base + EMBEDDED_THUMB_OFFSET + THUMB_BLOCK_SIZE:])
+
+    def test_unverified_copy_or_explicit_compatibility_keeps_the_original_palette(self):
+        altered = render_card(self.png, self.art, self.thumb, verified_layout=True)
+        self.assertFalse(altered.mirror_thumbnail)
+        self.assertEqual(altered.art.report['paleta'], 'original_preservada')
+        art = bytearray(self.art)
+        art[EMBEDDED_THUMB_OFFSET:EMBEDDED_THUMB_OFFSET + THUMB_BLOCK_SIZE] = self.thumb[:THUMB_BLOCK_SIZE]
+        locked = render_card(self.png, art, self.thumb, {'mode': 'compatibilidade'},
+                             verified_layout=True)
+        self.assertTrue(locked.mirror_thumbnail)
+        self.assertEqual(locked.art.clut, clut_words(self.art, ART_CLUT_OFFSET, 256))
+        self.assertEqual(locked.thumbnail.clut, clut_words(self.thumb, THUMB_CLUT_OFFSET, 64))
+
     def test_red_green_blue_gold_are_mapped_to_local_palette(self):
         result=render_card(self.png,self.art,self.thumb,
                            {'mode':'automatico','dither':'nenhum'})
@@ -137,6 +182,14 @@ class PS1ImagePipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ModError,'índice zero'):
             render_card(p, bytes(altered), self.thumb, {'mode':'automatico'})
 
+    def test_portrait_padding_respects_opaque_palette_without_altering_it(self):
+        path = png(self.folder/'portrait-opaque.png', (10, 20), b'\xff\0\0\xff' * 200)
+        palette = (0x8000, 31) + (0,) * 254
+        result = render_resource(path, palette, ART_SIZE, {'dither':'nenhum'})
+        self.assertEqual(result.clut, palette)
+        self.assertEqual(result.preview_rgba[:4], bytes((0, 0, 0, 255)))
+        self.assertEqual(result.indices[ART_SIZE[0] // 2], 1)
+
     def test_dithering_algorithms_have_correct_dimensions(self):
         gray=png(self.folder/'gray.png',ART_SIZE,
                  bytes((135,135,135,255))*(102*96))
@@ -157,10 +210,6 @@ class PS1ImagePipelineTests(unittest.TestCase):
             self.assertTrue(any('Pillow ausente' in w for w in result.art.report['avisos']))
 
     def test_private_clut_only_allowed_for_explicitly_isolated_resource(self):
-        try:
-            import PIL
-        except ImportError:
-            self.skipTest("Pillow não disponível")
         original=clut_words(self.art,0x2640,256)
         allowed=render_resource(self.png,original,ART_SIZE,
                                 {'mode':'automatico','palette':'personalizada'},

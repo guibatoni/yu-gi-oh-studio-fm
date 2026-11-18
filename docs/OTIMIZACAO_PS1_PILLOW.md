@@ -1,6 +1,6 @@
 # Conversor PS1 de imagens (Pillow opcional)
 
-## Implementação da primeira etapa segura
+## Conversão de imagens
 
 O conversor central é `fmstudio/ps1_image_optimizer.py`. O Studio
 armazena a imagem de entrada em `assets/cartas/<id>.png`, sem manipular
@@ -9,28 +9,28 @@ de JPG, WEBP, BMP e TIFF exige Pillow e converte o arquivo em um PNG de
 origem separado, preservando a imagem enviada.
 
 O projeto mantém suas configurações de imagem no campo JSON
-`ps1_image_optimizer`. Projetos antigos **sem o campo** mantêm o
-comportamento legado ao gerar BIN/CUE, evitando mudança silenciosa de
-imagens já aprovadas. Ao importar uma arte nova, o perfil Automático
-é registrado como ativo. Desativar explicitamente o otimizador restaura
-o redimensionamento e a busca de cor compatíveis com o conversor anterior.
+`ps1_image_optimizer`. Projetos antigos sem esse campo usam o perfil
+Automático no layout verificado do Original Drop x15. Em outras bases
+continuam no modo legado. Ao importar uma arte nova, o Studio ativa o
+perfil Automático se ainda não houver uma configuração salva. O perfil
+Compatibilidade original restaura a conversão que usa a paleta de origem.
 
 ## Formatos de destino
 
 | Recurso | Resolução | Bytes por pixel | CLUT | Permissão de gravação |
 | --- | ---: | ---: | ---: | --- |
-| Arte original | 102×96 | 1 | 256 entradas de 16 bits | Pixels da arte apenas |
-| Miniatura original | 40×32 | 1 | 64 entradas de 16 bits | Pixels da miniatura apenas |
-| Cartas 723–740 | Como acima | 1 | Herdada do modelo PS1 | Apenas perfil nativo expandido, experimental |
+| Arte original | 102×96 | 1 | 256 entradas de 16 bits | Pixels e paleta local no Drop x15 |
+| Miniatura original | 40×32 | 1 | 64 entradas de 16 bits | Pixels e paleta local nas duas cópias verificadas |
+| Cartas 723–740 | Como acima | 1 | Criada a partir do PNG | Perfil nativo expandido do Drop x15 |
 | Cartas acima de 740 | Indefinido | — | — | Studio apenas |
 | Ícones de descrição | 16×16 | 4 bits indexados | 16 entradas | Somente espaços exclusivos já validados pelo runtime |
 | Retratos/texturas de cena | Dependente do recurso | — | — | Sem rotina de importação/patch nesta versão |
 
-O bit 15 de RGB555 é um indicador especial do PS1 (STP), não é alpha PNG.
-Ele e os valores brutos das CLUTs originais são preservados. Índice 0
-com valor 0000 é interpretado como transparente no decoder de imagens
-existente. PNGs com transparência são bloqueados se o índice zero da
-CLUT real não corresponder a essa convenção.
+Em uma paleta adaptativa, a entrada zero recebe o valor 0000 para
+transparência e as cores opacas usam RGB555 com STP desligado. O Studio
+preserva os valores brutos nas paletas originais. Se a entrada zero da
+paleta escolhida for opaca, as bordas do enquadramento tomam essa cor.
+Uma imagem que usa transparência real precisa de um índice transparente.
 
 ## Filtros e modos
 
@@ -49,16 +49,18 @@ baseada em RMSE RGB, e não é PSNR perceptual nem certificação de PS1.
 
 ## CLUTs
 
-**Compatibilidade** sempre usa o CLUT original. **Seguro** e
-**Automático** preservam a CLUT original nos registros reais do WA.
-**Personalizada** só calcula cores novas se o chamador fornecer um recurso
-com paleta própria e comprovadamente isolada (`private_clut=True`).
-A implementação atual do disco **não passa essa autorização** para cartas,
-incluindo as adicionadas: seus registros mantêm faixas/títulos que podem
-depender da mesma paleta, portanto não é seguro trocar as entradas.
+No Original Drop x15, a arte tem uma paleta local de 256 entradas no
+offset `0x2640` do registro. O título ocupa o intervalo de `0x2840` a
+`0x2AE0` e usa uma paleta própria de 4 bits no renderizador. A miniatura
+de `0x580` bytes inclui pixels e paleta no setor individual e dentro do
+registro de arte a partir de `0x2AE0`. As 722 cópias coincidem no disco
+de referência. [Mapa do formato e rotinas de vídeo](https://github.com/Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled/blob/36d499c13522402a83c5b4772714f66046f80357/notes/research/Unchiga_Symbols/findings.md#L335)
 
-Assim a seleção de “Paleta personalizada” para uma carta registra um aviso
-de bloqueio e mantém a CLUT original; não colore outras regiões do jogo.
+**Automático**, **Seguro** e **Paleta personalizada** calculam as cores
+do PNG quando a assinatura do executável e a cópia da miniatura confirmam
+o layout. O Studio aplica a mesma miniatura nos dois locais. **CLUT
+original** conserva a paleta de origem. Se o layout divergir, o Studio
+também conserva as paletas e mantém a escrita nos locais já suportados.
 
 ## Uso e inspeção
 
@@ -79,18 +81,10 @@ no console ou emulador.
 
 ## Proteções
 
-O Studio guarda backups da imagem anterior na pasta
-`assets/cartas/backups` e do projeto em `backups`. Uma conversão
-inválida não altera o BIN original. Os registros existentes do WA não
-sofrem modificações em CLUT, tiras, faixas ou miniaturas de outras cartas.
-Pillow é opcional para PNG; seu fallback mantém leitura PNG e redução
-por área/linear, porém sem controles fotográficos avançados.
-
-## Pendências de engenharia
-
-Para liberar CLUTs próprias de cartas com segurança, será preciso mapear
-o uso de **cada índice** em faixas, títulos e registros compartilhados e
-testar a leitura da nova CLUT em ePSXe. Ainda faltam importadores
-diretos de retratos, texturas de cena, outros formatos de textura PS1
-e uma prova visual com BIN comercial/mod real. Nenhum deles foi tratado
-como concluído ou “universal” apenas por existir o motor reutilizável.
+O Studio guarda backups da imagem anterior na pasta `assets/cartas/backups`
+e do projeto em `backups`. Uma conversão inválida preserva o BIN original.
+A escrita de uma arte ocupa os registros daquele ID. A numeração, o título
+e as cartas vizinhas podem ser conferidos no arquivo final. Sem Pillow, o
+Studio lê PNG, reduz por área ou interpolação linear e gera a paleta por
+divisão de intervalos de cor RGB555. Os filtros e ajustes fotográficos
+exigem Pillow.
