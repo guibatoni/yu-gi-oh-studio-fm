@@ -142,8 +142,23 @@ class EffectDialog(tk.Toplevel):
         self.minsize(640 if self.batch else 590, 730 if self.batch else 670)
         self.transient(master)
         self.grab_set()
-        form=ttk.Frame(self,padding=14)
-        form.pack(fill='both',expand=True)
+        # Formulário rolável: pesquisa, filtros e efeitos acumulados precisam
+        # caber também em monitores 1366×768 sem esconder OK/Cancelar.
+        wrapper=ttk.Frame(self)
+        wrapper.pack(fill='both',expand=True)
+        viewport=tk.Canvas(wrapper,bg=BG,highlightthickness=0)
+        scrollbar=ttk.Scrollbar(wrapper,orient='vertical',command=viewport.yview)
+        viewport.configure(yscrollcommand=scrollbar.set)
+        viewport.pack(side='left',fill='both',expand=True)
+        scrollbar.pack(side='right',fill='y')
+        form=ttk.Frame(viewport,padding=14)
+        form_window=viewport.create_window((0,0),window=form,anchor='nw')
+        form.bind('<Configure>',lambda event:viewport.configure(scrollregion=viewport.bbox('all')))
+        viewport.bind('<Configure>',lambda event:viewport.itemconfigure(form_window,width=event.width))
+        self.bind('<MouseWheel>',lambda event:viewport.yview_scroll(
+            -(1 if event.delta>0 else -1),'units'))
+        self.bind('<Button-4>',lambda event:viewport.yview_scroll(-1,'units'))
+        self.bind('<Button-5>',lambda event:viewport.yview_scroll(1,'units'))
         self.vars={}
         self.combos={}
         self.labels={}
