@@ -493,8 +493,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                        'digitos':4,'lp_inicial':lp_hud_initial,'validado_epsxe':False}
     # A única instrução alterada fica no resultado de vitória; a regra
     # original por RANK continua intacta se a opção não estiver configurada.
-    reward_report = {'status': 'perfil_incompativel', 'estrelas': None}
-    if native_profile:
+    reward_report = ({'status': 'original_por_rank', 'estrelas': None}
+                     if native_profile else {'status': 'perfil_incompativel', 'estrelas': None})
+    if native_profile and win_reward_requested is not None:
         patched_exe, reward_report = patch_win_reward(patched_exe, win_reward_requested)
     from .ps1_rank_hud import inspect_rank_hud, patch_rank_hud
     rank_hud_report = {'status': 'perfil_incompativel'}
@@ -736,7 +737,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                     'aplicado' if show_all_chest else 'ausente'):
                 raise ModError('A opção de visualização do baú não coincide com o BIN gerado. '
                                'A cópia anterior foi preservada.')
-            if native_profile:
+            if native_profile and win_reward_requested is not None:
                 observed_reward = reward_status(reread_exe)
                 if observed_reward != reward_report:
                     raise ModError('Estrelas por vitória divergentes no SLUS final. '
