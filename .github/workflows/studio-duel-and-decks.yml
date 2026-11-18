@@ -7,6 +7,7 @@ on:
       - feature/studio-v1.8.5-entry-markers
       - feature/studio-v1.8.6-attribute-bonuses
       - feature/studio-v1.8.8-full-chest-catalog
+      - feature/studio-expanded-ps1-cards
   workflow_dispatch:
 permissions:
   contents: write
@@ -24,7 +25,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends xvfb xauth python3-tk gcc-mipsel-linux-gnu binutils-mipsel-linux-gnu
           python -m pip install pillow unicorn==2.1.4
       - name: Recompilar runtime PS1
-        run: python tools/compile_ps1_runtime.py
+        run: |
+          python tools/compile_ps1_runtime.py
+          python tools/compile_ps1_runtime.py --expanded
       - name: Verificar código e testes
         run: |
           python -m compileall -q app.py fmstudio tools tests
@@ -47,11 +50,12 @@ jobs:
           github.ref == 'refs/heads/feature/studio-v1.8.3-ps1-rank-hud' ||
           github.ref == 'refs/heads/feature/studio-v1.8.5-entry-markers' ||
           github.ref == 'refs/heads/feature/studio-v1.8.6-attribute-bonuses' ||
-          github.ref == 'refs/heads/feature/studio-v1.8.8-full-chest-catalog'
+          github.ref == 'refs/heads/feature/studio-v1.8.8-full-chest-catalog' ||
+          github.ref == 'refs/heads/feature/studio-expanded-ps1-cards'
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add fmstudio/ps1_runtime_blob.py
+          git add fmstudio/ps1_runtime_blob.py fmstudio/ps1_expanded_runtime_blob.py
           if ! git diff --cached --quiet; then
             git commit -m "build: recompilar runtime MIPS"
             git push origin "HEAD:${GITHUB_REF_NAME}"

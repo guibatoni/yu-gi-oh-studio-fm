@@ -1,3 +1,24 @@
+# Studio FM v1.9.0 — Expansão PS1 experimental até #740
+
+O **Original Drop x15** pode receber **18 cartas adicionais reais**, com IDs
+**#723–#740**. O baú usa 740 posições, mantém as quantidades no save existente
+e aceita novos monstros, magias, traps, equips e rituais com modelos de
+comportamento originais.
+
+Em **Nova carta**, escolha o tipo e o **Modelo de comportamento / animação
+no PS1**. Salve e gere um novo **BIN/CUE** da imagem original. A seção
+**Passwords e baú** mostra o código PS1 para obter a carta no jogo por 1 Star Chip.
+Use **Verificar BIN/CUE** para conferir os IDs e os atributos aplicados.
+
+A expansão foi testada por releitura da imagem e execução de rotinas MIPS;
+a partida completa no ePSXe ainda precisa ser validada. #741+ e Supreme seguem
+no Studio. Pools ponderados/drops e o álbum Library do PS1 conservam 722 entradas.
+
+Detalhes e limites: [Expansão PS1 #723–#740](docs/EXPANSAO_PS1_740.md).
+As seções seguintes registram recursos e limitações das versões anteriores.
+
+---
+
 # Studio FM v1.8.15 — Conferir descrições gravadas no BIN/CUE
 
 Na aba **Cartas**, use **Conferir descrições no BIN/CUE** após salvar

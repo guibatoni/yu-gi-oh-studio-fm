@@ -38,6 +38,19 @@ def audit(project) -> dict:
     counts['decks_fixos_ps1'] = len(native_plan.fixed_decks)
     counts['fusoes_personalizadas_ps1'] = len(native_plan.fusions)
     blocked=[*native_plan.pending,*mod_plan.pending]; supported=list(mod_plan.applied)
+    from .ps1_expansion import compile_expansion
+    try:
+        expansion = compile_expansion(project, profile=native_profile and wa_pinned)
+        extra_ids = set(expansion.ids)
+        blocked.extend(expansion.pending)
+    except ModError as exc:
+        extra_ids = set()
+        blocked.append(str(exc))
+    if extra_ids:
+        supported.append(f'Expansão nativa experimental: {len(extra_ids)} cartas #723–#740; '
+                         'baú, save, estatísticas, arte, modelos e passwords por ID')
+        counts['cartas_extras_ps1'] = len(extra_ids)
+        counts['estatisticas'] += len(extra_ids)
     if mod_plan.player_lp > 9999:
         if native_profile:
             supported.append('Contador LP de cinco dígitos para ambos no BIN/CUE PS1 (teste visual ePSXe pendente)')
@@ -52,13 +65,13 @@ def audit(project) -> dict:
             blocked.append('IA PS1 Difícil requer imagem Drop x15 com SLUS original confirmado')
     if native_profile:
         supported.append('Bloqueio de ataque na abertura com exceção por carta')
-        supported.append(f'Catálogo de {CARD_COUNT} cartas no baú, inclusive as sem cópias')
+        supported.append(f'Catálogo de {740 if extra_ids else CARD_COUNT} cartas no baú, inclusive as sem cópias')
     supported.extend(f'Drops do deck do duelista #{opponent}' for opponent in native_plan.deck_drops)
     if native_plan.name_colors:
         supported.append(f'Cores de tier em {native_plan.name_colors} nomes de cartas no PS1')
     if native_plan.password_prefix is not None:
         supported.append(f'Passwords por ID no BIN/CUE com prefixo {native_plan.password_prefix:05d}')
-    descriptions={}
+    descriptions={cid: project.get(cid).get('descricao', '') for cid in extra_ids}
     for key,edits in sorted(project.edits.items(),key=lambda item:int(item[0])):
         cid=int(key); current=project.get(cid)
         if current.get('virtual'):
@@ -123,7 +136,7 @@ def audit(project) -> dict:
         blocked.extend(pending)
     for key,rel in project.arts.items():
         cid=int(key)
-        if cid>CARD_COUNT or str(cid) in project.new_cards:
+        if (cid>CARD_COUNT or str(cid) in project.new_cards) and cid not in extra_ids:
             blocked.append(f'#{cid}: arte exige expansão de cards do console')
         elif not known or not wa_pinned:
             blocked.append(f'#{cid}: arte precisa de SLUS e WA_MRG.MRG de origem verificados')
@@ -204,8 +217,6 @@ def audit(project) -> dict:
     counts['efeitos']=sum(map(len,project.effects.values()))
     counts['efeitos_nativos_ps1']=len(native_plan.accepted)
     supported.extend(f'#{cid}: {ACTIONS[action]} no PS1' for cid,action in native_plan.accepted)
-    if project.new_cards:
-        blocked.append(f'{len(project.new_cards)} carta(s) adicionais usam o catálogo do Studio.')
     return {
       'versao_relatorio':1,'status':'PARCIAL_PS1_NAO_TODOS_OS_EFEITOS',
       'slus_conferido':known,'wa_hash_registrado':wa_pinned,'contagens':counts,'gravavel_hoje':supported,
@@ -217,7 +228,7 @@ def audit(project) -> dict:
         'descricoes_coloridas':'Cores e ícones do jogo. Drop x15 também aceita ícones do Studio e realocação de texto.',
         'raridade_e_cor_nomes':'Cores de tier salvo por carta no Drop x15',
         'icones_personalizados':'Graváveis nas descrições no perfil Drop x15',
-        'cartas_maiores_722':'PENDENTE_MIPS_MEMORIA_TABELAS',
+        'cartas_maiores_722':'EXPANSAO_NATIVA_EXPERIMENTAL_723_740; outros IDs permanecem no Studio',
         'tipo_god':'O tipo 24 ativa automaticamente o nome, o ícone e o roteamento de monstro no Drop x15.',
         'buffs_auras_cemiterio':'Bônus de campo com cartas viradas para baixo, deck inicial e cemitério no Drop x15',
         'equipamentos_imunidades':'Equipamentos com ATK e proteção, imunidades e indestrutibilidade no Drop x15',

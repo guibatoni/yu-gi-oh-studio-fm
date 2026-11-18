@@ -65,16 +65,16 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def decode_cards(slus: bytes) -> tuple[list[dict], list[str]]:
+def decode_cards(slus: bytes, *, capacity: int = CARD_COUNT, level_address: int = LEVEL_ADDR) -> tuple[list[dict], list[str]]:
     if slus[:8] != b"PS-X EXE":
         raise ValueError("SLUS_014.11 não possui cabeçalho PS-X EXE válido")
     first = STATS_ADDR - EXE_DELTA
-    _need(slus, first, CARD_COUNT * 4, "tabela de estatísticas")
-    _need(slus, LEVEL_ADDR - EXE_DELTA + CARD_COUNT, 1, "tabela de níveis")
+    _need(slus, first, capacity * 4, "tabela de estatísticas")
+    _need(slus, level_address - EXE_DELTA + capacity, 1, "tabela de níveis")
     cards, notes = [], []
-    for cid in range(1, CARD_COUNT + 1):
+    for cid in range(1, capacity + 1):
         raw = struct.unpack_from("<I", slus, first + (cid - 1) * 4)[0]
-        lv_attr = slus[LEVEL_ADDR - EXE_DELTA + cid]
+        lv_attr = slus[level_address - EXE_DELTA + cid]
         type_id, attr = (raw >> 26) & 31, lv_attr >> 4
         s1, s2 = (raw >> 22) & 15, (raw >> 18) & 15
         cards.append({

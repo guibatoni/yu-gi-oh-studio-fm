@@ -183,10 +183,10 @@ def ps1_supports_god24(project) -> bool:
 
 
 def ps1_god24_card_ids(project) -> list[int]:
-    """IDs originais com o tipo God salvo no projeto."""
+    """IDs com God no catálogo nativo disponível para o perfil vinculado."""
     return sorted(cid for cid in getattr(project, 'cards', {})
-                  if 1 <= cid <= CARD_COUNT
-                  and not project.get(cid).get('virtual')
+                  if 1 <= cid <= (740 if ps1_supports_god24(project) else CARD_COUNT)
+                  and (cid > CARD_COUNT or not project.get(cid).get('virtual'))
                   and int(project.get(cid)['tipo_id']) == GOD_TYPE_ID)
 
 
@@ -234,7 +234,7 @@ def ps1_unwritable_numeric_edits(project) -> list[str]:
 
 def check_card_edit(row: dict):
     cleaned = {}
-    for key in FIELDS:
+    for key in (*FIELDS, 'modelo_ps1_id'):
         if key not in row:
             continue
         val = row[key]
@@ -252,6 +252,8 @@ def check_card_edit(row: dict):
             if len(str(val)) > (100 if key == 'nome' else 2000):
                 raise ModError(f'{key}: texto muito longo')
             cleaned[key] = str(val)
+        elif key == 'modelo_ps1_id':
+            cleaned[key] = _bounded_int(val, key, 1, CARD_COUNT)
         elif key in ('ataque', 'defesa'):
             cleaned[key] = simulation_nonnegative_int(val, key)
         elif key == 'tipo_id':
@@ -526,6 +528,8 @@ class Project:
                 raise ModError('Este disco não contém SLUS_014.11 e DATA/WA_MRG.MRG')
             slus = b''.join(reader.read_entry(names['SLUS_014.11']))
             wa = b''.join(reader.read_entry(names['DATA/WA_MRG.MRG']))
+        from .ps1_expansion import require_original_source
+        require_original_source(slus)
         results, notes = decode_all(slus, wa)
         if len(results['cartas']) != CARD_COUNT:
             raise ModError('Extração não retornou 722 cartas')
@@ -578,6 +582,8 @@ class Project:
                            for e in entries.values()]
         if not slus.startswith(b'PS-X EXE'):
             raise ModError('A base extraída não possui cabeçalho PS-X EXE válido')
+        from .ps1_expansion import require_original_source
+        require_original_source(slus)
         if self.original_ids:
             from .tables import decode_cards
             checked,_=decode_cards(slus)
@@ -713,6 +719,8 @@ class Project:
         raw = path.read_bytes()
         if not raw.startswith(b'PS-X EXE') or len(raw) < (LEVEL_ADDR-EXE_DELTA + CARD_COUNT+1):
             raise ModError('Executável não é um PS-X EXE válido para SLUS-01411')
+        from .ps1_expansion import require_original_source
+        require_original_source(raw)
         # Conferir o hash do relatório, se existir, antes de comparar cada carta.
         summary = self.folder/'base'/'resumo.json'
         if summary.exists():
@@ -756,7 +764,8 @@ class Project:
         return cid
 
     def add_card(self, copy_from: int | None = None, *, name: str | None = None,
-                 type_id: int | None = None, card_id: int | None = None) -> int:
+                 type_id: int | None = None, card_id: int | None = None,
+                 native_model_id: int | None = None) -> int:
         """Cria uma carta Studio a partir de um modelo ou em branco."""
         if copy_from is not None and copy_from not in self.cards:
             raise ModError('Escolha uma carta válida para servir como modelo.')
@@ -770,6 +779,12 @@ class Project:
         card = check_card_edit({'nome': name or f'Nova carta {cid}'[:100], 'descricao': '',
                                 'cor_nome': DEFAULT_NAME_COLOR, 'raridade': DEFAULT_RARITY, **numeric})
         card.update({'id':cid, 'modelo_base_id':copy_from, 'virtual':True})
+        if native_model_id is not None:
+            from .ps1_expansion import model_candidates
+            native_model_id = positive_int(native_model_id, 'Modelo PS1')
+            if native_model_id not in model_candidates(self, card['tipo_id']):
+                raise ModError('Escolha um modelo PS1 compatível com o tipo da nova carta.')
+            card['modelo_ps1_id'] = native_model_id
         self.cards[cid] = card
         self.new_cards[str(cid)] = card
         try:
@@ -965,7 +980,9 @@ class Project:
             for cid in sorted(self.cards)
         })
         _write_json_atomic(output/'novas_cartas.json', {
-            'status':'EDITOR_APENAS_SEM_SUPORTE_PS1',
+            'status':'CATALOGO_STUDIO_COM_EXPANSAO_PS1_723_740',
+            'capacidade_ps1_experimental':740,
+            'observacao':'Somente Gerar jogo BIN/CUE aplica as tabelas expandidas no perfil Drop x15.',
             'cartas':{str(cid): self.get(cid) for cid, card in self.cards.items()
                       if cid > CARD_COUNT or card.get('virtual')}})
         from .richtext import native_text_only
@@ -1033,7 +1050,7 @@ class Project:
             _write_json_atomic(output/'mudancas_binarias.json',byte_diffs)
             manifest['arquivos'].extend(['build_local/SLUS_014.11','mudancas_binarias.json'])
             manifest['slus_modificado_sha256'] = hashlib.sha256(data).hexdigest()
-            if ps1_supports_god24(self) and ps1_god24_card_ids(self):
+            if ps1_supports_god24(self) and any(cid <= CARD_COUNT for cid in ps1_god24_card_ids(self)):
                 manifest['tipo_god_status'] = 'TIPO_24_GRAVADO_NO_SLUS_AUXILIAR'
             manifest['observacao_executavel'] = ('Executável auxiliar modificado localmente; NÃO é imagem BIN/CUE '
                 'jogável e não deve ser distribuído. Ainda faltam empacotamento do disco e testes in-game.')

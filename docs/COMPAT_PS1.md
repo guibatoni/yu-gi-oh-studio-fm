@@ -1,3 +1,18 @@
+# Atualização de compatibilidade — v1.9.0
+
+O perfil **Original Drop x15** dispõe de expansão nativa experimental para
+**#723–#740**. Ela inclui baú/save, atributos, textos, imagens, modelos e
+comportamentos herdados para monstros, magias, traps, equips e rituais.
+Fusões personalizadas e decks fixos de 40 cartas aceitam os IDs novos.
+Pools ponderados/drops e a Library separada conservam o formato original.
+
+Veja [capacidade, criação, validação e limites](EXPANSAO_PS1_740.md).
+A execução completa no ePSXe permanece pendente. A documentação abaixo
+mantém o histórico das versões anteriores; os limites atualizados estão no
+arquivo acima.
+
+---
+
 ## Rank ao vivo no PS1 — v1.8.3
 
 O **Drop x15** com **SLUS_014.11** verificado mostra o rank abaixo do

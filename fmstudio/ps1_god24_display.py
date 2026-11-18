@@ -90,9 +90,10 @@ SPRITE_PATCHED = (
 )
 
 
-def extended_sprite_words() -> tuple[int, ...]:
-    from .ps1_runtime_blob import ENTRY_POINTS
-    dispatch = 0x08000000 | ((ENTRY_POINTS['DescriptionIcon'] >> 2) & 0x03FFFFFF)
+def extended_sprite_words(entries=None) -> tuple[int, ...]:
+    if entries is None:
+        from .ps1_runtime_blob import ENTRY_POINTS as entries
+    dispatch = 0x08000000 | ((entries['DescriptionIcon'] >> 2) & 0x03FFFFFF)
     return SPRITE_PATCHED[:9] + (dispatch, 0) + SPRITE_PATCHED[11:]
 
 # 0x8327 é um alias de Dragon inalcançável pelo campo de 4 bits das estrelas.
@@ -128,10 +129,11 @@ def inspect(exe: bytes, wa: bytes | None = None) -> dict:
     if exe.startswith(b'PS-X EXE'):
         original = [before for _, before, _ in REGIONS]
         wanted = [after for _, _, after in REGIONS]
-        if regions[1] == struct.pack('<28I', *extended_sprite_words()):
-            from .ps1_runtime_blob import RUNTIME, RUNTIME_BASE
-            offset = RUNTIME_BASE - EXE_DELTA
-            if exe[offset:offset + len(RUNTIME)] == RUNTIME:
+        from . import ps1_runtime_blob, ps1_expanded_runtime_blob
+        for bundle in (ps1_runtime_blob, ps1_expanded_runtime_blob):
+            offset = bundle.RUNTIME_BASE - EXE_DELTA
+            if (regions[1] == struct.pack('<28I', *extended_sprite_words(bundle.ENTRY_POINTS))
+                    and exe[offset:offset + len(bundle.RUNTIME)] == bundle.RUNTIME):
                 wanted[1] = regions[1]
                 original[1] = regions[1]
         if regions == wanted:

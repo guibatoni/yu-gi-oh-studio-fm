@@ -81,7 +81,7 @@ class PasswordPanel(ttk.Frame):
 
     def _ps1_code(self, cid):
         prefix = self.project.metadata.get(PS1_ID_PREFIX)
-        if prefix is not None and cid <= CARD_COUNT and not self.cards[cid].get('virtual'):
+        if prefix is not None and cid <= 740 and (cid > CARD_COUNT or not self.cards[cid].get('virtual')):
             return ps1_id_code(prefix, cid)
         return '—'
 

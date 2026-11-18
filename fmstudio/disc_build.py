@@ -180,7 +180,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         LP_BANK_END, LP_CODE, compile_mod, inspect_chest_catalog, patch_chest_catalog,
         patch_executable, patch_wa, wa_sha,
     )
-    from .passwords import validate_ps1_prefix
+    from .passwords import validate_ps1_prefix, choose_ps1_prefix, PS1_ID_PREFIX
+    from .ps1_expansion import compile_expansion, expand_archive, patch_expansion, inspect_expansion
     texts={int(cid):project.get(int(cid)).get('descricao','')
            for cid,rows in getattr(project,'edits',{}).items()
            if 'descricao' in rows and 1<=int(cid)<=722}
@@ -204,6 +205,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             source_digest=hashlib.sha256(original_exe).hexdigest()
             native_profile=source_digest==SOURCE_SHA256
             god24_enabled=native_profile and bool(god_cards)
+            expansion = compile_expansion(project, profile=native_profile)
             wa_entry=entries.get('DATA/WA_MRG.MRG')
             requested_art={int(k):v for k,v in getattr(project,'arts',{}).items() if int(k)<=722}
             metadata=getattr(project,'metadata',{})
@@ -224,10 +226,21 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                             if metadata.get('ps1_rituals_enabled',False) else {})
             native_traps=metadata.get('ps1_trap_thresholds',{})
             native_terrain=metadata.get('ps1_terrain_boosts',{})
-            needs_wa=(requested_art or native_equips or replacements or native_rituals or mod_plan.needs_wa
+            needs_wa=(expansion.enabled or requested_art or native_equips or replacements or native_rituals or mod_plan.needs_wa
                       or god_icon_card or god24_enabled or native_plan.password_prefix is not None
                       or (native_profile and any('{icon:' in desc for desc in texts.values())))
             original_wa=b''.join(reader.read_entry(wa_entry)) if needs_wa and wa_entry else None
+            if expansion.enabled:
+                if original_wa is None or source_digest != metadata.get('base_sha256', {}).get('slus'):
+                    raise ModError('Expansão exige SLUS e WA_MRG da imagem vinculada.')
+                if metadata.get(PS1_ID_PREFIX) is None:
+                    from .tables import decode_passwords
+                    prefix = choose_ps1_prefix(row['password'] for row in decode_passwords(original_wa))
+                    project.metadata = {**project.metadata, PS1_ID_PREFIX: prefix}
+                    project.save()
+                    metadata = project.metadata
+                    native_plan = compile_effects(project, native_profile, fixed_decks=mod_plan.fixed_decks,
+                                                  fusions=mod_plan.fusions)
     except DiscError as exc:
         raise ModError(f'Imagem original inválida: {exc}') from exc
 
@@ -276,6 +289,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             except ModError:
                 continue
 
+    if expansion.enabled:
+        descriptions_studio_only = [cid for cid in descriptions_studio_only if cid > 740]
+        for cid in range(723, 741):
+            texts[cid] = project.get(cid).get('descricao', '') if cid in expansion.ids else ''
+
     description_icons=set()
     descriptions_not_written=[]
     if texts:
@@ -284,6 +302,12 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
          descriptions_not_written) = _apply_card_descriptions(
             patched_exe, texts, catalog, native_profile=native_profile,
             start=native_plan.data_end, end=desc_bank_end, policy=description_policy)
+        if expansion.enabled:
+            failed_new = [message for message in descriptions_not_written
+                          if any(message.startswith(f'#{cid}:') for cid in range(723, 741))]
+            if failed_new:
+                raise ModError('As cartas adicionais precisam de descrições compatíveis; não possuem '
+                               'um texto original para preservar. Corrija estes textos:\n' + '\n'.join(failed_new))
 
     from .ps1_native import patch_trap_thresholds, patch_terrain_boosts, patch_rituals
     patched_exe, traps_written = patch_trap_thresholds(patched_exe, native_traps)
@@ -397,7 +421,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         from .ps1_god24_row_patch import apply as patch_real_list
         from .ps1_god24_display import apply as patch_god_display
         from .ps1_god24_play import apply as patch_duel
-        kinds=[int(project.get(cid)['tipo_id']) for cid in project.cards if 1<=cid<=CARD_COUNT]
+        kinds=[int(project.get(cid)['tipo_id']) for cid in project.cards if 1<=cid<= (740 if expansion.enabled else CARD_COUNT)]
         patched_exe,god_chest_report=patch_god24_chest_preview(
             original_exe,patched_exe,kinds)
         patched_exe,row_report=patch_real_list(original_exe,patched_exe,kinds)
@@ -452,6 +476,23 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             raise ModError('As tabelas de duelistas exigem o WA_MRG vinculado ao projeto.')
         patched_wa=patch_wa(patched_wa if patched_wa is not None else original_wa,mod_plan)
 
+    expansion_report = expansion.report()
+    if expansion.enabled:
+        if not expected_wa:
+            expected_wa = wa_sha(project)
+        if not expected_wa or hashlib.sha256(original_wa).hexdigest() != expected_wa:
+            raise ModError('Expansão: WA_MRG precisa ter o hash de origem registrado pelo extrator.')
+        patched_wa = expand_archive(patched_wa if patched_wa is not None else original_wa,
+                                    project, expansion, prefix=native_plan.password_prefix)
+        patched_exe = patch_expansion(original_exe, patched_exe, project, expansion,
+                                      wa_sectors=len(original_wa) // PAYLOAD)
+        expansion_report.update(inspect_expansion(patched_exe))
+        expansion_report['titulos_gravados'] = list(expansion.ids)
+        expansion_report['artes_proprias'] = [cid for cid in expansion.ids if str(cid) in project.arts]
+        if expansion_report['status'] != 'aplicado':
+            raise ModError('Expansão incompleta após instalar as tabelas e os adaptadores nativos.')
+        chest_catalog_report = inspect_chest_catalog(patched_exe)
+
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
     if not native_profile and patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
         if audit_report is not None:
@@ -498,7 +539,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         with stage_bin.open('r+b') as out:
             changed+=_write_file_patches(out,exe,original_exe,patched_exe)
             if patched_wa is not None and patched_wa!=original_wa:
-                changed+=_write_file_patches(out,wa_entry,original_wa,patched_wa)
+                if len(patched_wa) == len(original_wa):
+                    changed+=_write_file_patches(out,wa_entry,original_wa,patched_wa)
+                else:
+                    from .disc_append import append_iso_file
+                    changed+=append_iso_file(out,wa_entry,original_wa,patched_wa)
 
         # A releitura confere o SLUS e, quando necessário, o arquivo WA gravado.
         with DiscReader(stage_bin) as verify:
@@ -566,6 +611,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'contador_lp_ps1':lp_hud_report,
                 'rank_hud_ps1':rank_hud_report,
                 'catalogo_bau_ps1':chest_catalog_report,
+                'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
                                     'decks_fixos':list(native_plan.fixed_decks)},

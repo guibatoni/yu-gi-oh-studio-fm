@@ -54,6 +54,7 @@ def verify_image_stats(project, source):
     from .ps1_runtime import compile_effects, verify_effects
     from .ps1_mod import compile_mod, inspect_chest_catalog, verify_executable, verify_wa, wa_sha
     from .ps1_rank_hud import inspect_rank_hud
+    from .ps1_expansion import inspect_expansion, EXPANDED_LEVELS, retail_archive_view
     config=getattr(project,'metadata',{}) or {}
     profile=ps1_supports_god24(project)
     mod_plan=compile_mod(project,profile=profile,
@@ -65,29 +66,37 @@ def verify_image_stats(project, source):
             if 'SLUS_014.11' not in entries:
                 raise ModError('SLUS_014.11 ausente do disco.')
             exe = b''.join(image.read_entry(entries['SLUS_014.11']))
-            cards, _ = decode_cards(exe)
+            expansion = inspect_expansion(exe)
+            expanded = expansion['status'] == 'aplicado'
+            cards, _ = decode_cards(exe, capacity=740 if expanded else CARD_COUNT,
+                                    level_address=EXPANDED_LEVELS if expanded else 0x801D5332)
             god_display = inspect_god_display(exe)
-            if god_display['status'] == 'aguardando_textura' or mod_plan.needs_wa:
+            if god_display['status'] == 'aguardando_textura' or mod_plan.needs_wa or expanded:
                 entry = entries.get('DATA/WA_MRG.MRG')
                 wa = b''.join(image.read_entry(entry)) if entry else b''
+                if expanded:
+                    wa = retail_archive_view(wa)
             if god_display['status'] == 'aguardando_textura':
                 god_display = inspect_god_display(exe, wa)
             image_path = str(image.path.resolve())
     except DiscError as exc:
         raise ModError(f'Imagem de disco inválida: {exc}') from exc
     result = []
-    for key, edits in sorted(getattr(project, 'edits', {}).items(),
+    requests = dict(getattr(project, 'edits', {}))
+    if expanded:
+        requests.update({str(cid): dict.fromkeys(FIELDS) for cid in expansion['ids_adicionais']})
+    for key, edits in sorted(requests.items(),
                              key=lambda pair:int(pair[0])):
         cid = int(key)
-        if cid < 1 or cid > CARD_COUNT:
+        if cid < 1 or cid > (740 if expanded else CARD_COUNT):
             continue
         requested = project.get(cid)
-        if requested.get('virtual'):
+        if requested.get('virtual') and cid <= CARD_COUNT:
             continue
         original = project.cards[cid]
         typ=int(requested.get('tipo_id',0))
         if (typ > GOD_TYPE_ID or (typ == GOD_TYPE_ID and not profile)
-                or int(requested.get('atributo_id',0)) > 5):
+                or (typ < 20 or typ == GOD_TYPE_ID) and int(requested.get('atributo_id',0)) > 5):
             if set(edits) & set(FIELDS):
                 raise ModError(f'Carta #{cid:03d}: tipo/atributo incompatível com '
                                'o motor PS1. Não é seguro omitir esta carta da '
@@ -99,7 +108,7 @@ def verify_image_stats(project, source):
                 continue
             want = int(requested[field])
             was = int(original[field])
-            if want == was:
+            if want == was and cid <= CARD_COUNT:
                 continue
             got = int(cards[cid-1][field])
             fields[field] = {'base':was,'projeto':want,'bin':got,'ok':got==want}
@@ -143,6 +152,7 @@ def verify_image_stats(project, source):
             'god24_exibicao_tipo':god_display,
             'efeitos_nativos_ps1':runtime,
             'rank_hud_ps1':inspect_rank_hud(exe),
+            'expansao_cartas_ps1':expansion,
             'catalogo_bau_ps1':inspect_chest_catalog(exe) if profile else {'status':'perfil_incompativel','cartas':0},
             'edicao_do_mod_ps1':{'bloqueio_turno_inicial':opening_lock if profile else None,
                                 'lp':life,'tabelas':verify_wa(wa,mod_plan)},

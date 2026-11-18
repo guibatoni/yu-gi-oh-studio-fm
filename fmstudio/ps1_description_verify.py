@@ -22,12 +22,18 @@ from .tables import CARD_COUNT
 MAX_TEXT_BYTES = 2048
 
 
+def _card_capacity(exe):
+    from .ps1_expansion import inspect_expansion
+    expansion = inspect_expansion(exe)
+    return expansion['capacidade'] if expansion['status'] == 'aplicado' else CARD_COUNT
+
+
 def _description_bytes(exe: bytes, cid: int):
     """Lê o ponteiro real D100+ID; não depende da posição original do texto."""
     if not exe.startswith(b'PS-X EXE'):
         raise ModError('O BIN não contém um executável PS-X reconhecido.')
-    if not 1 <= cid <= CARD_COUNT:
-        raise ModError('O PS1 ainda não suporta descrições de cartas acima de 722.')
+    if not 1 <= cid <= _card_capacity(exe):
+        raise ModError('O ID não pertence ao catálogo nativo confirmado neste BIN/CUE.')
     try:
         ptr = exe_pos(STRING_TABLE + 2 * (0x100 + cid), exe, 2)
         offset = struct.unpack_from('<H', exe, ptr)[0]
@@ -49,9 +55,9 @@ def inspect_exe_description(exe: bytes, cid: int, desired: str, cards: dict,
                             native_profile: bool = False) -> dict:
     """Retorna aplicada/original/divergente/incompativel/somente_studio."""
     result = {'id': int(cid), 'status': 'divergente', 'motivo': ''}
-    if not 1 <= cid <= CARD_COUNT:
+    if not 1 <= cid <= _card_capacity(exe):
         result.update(status='somente_studio',
-                      motivo='O motor PS1 não contém descrições de IDs acima de 722.')
+                      motivo='O ID não pertence ao catálogo nativo confirmado neste BIN/CUE.')
         return result
     try:
         actual, address, file_offset = _description_bytes(exe, cid)

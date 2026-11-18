@@ -9,7 +9,10 @@ enum {
     OCCUPIED = 0x8000, USED = 0x4000, FACE_DOWN = 0x1000, DEFENSE = 0x800,
     MAGIC = 1, TRAP = 2, INDESTRUCTIBLE = 4, PIERCING = 8, DIRECT = 16, FIRST_TURN = 32,
     FIELD = 5, PLACING = 7, CONFIRMING = 8, BATTLE = 9,
-    CARD_COUNT = 722, DECK_SIZE = 40, RECORD_COUNT = 30, DUELIST_COUNT = 40,
+#ifndef FM_CARD_CAPACITY
+#define FM_CARD_CAPACITY 722
+#endif
+    CARD_COUNT = FM_CARD_CAPACITY, DECK_SIZE = 40, RECORD_COUNT = 30, DUELIST_COUNT = 40,
     AURA = 1, FIELD_TYPE, DECK_TYPE, FIELD_ID, DECK_ID, GRAVE_TYPE, SUMMON_DAMAGE, SUMMON_HEAL,
     ENTRY_GROW, ENTRY_SHRINK,
     ATTRIBUTE_MASK = 0x7C, MATCH_EITHER = 0x80
@@ -82,7 +85,10 @@ register u8 *game_gp __asm__("$28");
 /* Offset zero of the card directory is unused by card IDs. */
 #define GRAVE_FILTERS ((Bonus *)((u8 *)CONFIG + CONFIG->offsets[0]))
 #define STATS ((const u32 *)0x801D4244)
-#define LEVELS ((const u8 *)0x801D5332)
+#ifndef FM_LEVEL_ADDRESS
+#define FM_LEVEL_ADDRESS 0x801D5332
+#endif
+#define LEVELS ((const u8 *)FM_LEVEL_ADDRESS)
 #define OBJECTS ((const u8 *volatile *)0x800E9EF0)
 #define SCENE GAME(u16, 0x8009B23A)
 #define STEP GAME(u8, 0x8009B174)
@@ -655,6 +661,9 @@ extern int RetailCardDrop(int rank);
 
 ENTRY int SelectDeckDrop(int rank)
 {
+#ifdef FM_EXPANDED
+    return RetailCardDrop(rank);
+#else
     unsigned opponent = GAME(u8, 0x8009B361);
     if (duel.deck_ready && opponent < DUELIST_COUNT &&
         (CONFIG->deck_drops[opponent / 8] & (1u << (opponent % 8)))) {
@@ -667,13 +676,18 @@ ENTRY int SelectDeckDrop(int rank)
         if (count) return eligible[FN(unsigned, 0x800358FC, unsigned)(count)];
     }
     return RetailCardDrop(rank);
+#endif
 }
 
 typedef struct {
     u32 price, password;
 } PasswordRecord;
 
+#ifdef FM_EXPANDED
+__attribute__((used, noinline, section(".runtime.expansion_aux")))
+#else
 __attribute__((used, noinline, section(".runtime.password")))
+#endif
 void UpdatePasswordShop(void)
 {
     const volatile u8 *digits = (const volatile u8 *)0x8016D410;
@@ -682,6 +696,9 @@ void UpdatePasswordShop(void)
     unsigned id = 100 * digits[5] + 10 * digits[6] + digits[7];
     unsigned stage = AT(u16, 0x8016D424) & 31;
     if ((packed >> 12) != CONFIG->password_prefix || (unsigned)(id - 1) >= CARD_COUNT ||
+#ifdef FM_EXPANDED
+        (id > 722 && !((const u16 *)0x801D53A0)[id - 723]) ||
+#endif
         (stage && AT(u16, 0x8016D4DC) != id)) {
         FN(void, 0x8016A37C, void)();
         return;
@@ -692,7 +709,17 @@ void UpdatePasswordShop(void)
     u32 password = entry->password;
     entry->price = 1;
     entry->password = packed;
+#ifdef FM_EXPANDED
+    /* The extra password bits would overlap campaign flags at 0x6E0.
+       New cards use their quantity, without setting a retail password bit. */
+    volatile u8 *flag = (volatile u8 *)0x801D0618 + ((id + 0x400) >> 3);
+    u8 before = *flag;
+    if (id > 722) *flag = before & ~(0x80u >> ((id + 0x400) & 7));
+#endif
     FN(void, 0x8016A37C, void)();
+#ifdef FM_EXPANDED
+    if (id > 722) *flag = before;
+#endif
     entry->price = price;
     entry->password = password;
 }
