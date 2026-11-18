@@ -95,7 +95,7 @@ def rgba_from_indices(indices: bytes, clut: tuple[int, ...]) -> bytes:
     colors = [rgb555(c) for c in clut]
     if any(index >= len(colors) for index in indices):
         raise ModError("Índice de cor fora da CLUT do recurso PS1.")
-    return b"".join(colors[index] for index in indices)
+    return b"".join(bytes(colors[index]) for index in indices)
 
 
 def png_rgba(pixels: bytes, size: tuple[int, int]) -> bytes:
