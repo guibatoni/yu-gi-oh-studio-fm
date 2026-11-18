@@ -328,7 +328,7 @@ class TestRichDescriptions(unittest.TestCase):
 
     def test_description_too_tall_is_reported(self):
         source = sample_exe()
-        output, rows, icons, pending = patch_descriptions(source, {1: '\n'.join('A' for _ in range(10))}, {})
+        output, rows, icons, pending = patch_descriptions(source, {1: '\n'.join('A' * 21 for _ in range(10))}, {})
         self.assertEqual(source, output)
         self.assertEqual(rows, [])
         self.assertEqual(icons, set())

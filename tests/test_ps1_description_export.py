@@ -1,10 +1,14 @@
 """Não permitir que descrições ignoradas sejam anunciadas como gravadas no PS1."""
 import struct
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from fmstudio.core import ModError
 from fmstudio.disc_build import _apply_card_descriptions, DescriptionCompatibilityError
 from fmstudio.ps1_content import description_slot
+from fmstudio.ps1_description_verify import inspect_exe_description
+from fmstudio.ps1_text import description_regions
 from test_ps1_content import sample_exe, where
 
 
@@ -92,6 +96,69 @@ class DescriptionWriteTests(unittest.TestCase):
                 source, {1: 'A' * 50}, {}, native_profile=False,
                 start=0x801CD5A0, end=0x801D0000)
         self.assertEqual(source, sample_exe())
+
+    def test_ten_manual_lines_can_keep_all_text_icons_and_colors(self):
+        text = '{color:azul}{icon:ataque_3x} ' + '\n'.join(['AB AB AB AB AB'] * 10) + '{/color}'
+        patched, rows, icons, failures = self.apply({723: text}, native=True)
+        self.assertFalse(failures)
+        self.assertTrue(rows[0]['quebras_reorganizadas'])
+        self.assertEqual(icons, {'ataque_3x'})
+        with patch('fmstudio.ps1_expansion.inspect_expansion',
+                   return_value={'status': 'aplicado', 'capacidade': 740}):
+            result = inspect_exe_description(patched, 723, text, {}, native_profile=True)
+        self.assertEqual(result['status'], 'aplicada')
+        self.assertEqual(result['texto_no_bin'].split().count('AB'), 49)
+        self.assertTrue(result['texto_no_bin'].endswith('AB{f8 0A 00}'))
+
+    def test_expanded_fallback_uses_free_intervals_and_leaves_unregistered_slots_empty(self):
+        source = bytearray(sample_exe())
+        struct.pack_into('<I', source, where(0x801D9000 + 4 * 4), 0x8144)  # period
+        vacant = 0x2FF0
+        source[where(0x801C0000 + vacant)] = 0xFF
+        for cid in (0, *range(723, 741)):
+            struct.pack_into('<H', source, where(0x801C0000 + 2 * (0x100 + cid)), vacant)
+        plan = SimpleNamespace(
+            data_end=0x801CF9A4, capacity=740, password_prefix=12345,
+            grave_filters=False, entry_markers=False, mod_features=False, gameplay=True,
+        )
+        regions = description_regions(plan, has_lp=True)
+        changes = {723: '\n'.join(['A' * 21] * 10), 724: 'B' * 120, 725: '{icon:vinculo_vida}'}
+        args = dict(native_profile=True, start=plan.data_end, end=0x801CF9B0, regions=regions)
+        with self.assertRaises(DescriptionCompatibilityError) as ctx:
+            _apply_card_descriptions(source, changes, {}, **args)
+        self.assertEqual([problem.split(':', 1)[0] for problem in ctx.exception.failures], ['#723', '#725'])
+        patched, rows, _, failures = _apply_card_descriptions(
+            source, changes, {}, policy='preserve_incompatible', **args)
+        self.assertEqual([(row['id'], row.get('resumida', False)) for row in rows], [(723, True), (724, False)])
+        self.assertEqual(len(failures), 1)
+        self.assertIn('#725:', failures[0])
+        for cid in range(725, 741):
+            pointer = where(0x801C0000 + 2 * (0x100 + cid))
+            self.assertEqual(struct.unpack_from('<H', patched, pointer)[0], vacant)
+        with patch('fmstudio.ps1_expansion.inspect_expansion',
+                   return_value={'status': 'aplicado', 'capacidade': 740}):
+            results = [inspect_exe_description(patched, cid, text, {}, native_profile=True)
+                       for cid, text in changes.items()]
+        self.assertEqual([row['status'] for row in results], ['resumida', 'aplicada', 'sem_texto'])
+        self.assertEqual(results[1]['texto_no_bin'], changes[724])
+
+    def test_complete_description_gets_storage_before_an_optional_preview(self):
+        source = bytearray(sample_exe())
+        struct.pack_into('<I', source, where(0x801D9000 + 4 * 4), 0x8144)
+        _, rows, _, pending = _apply_card_descriptions(
+            source, {723: 'A' * 250, 724: 'B' * 45}, {}, native_profile=True,
+            start=0x801CD5A0, end=0x801CD5A0 + 52, policy='preserve_incompatible')
+        self.assertEqual([row['id'] for row in rows], [724])
+        self.assertEqual(len(pending), 1)
+        self.assertIn('#723:', pending[0])
+
+    def test_identical_new_descriptions_share_one_native_string(self):
+        _, rows, _, pending = _apply_card_descriptions(
+            sample_exe(), {723: 'AB' * 20, 724: 'AB' * 20}, {}, native_profile=True,
+            start=0x801CD5A0, end=0x801CD5A0 + 41)
+        self.assertFalse(pending)
+        self.assertEqual([row['id'] for row in rows], [723, 724])
+        self.assertEqual(rows[0]['offset_exe'], rows[1]['offset_exe'])
 
 
 if __name__ == '__main__':

@@ -32,6 +32,12 @@ Slots ainda não cadastrados mostram **Reservado**, com descrição vazia. Eles
 não recebem um password válido. Cartas sem cópias aparecem com **0/0** no baú;
 o controle de inventário ainda exige uma cópia para colocar no deck.
 
+Desde a v1.9.2, os slots vazios compartilham o texto vazio nativo. Se a
+descrição de uma carta nova exceder o visor depois do ajuste de quebras de
+linha, a opção de gerar com descrições compatíveis tenta gravar uma prévia
+com reticências. Se faltar espaço ou houver um ícone incompatível, a carta
+fica sem descrição na cópia. O texto completo permanece no projeto.
+
 ## Tipos e comportamentos
 
 | Tipo novo | Implementação nativa |

@@ -34,9 +34,9 @@ class DescriptionCompatibilityError(ModError):
             'As descrições abaixo NÃO foram gravadas no jogo:\n'
             + details
             + '\n\nO BIN/CUE anterior foi preservado. '
-              'Corrija os textos ou use uma imagem Drop x15 compatível para '
-              'descrições maiores. Ícones novos sem suporte MIPS ficam '
-              'disponíveis somente na prévia do Studio.'
+              'A exportação com descrições compatíveis mantém o texto original '
+              'nas cartas de base e usa uma prévia ou um texto vazio para cartas novas. '
+              'Os textos completos continuam no projeto.'
         )
 
 
@@ -132,12 +132,12 @@ def _write_file_patches(out, entry, original: bytes, patched: bytes) -> list[int
 
 def _apply_card_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
                              *, native_profile: bool, start: int, end: int,
-                             policy: str = 'strict'):
+                             policy: str = 'strict', regions=None):
     """Grava textos compatíveis e informa os demais sem ocultar perda de dados.
 
     'strict': bloqueia se qualquer descrição editada não couber.
-    'preserve_incompatible': mantém os textos originais do PS1 apenas onde
-    falhou, reportando ID e motivo. O projeto Studio nunca é reescrito.
+    'preserve_incompatible': mantém textos originais do PS1 onde falhou.
+    Para cartas novas, usa uma prévia ou mantém o texto vazio da base.
     """
     if policy not in ('strict', 'preserve_incompatible'):
         raise ModError('Política de exportação de descrições desconhecida.')
@@ -150,7 +150,8 @@ def _apply_card_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
     if native_profile:
         from .ps1_text import patch_descriptions
         patched, written, icons, failures = patch_descriptions(
-            exe, changes, cards, start=start, end=end)
+            exe, changes, cards, start=start, end=end, regions=regions,
+            preview_new=policy == 'preserve_incompatible')
     else:
         from .ps1_content import patch_descriptions
         for cid, description in sorted(changes.items()):
@@ -296,24 +297,23 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 continue
 
     if expansion.enabled:
-        descriptions_studio_only = [cid for cid in descriptions_studio_only if cid > 740]
-        for cid in range(723, 741):
-            texts[cid] = project.get(cid).get('descricao', '') if cid in expansion.ids else ''
+        descriptions_studio_only = [cid for cid in descriptions_studio_only if cid not in expansion.ids]
+        # The unused IDs already share the original empty description (D100).
+        texts.update({cid: project.get(cid).get('descricao', '') for cid in expansion.ids})
 
     description_icons=set()
     descriptions_not_written=[]
     if texts:
+        from .ps1_text import description_regions
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
+        regions = description_regions(native_plan, has_lp=mod_plan.has_lp) if native_profile else None
         (patched_exe, written_descriptions, description_icons,
          descriptions_not_written) = _apply_card_descriptions(
             patched_exe, texts, catalog, native_profile=native_profile,
-            start=native_plan.data_end, end=desc_bank_end, policy=description_policy)
-        if expansion.enabled:
-            failed_new = [message for message in descriptions_not_written
-                          if any(message.startswith(f'#{cid}:') for cid in range(723, 741))]
-            if failed_new:
-                raise ModError('As cartas adicionais precisam de descrições compatíveis; não possuem '
-                               'um texto original para preservar. Corrija estes textos:\n' + '\n'.join(failed_new))
+            start=native_plan.data_end, end=desc_bank_end, policy=description_policy,
+            regions=regions)
+    written_ids = {row['id'] for row in written_descriptions}
+    new_without_text = [cid for cid in expansion.ids if cid not in written_ids]
 
     from .ps1_native import patch_trap_thresholds, patch_terrain_boosts, patch_rituals
     patched_exe, traps_written = patch_trap_thresholds(patched_exe, native_traps)
@@ -464,12 +464,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     from .ps1_rank_hud import inspect_rank_hud, patch_rank_hud
     rank_hud_report = {'status': 'perfil_incompativel'}
     if native_profile:
-        occupied_until = max([native_plan.data_end, *(
-            EXE_DELTA + row['offset_exe'] + row['bytes'] + 1
-            for row in written_descriptions if row.get('realocada')
-        )])
         patched_exe, rank_hud_report = patch_rank_hud(
-            original_exe, patched_exe, occupied_until=occupied_until)
+            original_exe, patched_exe, occupied_until=native_plan.data_end)
     from .ps1_ai import mode_for, patch_hard_ai, verify_hard_ai
     ai_mode=mode_for(project)
     if native_profile:
@@ -576,7 +572,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                     checked = inspect_exe_description(
                         reread_exe, row['id'], texts[row['id']], catalog,
                         original_exe=original_exe, native_profile=native_profile)
-                    if checked['status'] != 'aplicada':
+                    expected_status = 'resumida' if row.get('resumida') else 'aplicada'
+                    if (checked['status'] != expected_status or
+                            'sha256_texto' in row and checked['sha256_texto_bin'] != row['sha256_texto']):
                         raise ModError(
                             f'Carta #{row["id"]}: texto do BIN não corresponde ao salvo no Studio: '
                             f'{checked["motivo"]} O BIN/CUE anterior foi preservado.')
@@ -588,7 +586,15 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                         'id': row['id'],
                         'ponteiro': checked['ponteiro'],
                         'sha256_texto': checked['sha256_texto_bin'],
+                        'status': checked['status'],
                     })
+            if expansion.enabled:
+                from .ps1_description_verify import _description_bytes
+                empty_ids = set(range(CARD_COUNT + 1, PS1_CARD_CAPACITY + 1)) - written_ids
+                for cid in sorted(empty_ids):
+                    text, _, _ = _description_bytes(reread_exe, cid)
+                    if text:
+                        raise ModError(f'Carta #{cid}: a descrição vazia diverge no BIN final.')
             if native_profile and ai_mode=='dificil' and not verify_hard_ai(original_exe,reread_exe,mode=ai_mode):
                 raise ModError('IA PS1: patch incompleto após reempacotamento; BIN antigo preservado.')
             if native_profile and lp_hud_initial>9999 and not verify_lp_hud(
@@ -618,6 +624,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'descricoes_aplicadas':written_descriptions,
                 'descricoes_confirmadas_no_bin':confirmed_descriptions,
                 'descricoes_nao_gravadas':descriptions_not_written,
+                'descricoes_resumidas_ps1':[{'id': row['id'], 'motivo': row['motivo']}
+                                          for row in written_descriptions if row.get('resumida')],
+                'cartas_novas_sem_descricao_ps1': new_without_text,
                 'politica_descricoes_ps1':description_policy,
                 'descricoes_somente_studio':descriptions_studio_only,
                 'icones_de_descricao_ps1':sorted(description_icons),

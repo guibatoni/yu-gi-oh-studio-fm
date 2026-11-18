@@ -1,3 +1,20 @@
+# Studio FM v1.9.2 — Descrições das cartas novas no PS1
+
+Ao gerar o BIN/CUE do **Original Drop x15**, o Studio ajusta as quebras de
+linha de textos que excedem a altura do visor. O banco de descrições usa
+os intervalos livres entre as rotinas nativas e compartilha textos
+idênticos. Os IDs ainda sem carta usam o texto vazio de origem.
+
+O visor PS1 continua limitado a 9 linhas de 21 colunas. Quando o texto
+completo não cabe, a opção **Gerar o BIN/CUE com as descrições compatíveis**
+grava uma prévia com reticências nas cartas novas quando há espaço. Para
+uma carta nova sem prévia possível, a cópia exibe a descrição vazia. As
+cartas originais incompatíveis mantêm o texto de origem. Os textos completos
+continuam no projeto. **Conferir descrições no BIN/CUE** indica o que foi
+gravado e quais cartas usam prévia ou estão sem descrição na cópia.
+
+---
+
 # Studio FM v1.9.1 — Supreme no PS1
 
 O botão **Gerar jogo BIN/CUE** aceita Supreme nos dois campos de Guardian Star

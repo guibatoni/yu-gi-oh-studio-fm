@@ -1,6 +1,7 @@
 """Descriptions and custom text icons for the Drop x15 PS1 profile."""
 from __future__ import annotations
 
+import hashlib
 import struct
 import unicodedata
 
@@ -9,7 +10,7 @@ from .deep_extract import BANK_DESC, STRING_TABLE, exe_pos, glyph_map
 from .ps1_content import _encode_description, description_slot
 from .ps1_god24_display import GOLD_PALETTE, ICON_ROWS
 from .ps1_god_icon import PALETTE_OFFSET, ROW_BYTES, decode_icon_png, god_glyph_rows, god_icon_asset
-from .ps1_runtime import BANK_END, DUEL_STATE
+from .ps1_runtime import BANK_END, DUEL_STATE, _runtime_bundle
 from .richtext import CUSTOM_ICONS
 from .tables import CARD_COUNT
 
@@ -18,94 +19,256 @@ ICON_CODES = {name: 0x40 + index for index, name in enumerate(
     name for name in CUSTOM_ICONS if name not in ('god', 'vinculo_vida', 'restaurar_lp'))}
 ICON_CODES['god'] = 0x31
 MAX_ROWS, COLUMN_WIDTH = 9, 21
+MAX_TEXT_BYTES = 2048  # Includes the terminator read by the BIN verifier.
+
+
+def _text_tokens(raw: bytes):
+    index = 0
+    while index < len(raw):
+        size = 3 if raw[index] == 0xF8 else 1
+        if index + size > len(raw):
+            raise ModError('Comando de descrição PS1 incompleto.')
+        yield raw[index:index + size]
+        index += size
+
+
+def _columns(token: bytes) -> int:
+    if token[0] != 0xF8:
+        return 1
+    return 0 if token[1] == 0x0A else 2
+
+
+def _cursor(rows, column, token):
+    if token == b'\xfe':
+        return rows + 1, 0
+    width = _columns(token)
+    if column + width > COLUMN_WIDTH:
+        return rows + 1, width
+    return rows, column + width
+
+
+def _layout(raw: bytes) -> tuple[int, set[int]]:
+    rows, column = 1, 0
+    icons = set()
+    for token in _text_tokens(raw):
+        if token[:2] == b'\xf8\x0b':
+            icons.add(token[2])
+        rows, column = _cursor(rows, column, token)
+    return rows, icons
 
 
 def _measure(raw: bytes) -> set[int]:
     """Count the native viewer's 8-pixel columns and return sprite codes."""
-    index, rows, width = 0, 1, 0
-    icons = set()
-    while index < len(raw):
-        op = raw[index]
-        if op == 0xF8:
-            command, operand = raw[index + 1:index + 3]
-            index += 3
-            if command == 0x0A:
-                continue
-            icons.add(operand)
-            size = 2
-        elif op == 0xFE:
-            index += 1
-            rows += 1
-            width = 0
-            continue
-        else:
-            index += 1
-            size = 1
-        if width + size > COLUMN_WIDTH:
-            rows += 1
-            width = 0
-        width += size
+    rows, icons = _layout(raw)
     if rows > MAX_ROWS:
         raise ModError(f'Descrição ocupa {rows} linhas. A tela PS1 comporta {MAX_ROWS} de {COLUMN_WIDTH} colunas.')
+    if len(raw) + 1 > MAX_TEXT_BYTES:
+        raise ModError(f'Os comandos da descrição excedem {MAX_TEXT_BYTES} bytes no PS1.')
     return icons
 
 
-def patch_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
-                       *, start: int = DUEL_STATE, end: int = BANK_END) -> tuple[bytes, list[dict], set[str], list[str]]:
-    """Reuse original string slots and allocate larger strings from the verified bank tail."""
-    if not DUEL_STATE <= start <= end <= BANK_END:
-        raise ModError('Área de descrições PS1 fora do banco de texto.')
-    cmap, _ = glyph_map(exe)
+def _reflow(raw: bytes) -> bytes:
+    """Collapse manual line breaks and keep icon commands together."""
+    out = bytearray()
+    gap, visible = False, False
+    rows, column = 1, 0
+    for token in _text_tokens(raw):
+        if token in (b'\x00', b'\xfe'):
+            gap = visible
+            continue
+        width = _columns(token)
+        if width and gap:
+            if column < COLUMN_WIDTH:
+                out.append(0)
+                column += 1
+            else:
+                out.append(0xFE)
+                rows, column = rows + 1, 0
+            gap = False
+        next_row, next_column = _cursor(rows, column, token)
+        if width == 2 and next_row != rows:
+            out.append(0xFE)  # The icon renderer itself does not wrap.
+        out.extend(token)
+        rows, column = next_row, next_column
+        visible |= bool(width)
+    return bytes(out)
+
+
+def compile_description(value: str, cmap: dict, cards: dict) -> tuple[bytes, str, bool]:
+    """Encode the full text, reflowing only when the original layout is too tall."""
     font = set(cmap.values())
+    simplified = set()
+
+    def normalize(text):
+        result = []
+        for char in text:
+            fallback = ''.join(base for base in unicodedata.normalize('NFD', char)
+                               if not unicodedata.combining(base))
+            if char not in font and fallback and all(base in font for base in fallback):
+                simplified.add(char)
+                result.append(fallback)
+            else:
+                result.append(char)
+        return ''.join(result)
+
+    raw = _encode_description(value.replace('\r\n', '\n').replace('\r', '\n'),
+                              cmap, cards, icon_codes=ICON_CODES, normalize=normalize)
+    reflowed = _reflow(raw) if _layout(raw)[0] > MAX_ROWS else raw
+    return reflowed, ''.join(sorted(simplified)), reflowed != raw
+
+
+def preview_description(raw: bytes, cmap: dict, byte_limit: int) -> bytes | None:
+    """Fit a prefix plus an ellipsis in the given payload and screen budget."""
+    dot = next((code for code, char in cmap.items() if char == '.'), None)
+    if dot is None:
+        return None
+    suffix = bytes([dot]) * 3 + b'\xf8\x0a\x00'
+    budget = min(byte_limit, MAX_TEXT_BYTES - 1) - len(suffix)
+    rows, column, used = 1, 0, 0
+    prefix = []
+    for token in _text_tokens(raw):
+        next_row, next_column = _cursor(rows, column, token)
+        if (used + len(token) > budget or next_row > MAX_ROWS
+                or next_row == MAX_ROWS and next_column > COLUMN_WIDTH - 3):
+            break
+        prefix.append(token)
+        rows, column = next_row, next_column
+        used += len(token)
+    while prefix and (prefix[-1] in (b'\x00', b'\xfe') or _columns(prefix[-1]) == 0):
+        prefix.pop()
+    if not prefix or used == len(raw):
+        return None
+    return b''.join(prefix) + suffix
+
+
+def description_regions(plan, *, has_lp: bool) -> list[tuple[int, int]]:
+    """Find free intervals in the text bank without taking space from native code."""
+    from .ps1_mod import LP_CODE, LP_BANK_END
+
+    bundle = _runtime_bundle(plan)
+    occupied = [(bundle.RUNTIME_RANK_HUD_BASE, bundle.RUNTIME_RANK_HUD_END)]
+    for enabled, section in (
+        (plan.grave_filters, 'RUNTIME_GRAVE_FILTERS'),
+        (plan.entry_markers, 'RUNTIME_MARKERS'),
+        (plan.mod_features, 'RUNTIME_MOD'),
+        (plan.password_prefix is not None and plan.capacity == CARD_COUNT, 'RUNTIME_PASSWORD'),
+        (plan.gameplay, 'RUNTIME_EXT'),
+    ):
+        if enabled:
+            occupied.append((getattr(bundle, section + '_BASE'), getattr(bundle, section + '_END')))
+    if has_lp:
+        occupied.append((LP_CODE, LP_BANK_END))
+    regions = []
+    start = plan.data_end
+    for lo, hi in sorted(occupied):
+        if start < lo:
+            regions.append((start, lo))
+        start = max(start, hi)
+    if start < BANK_END:
+        regions.append((start, BANK_END))
+    return regions
+
+
+def _vacant_slot(exe: bytes) -> int | None:
+    """Read the original empty description shared by unused IDs."""
+    table = exe_pos(STRING_TABLE + 2 * 0x100, exe, 2)
+    pointer = struct.unpack_from('<H', exe, table)[0]
+    if pointer:
+        at = exe_pos(BANK_DESC + pointer, exe, 1)
+        if exe[at] == 0xFF:
+            return at
+    return None
+
+
+def patch_descriptions(exe: bytes, changes: dict[int, str], cards: dict,
+                       *, start: int = DUEL_STATE, end: int = BANK_END,
+                       regions=None, preview_new: bool = False) -> tuple[bytes, list[dict], set[str], list[str]]:
+    """Place valid edits in existing slots or free intervals and share identical texts."""
+    from .ps1_expansion import PS1_CARD_CAPACITY
+
+    available = []
+    previous_end = DUEL_STATE
+    for lo, hi in sorted(regions if regions is not None else [(start, end)]):
+        if not previous_end <= lo <= hi <= BANK_END:
+            raise ModError('Área de descrições PS1 fora do banco de texto.')
+        previous_end = hi
+        at = exe_pos(lo, exe, hi - lo)
+        if hi > lo and not any(exe[at:at + hi - lo]):
+            available.append([at, at + hi - lo])
+    cmap, _ = glyph_map(exe)
     out = bytearray(exe)
-    rows, pending, needed = [], [], set()
+    rows, pending, deferred, needed = [], {}, [], set()
     icon_names = {code: name for name, code in ICON_CODES.items()}
+    empty = _vacant_slot(exe)
+    shared = {b'': empty} if empty is not None else {}
+
+    def allocate(raw):
+        if raw in shared:
+            return shared[raw]
+        size = len(raw) + 1
+        slot = min((pair for pair in available if pair[1] - pair[0] >= size),
+                   key=lambda pair: pair[1] - pair[0], default=None)
+        if slot is None:
+            raise ModError('O espaço para descrições maiores deste BIN está cheio.')
+        at = slot[0]
+        slot[0] += size
+        shared[raw] = at
+        return at
+
+    def write_text(cid, raw, offset, relocated, icons, simplified, reflowed, reason=''):
+        if relocated:
+            pointer = exe_pos(STRING_TABLE + 2 * (0x100 + cid), exe, 2)
+            struct.pack_into('<H', out, pointer, offset - exe_pos(BANK_DESC, exe))
+        out[offset:offset + len(raw) + 1] = raw + b'\xff'
+        shared.setdefault(raw, offset)
+        names = {icon_names[code] for code in icons if code in icon_names}
+        row = {'id': cid, 'offset_exe': offset, 'bytes': len(raw) + 1,
+               'realocada': relocated, 'icones': sorted(names),
+               'acentos_simplificados': simplified, 'quebras_reorganizadas': reflowed,
+               'sha256_texto': hashlib.sha256(raw).hexdigest()}
+        if reason:
+            row.update(resumida=True, motivo=reason)
+        rows.append(row)
+        needed.update(names)
+
     for cid, value in sorted(changes.items()):
-        simplified = set()
-
-        def normalize(text):
-            result = []
-            for char in text:
-                fallback = ''.join(base for base in unicodedata.normalize('NFD', char)
-                                   if not unicodedata.combining(base))
-                if char not in font and fallback and all(base in font for base in fallback):
-                    simplified.add(char)
-                    result.append(fallback)
-                else:
-                    result.append(char)
-            return ''.join(result)
-
         try:
-            if not 1 <= cid <= 740:
+            if not 1 <= cid <= PS1_CARD_CAPACITY:
                 raise ModError('Edição PS1 requer ID de 1 a 740.')
-            raw = _encode_description(value.replace('\r\n', '\n'), cmap, cards,
-                                      icon_codes=ICON_CODES, normalize=normalize)
-            icons = _measure(raw)
+            raw, simplified, reflowed = compile_description(value, cmap, cards)
             try:
                 offset, capacity = description_slot(exe, cid)
             except ModError:
                 offset, capacity = 0, -1
-            moved = len(raw) > capacity
-            if moved:
-                size = len(raw) + 1
-                if start + size > end:
-                    raise ModError('O espaço para descrições maiores deste BIN está cheio.')
-                offset = exe_pos(start, exe, size)
-                if any(exe[offset:offset+size]):
-                    raise ModError('Área reservada de descrição já contém texto ou código.')
-                pointer = exe_pos(STRING_TABLE + 2 * (0x100 + cid), exe, 2)
-                struct.pack_into('<H', out, pointer, start - BANK_DESC)
-                start += size
-            raw += b'\xff'
-            out[offset:offset+len(raw)] = raw
-            names = {icon_names[code] for code in icons if code in icon_names}
-            rows.append({'id': cid, 'offset_exe': offset, 'bytes': len(raw),
-                         'realocada': moved, 'icones': sorted(names),
-                         'acentos_simplificados': ''.join(sorted(simplified))})
-            needed.update(names)
+            relocated = len(raw) > capacity
+            try:
+                icons = _measure(raw)
+                if relocated:
+                    offset = allocate(raw)
+            except ModError as exc:
+                if not preview_new or cid <= CARD_COUNT:
+                    raise
+                deferred.append((cid, raw, simplified, reflowed, str(exc)))
+                continue
+            write_text(cid, raw, offset, relocated, icons, simplified, reflowed)
         except ModError as exc:
-            pending.append(f'#{cid}: descrição: {exc}')
-    return bytes(out), rows, needed, pending
+            pending[cid] = str(exc)
+
+    # Use the remaining space only after all full descriptions were tried.
+    previews = {}
+    for cid, raw, simplified, reflowed, reason in deferred:
+        preview = previews.get(raw)
+        if preview is None:
+            budget = max((hi - lo - 1 for lo, hi in available), default=0)
+            preview = preview_description(raw, cmap, budget)
+        if preview is None:
+            pending[cid] = reason
+            continue
+        write_text(cid, preview, allocate(preview), True, _measure(preview),
+                   simplified, reflowed, reason)
+        previews[raw] = preview
+    return (bytes(out), sorted(rows, key=lambda row: row['id']), needed,
+            [f'#{cid}: descrição: {reason}' for cid, reason in sorted(pending.items())])
 
 
 def _indexed_sprite(name: str) -> tuple[list[bytes], bytes]:

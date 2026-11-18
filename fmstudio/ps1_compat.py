@@ -11,7 +11,7 @@ from .ps1_content import name_patch_info, description_patch_info
 from .core import ACTIONS, ModError, ps1_supports_god24
 from .expanded import GOD_TYPE_ID
 from .ps1_runtime import compile_effects
-from .ps1_mod import LP_CODE, LP_BANK_END, compile_mod
+from .ps1_mod import compile_mod
 
 
 def audit(project) -> dict:
@@ -136,10 +136,10 @@ def audit(project) -> dict:
             if not native_profile or (cid > CARD_COUNT and cid not in extra_ids):
                 blocked.append(f'#{cid}: cores de tier no BIN/CUE exigem carta nativa e perfil Drop x15.')
     if descriptions:
-        from .ps1_text import patch_descriptions
+        from .ps1_text import description_regions, patch_descriptions
         catalog={cid:project.get(cid) for cid in project.cards}
-        _,rows,icons,pending=patch_descriptions(exe,descriptions,catalog,start=native_plan.data_end,
-                                               end=min(native_plan.bank_end, LP_CODE if mod_plan.has_lp else LP_BANK_END))
+        _,rows,icons,pending=patch_descriptions(
+            exe,descriptions,catalog,regions=description_regions(native_plan, has_lp=mod_plan.has_lp))
         counts['descricoes']=len(rows)
         counts['icones_especiais']=len(icons)
         for row in rows:
