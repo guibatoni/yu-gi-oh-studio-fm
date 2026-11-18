@@ -1,3 +1,15 @@
+## v1.9.9 — Deck dos oponentes com base na ISO original
+
+- Botão **Criar deck da ISO original** com prévia rolável de IDs,
+  nomes, pesos e probabilidades para o oponente selecionado.
+- Usa apenas os registros do grupo `deck` em
+  `base/decks_drops.csv`, extraídos do `WA_MRG.MRG`.
+- Restaura o comportamento herdado sem quantizar nem modificar
+  a tabela original do PS1; mantém os demais duelistas e drops.
+- O botão **Salvar deck** reconhece pools idênticos aos
+  originais e evita um patch redundante; mudanças personalizadas
+  seguem a validação já existente no Studio.
+
 ## v1.9.8 — Editor múltiplo, efeitos e ícones de LP
 
 - Baú e Password com múltipla seleção Ctrl/Shift/Ctrl+A, contador, prévia
