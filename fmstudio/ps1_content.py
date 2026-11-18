@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 from .core import ModError
 from .deep_extract import BANK_NAMES, BANK_DESC, NAME_TABLE, STRING_TABLE, glyph_map, exe_pos
+from .png_pixels import read_png, resize_rgba
 from .tables import CARD_COUNT
 
 ART_WIDTH, ART_HEIGHT = 102, 96
@@ -81,32 +82,49 @@ def _palette(raw: bytes, offset: int, size: int) -> list[tuple[int,int,int,int]]
     return result
 
 
-def _map_png(png:Path, dimensions:tuple[int,int], palette:list[tuple[int,int,int,int]]) -> bytes:
+def _rgba_views(png: Path, sizes: tuple[tuple[int, int], ...]) -> tuple[bytes, ...]:
+    """Decode once for the two PS1 renders. Pillow is an optional accelerator."""
     try:
         from PIL import Image
-    except ImportError as exc:
-        raise ModError('Para gravar artes no BIN, instale Pillow: python -m pip install pillow') from exc
-    try:
         with Image.open(png) as source:
-            source.load()
-            im=source.convert('RGBA')
-            if im.size != dimensions:
-                im=im.resize(dimensions,Image.Resampling.LANCZOS)
-            pixels=list(im.get_flattened_data() if hasattr(im, "get_flattened_data") else im.getdata())
-    except (OSError,ValueError) as exc:
-        raise ModError(f'PNG inválido em {png.name}: {exc}') from exc
-    colors=[(i,p[:3]) for i,p in enumerate(palette) if p[3]]
+            image = source.convert('RGBA')
+            lanczos = getattr(Image, 'Resampling', Image).LANCZOS
+            return tuple((image if image.size == size else image.resize(size, lanczos)).tobytes()
+                         for size in sizes)
+    except (ImportError, OSError, ValueError):
+        try:
+            width, height, pixels = read_png(png)
+            return tuple(resize_rgba(pixels, (width, height), size) for size in sizes)
+        except (OSError, ValueError) as exc:
+            raise ModError(f'Não foi possível ler o PNG {png.name}: {exc}') from exc
+
+
+def _index_art(pixels: bytes, palette: list[tuple[int, int, int, int]]) -> bytes:
+    colors = [(i, red, green, blue) for i, (red, green, blue, used) in enumerate(palette) if used]
     if not colors:
         raise ModError('Paleta original vazia, impossível substituir arte com segurança.')
-    cache={}
-    def nearest(c):
-        if c[3]<128:
-            return 0
-        rgb=c[:3]
-        if rgb not in cache:
-            cache[rgb]=min(colors,key=lambda p:sum((a-b)**2 for a,b in zip(p[1],rgb)))[0]
-        return cache[rgb]
-    return bytes(nearest(c) for c in pixels)
+    indices = bytearray(len(pixels) // 4)
+    cache = {}
+    for i in range(len(indices)):
+        at = i * 4
+        if pixels[at + 3] < 128:
+            continue
+        color = pixels[at:at + 3]
+        index = cache.get(color)
+        if index is None:
+            red, green, blue = color
+            index = min(colors, key=lambda p: (red - p[1]) ** 2 + (green - p[2]) ** 2 + (blue - p[3]) ** 2)[0]
+            cache[color] = index
+        indices[i] = index
+    return bytes(indices)
+
+
+def render_card_art(png: Path, art_record: bytes, thumbnail_record: bytes) -> tuple[bytes, bytes]:
+    """Render pixels for an original or additional card using its local CLUTs."""
+    art_colors = _palette(art_record, 0x2640, 256)
+    thumbnail_colors = _palette(thumbnail_record, 0x500, 64)
+    art, thumbnail = _rgba_views(png, ((ART_WIDTH, ART_HEIGHT), (THUMB_WIDTH, THUMB_HEIGHT)))
+    return _index_art(art, art_colors), _index_art(thumbnail, thumbnail_colors)
 
 
 def patch_card_art(wa: bytes, cid: int, png:Path) -> tuple[bytes, list[dict]]:
@@ -119,13 +137,9 @@ def patch_card_art(wa: bytes, cid: int, png:Path) -> tuple[bytes, list[dict]]:
         raise ModError('Artes de cartas adicionais exigem expansão de arquivos do PS1.')
     base=((cid-1)*7+722)*WA_SECTOR
     thumb=(cid-1)*WA_SECTOR
-    regions=[('arte',base,ART_WIDTH,ART_HEIGHT,base+0x2640,256),
-             ('miniatura',thumb,THUMB_WIDTH,THUMB_HEIGHT,thumb+0x500,64)]
+    art, thumbnail = render_card_art(Path(png), wa[base:base+7*WA_SECTOR], wa[thumb:thumb+WA_SECTOR])
     result=bytearray(wa);modified=[]
-    for kind,offset,width,height,clut,n in regions:
-        if offset+width*height>len(wa):
-            raise ModError('Região de arte fora dos limites do disco.')
-        pixels=_map_png(Path(png),(width,height),_palette(wa,clut,n))
+    for kind, offset, pixels in (('arte', base, art), ('miniatura', thumb, thumbnail)):
         if bytes(result[offset:offset+len(pixels)]) != pixels:
             result[offset:offset+len(pixels)]=pixels
             modified.append({'id':cid,'regiao':kind,'offset_wa':offset,'bytes':len(pixels)})
