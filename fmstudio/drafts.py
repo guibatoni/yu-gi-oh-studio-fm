@@ -103,9 +103,32 @@ class DraftSession:
             self.effects[cid] = entries
 
     def add_effect(self, cid: int, entry: dict) -> None:
+        self.add_effects(cid, [entry])
+
+    def add_effects(self, cid: int, entries: list[dict]) -> None:
+        """Valida lote antes de alterar o rascunho, sem duplicar regras iguais."""
+        from .core import ModError
+        if cid not in self.project.cards:
+            raise ModError('Carta inexistente.')
         items = self.get_effects(cid)
-        items.append(check_effect(entry))
+        accepted = [check_effect(entry) for entry in entries]
+        if len(accepted) != len(entries) or not accepted:
+            raise ModError('Selecione efeitos para adicionar.')
+        for entry in accepted:
+            if entry in items:
+                raise ModError('Efeito já está cadastrado nesta carta. Revise duplicatas.')
+            items.append(dict(entry))
         self._stage_effects(cid, items)
+
+    def set_effects(self, cid: int, entries: list[dict]) -> None:
+        """Substituição atômica de rascunho, usada para colar efeitos."""
+        from .core import ModError
+        if cid not in self.project.cards:
+            raise ModError('Carta inexistente.')
+        validated=[check_effect(entry) for entry in entries]
+        if len({str(sorted(entry.items())) for entry in validated}) != len(validated):
+            raise ModError('A lista contém efeitos exatamente duplicados.')
+        self._stage_effects(cid, [dict(entry) for entry in validated])
 
     def set_quick_abilities(self, cid: int, settings: dict, *, default_copies: int | None = 3) -> None:
         from .abilities import replace_quick_effects

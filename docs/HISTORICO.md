@@ -1,3 +1,16 @@
+## v1.9.8 — Editor múltiplo, efeitos e ícones de LP
+
+- Baú e Password com múltipla seleção Ctrl/Shift/Ctrl+A, contador, prévia
+  antes/depois e edição atômica de quantidades do Studio e preços PS1.
+- Editor de efeitos: filtros e pesquisa, Aplicar acumulativo, OK/Cancelar,
+  Ctrl+C/Ctrl+V e colagem com acrescentar/substituir e alertas de referência.
+- Editor de ícones com seleção acumulativa e confirmação única.
+- Tokens F8 0B 49/4A e hook MIPS 11-slot nos perfis originais e expandidos,
+  com bloqueios de CLUT e sprite ocupados.
+- Permanecem pendentes os multiplicadores de drops configuráveis reais,
+  a correção definitiva das descrições vistas no ePSXe e as mecânicas LP
+  dos ícones. Sem testes de execução do BIN em emulador nesta versão.
+
 ## v1.9.6 — Descrições, títulos e enquadramento no PS1
 
 - Preenche a arte e as miniaturas por recorte central no perfil Automático.

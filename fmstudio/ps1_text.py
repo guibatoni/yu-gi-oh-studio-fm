@@ -16,7 +16,7 @@ from .tables import CARD_COUNT
 
 # Matches DescriptionIcon in tools/ps1/hooks.S. God uses the v1.4.24 slot.
 ICON_CODES = {name: 0x40 + index for index, name in enumerate(
-    name for name in CUSTOM_ICONS if name not in ('god', 'vinculo_vida', 'restaurar_lp'))}
+    name for name in CUSTOM_ICONS if name != 'god')}
 ICON_CODES['god'] = 0x31
 MAX_ROWS, COLUMN_WIDTH = 9, 21
 MAX_TEXT_BYTES = 2048  # Includes the terminator read by the BIN verifier.
@@ -24,7 +24,7 @@ COLOR_CONTROL = b'\xf8\x0a'
 ICON_CONTROL = b'\xf8\x0b'
 PUNCTUATION = str.maketrans({'–': '-', '—': '-', '−': '-', '’': "'", '‘': "'",
                             '“': '"', '”': '"', '…': '...', '×': 'x', '\xa0': ' '})
-TEXT_ICON_LABELS = {'vinculo_vida': 'Vinculo de vida', 'restaurar_lp': 'Restaura LP'}
+TEXT_ICON_LABELS = {}  # Os dois glifos LP possuem agora slots MIPS 0x49 e 0x4A.
 
 
 def _text_tokens(raw: bytes):

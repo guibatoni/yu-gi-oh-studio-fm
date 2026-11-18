@@ -41,9 +41,14 @@ class DescriptionWriteTests(unittest.TestCase):
         self.assertEqual(offset, rows[0]['offset_exe'])
         self.assertEqual(patched[offset:offset+51], bytes([1]*50+[255]))
 
-    def test_native_unsupported_icon_is_not_silently_dropped(self):
-        with self.assertRaisesRegex(ModError, r'#1: descrição:.*vinculo_vida'):
-            self.apply({1: '{icon:vinculo_vida}'}, native=True)
+    def test_native_life_icon_written_as_real_glyph_code(self):
+        patched, rows, icons, failures = self.apply(
+            {1: '{icon:vinculo_vida}'}, native=True)
+        self.assertFalse(failures)
+        self.assertEqual(icons, {'vinculo_vida'})
+        self.assertEqual(len(rows), 1)
+        offset, _ = description_slot(patched, 1)
+        self.assertEqual(patched[offset:offset+4], bytes((0xf8,0x0b,0x49,0xff)))
 
     def test_explicit_fallback_keeps_old_slot_and_records_reason(self):
         original = sample_exe()
@@ -71,14 +76,15 @@ class DescriptionWriteTests(unittest.TestCase):
         self.assertEqual(len(skipped), 1)
         self.assertIn('#2:', skipped[0])
 
-    def test_unsupported_new_icon_keeps_original_in_opt_in_mode(self):
-        original = sample_exe()
-        result, rows, _, skipped = self.apply(
+    def test_life_icon_is_not_replaced_by_words_in_opt_in_mode(self):
+        patched, rows, icons, skipped = self.apply(
             {1: '{icon:restaurar_lp}'}, native=True,
             policy='preserve_incompatible')
-        self.assertEqual(result, original)
-        self.assertEqual(rows, [])
-        self.assertIn('restaurar_lp', skipped[0])
+        self.assertFalse(skipped)
+        self.assertEqual(icons, {'restaurar_lp'})
+        self.assertFalse(rows[0].get('resumida', False))
+        offset, _ = description_slot(patched, 1)
+        self.assertEqual(patched[offset:offset+4], bytes((0xf8,0x0b,0x4a,0xff)))
 
     def test_unknown_policy_is_rejected(self):
         with self.assertRaisesRegex(ModError, 'Política'):
@@ -87,7 +93,10 @@ class DescriptionWriteTests(unittest.TestCase):
     def test_strict_error_exposes_all_failed_ids(self):
         with self.assertRaises(DescriptionCompatibilityError) as ctx:
             self.apply({1: 'A' * 50, 2: '{icon:restaurar_lp}'})
+        # Perfil não-nativo não possui o hook PS1; ambos são rejeitados.
         self.assertEqual(len(ctx.exception.failures), 2)
+        self.assertEqual([row.split(':')[0] for row in ctx.exception.failures],
+                         ['#1', '#2'])
 
     def test_invalid_description_does_not_modify_source_file(self):
         source = sample_exe()
@@ -126,20 +135,20 @@ class DescriptionWriteTests(unittest.TestCase):
         args = dict(native_profile=True, start=plan.data_end, end=0x801CF9B0, regions=regions)
         with self.assertRaises(DescriptionCompatibilityError) as ctx:
             _apply_card_descriptions(source, changes, {}, **args)
-        self.assertEqual([problem.split(':', 1)[0] for problem in ctx.exception.failures], ['#723', '#725'])
+        self.assertEqual([problem.split(':', 1)[0] for problem in ctx.exception.failures], ['#723'])
         patched, rows, _, failures = _apply_card_descriptions(
             source, changes, {}, policy='preserve_incompatible', **args)
-        self.assertEqual([(row['id'], row.get('resumida', False)) for row in rows], [(723, True), (724, False)])
-        self.assertEqual(len(failures), 1)
-        self.assertIn('#725:', failures[0])
-        for cid in range(725, 741):
+        self.assertEqual([(row['id'], row.get('resumida', False)) for row in rows],
+                         [(723, True), (724, False), (725, False)])
+        self.assertFalse(failures)
+        for cid in range(726, 741):
             pointer = where(0x801C0000 + 2 * (0x100 + cid))
             self.assertEqual(struct.unpack_from('<H', patched, pointer)[0], vacant)
         with patch('fmstudio.ps1_expansion.inspect_expansion',
                    return_value={'status': 'aplicado', 'capacidade': 740}):
             results = [inspect_exe_description(patched, cid, text, {}, native_profile=True)
                        for cid, text in changes.items()]
-        self.assertEqual([row['status'] for row in results], ['resumida', 'aplicada', 'sem_texto'])
+        self.assertEqual([row['status'] for row in results], ['resumida', 'aplicada', 'aplicada'])
         self.assertEqual(results[1]['texto_no_bin'], changes[724])
 
     def test_complete_description_gets_storage_before_an_optional_preview(self):
@@ -169,7 +178,7 @@ class DescriptionWriteTests(unittest.TestCase):
         self.assertEqual(result['status'], 'resumida')
         self.assertEqual(result['texto_no_bin'], 'AB AB AB...')
 
-    def test_unmapped_studio_icons_render_as_words_in_compatible_new_descriptions(self):
+    def test_life_icons_use_real_codes_in_compatible_new_descriptions(self):
         source = bytearray(sample_exe())
         letters = sorted(set('Vinculo de vida Restaura LP') - {' '})
         codes = (i for i in range(4, 0x5C) if i not in (0x1B, 0x27, 0x28, 0x30, 0x40, 0x47))
@@ -181,12 +190,13 @@ class DescriptionWriteTests(unittest.TestCase):
             source, {723: text}, {}, native_profile=True, start=0x801CD5A0,
             end=0x801CD5A0 + 90, policy='preserve_incompatible')
         self.assertFalse(pending)
-        self.assertTrue(rows[0]['resumida'])
+        self.assertFalse(rows[0].get('resumida', False))
+        self.assertEqual(patched[rows[0]['offset_exe']:rows[0]['offset_exe']+3],
+                         bytes((0xf8,0x0b,0x49)))
         with patch('fmstudio.ps1_expansion.inspect_expansion',
                    return_value={'status': 'aplicado', 'capacidade': 740}):
             result = inspect_exe_description(patched, 723, text, {}, native_profile=True)
-        self.assertEqual(result['status'], 'resumida')
-        self.assertEqual(result['texto_no_bin'], 'Vinculo de vida Restaura LP')
+        self.assertEqual(result['status'], 'aplicada')
 
     def test_identical_new_descriptions_share_one_native_string(self):
         _, rows, _, pending = _apply_card_descriptions(

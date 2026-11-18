@@ -43,11 +43,17 @@ class DescriptionReadbackTests(unittest.TestCase):
         result = self.inspect(modified, 'A'*50, native=True)
         self.assertEqual(result['status'], 'aplicada')
 
-    def test_new_life_icon_not_reported_as_exported(self):
+    def test_life_icon_is_not_reported_as_exported_until_actual_bytes_are_written(self):
         original = sample_exe()
         result = self.inspect(original, '{icon:vinculo_vida}', native=True)
-        self.assertEqual(result['status'], 'incompativel')
-        self.assertIn('vinculo_vida', result['motivo'])
+        self.assertEqual(result['status'], 'original')
+        patched, rows, icons, failures = patch_extended(
+            original, {1:'{icon:vinculo_vida}'}, {},
+            start=0x801CD5A0, end=0x801D0000)
+        self.assertFalse(failures)
+        self.assertIn('vinculo_vida',icons)
+        confirmed = self.inspect(patched, '{icon:vinculo_vida}', native=True)
+        self.assertEqual(confirmed['status'], 'aplicada')
 
     def test_custom_card_above_722_remains_studio_only(self):
         result = inspect_exe_description(sample_exe(), 723, 'Teste', {})

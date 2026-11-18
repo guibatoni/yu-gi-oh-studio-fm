@@ -1,0 +1,45 @@
+name: Validar editor em massa, efeitos e ícones PS1
+on:
+  pull_request:
+    paths:
+      - 'fmstudio/bulk_editor.py'
+      - 'fmstudio/bulk_gui.py'
+      - 'fmstudio/effects_transfer.py'
+      - 'fmstudio/icon_composer.py'
+      - 'fmstudio/gui.py'
+      - 'fmstudio/mod_tools_gui.py'
+      - 'fmstudio/drafts.py'
+      - 'fmstudio/ps1_text.py'
+      - 'fmstudio/ps1_runtime_blob.py'
+      - 'fmstudio/ps1_expanded_runtime_blob.py'
+      - 'tools/ps1/hooks.S'
+      - 'tests/test_bulk_effect_transfer.py'
+      - 'tests/test_life_description_icons.py'
+      - 'fmstudio/updates.py'
+      - '.github/workflows/studio-multiedit-icons.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  studio:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pillow para sprites 16×16
+        run: python -m pip install pillow
+      - name: Compilar sintaxe
+        run: python -m compileall -q fmstudio tests app.py updater_main.py
+      - name: Testar edição em massa, clipboard e ícones LP
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p test_bulk_effect_transfer.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_life_description_icons.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Suíte completa do Studio
+        run: python -m unittest discover -s tests -v
+      - name: Gerar fonte e validar arquivos do atualizador
+        run: python tools/package_source.py --out FM-Mod-Studio-Source.zip
