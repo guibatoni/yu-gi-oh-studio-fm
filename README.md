@@ -1,3 +1,14 @@
+## Studio FM v1.9.11 — Quests antes do duelo e retorno à loja
+
+Simon Muran está liberado. Os outros 37 duelistas pedem a doação
+antes da luta. Em **Edição do Mod → Quests da campanha**, escolha
+um NPC e clique em **Editar quest**. A opção **Voltar ao Card Shop**
+permite buscar as cartas e retomar o confronto ao sair da loja.
+
+[Instruções e exemplo de quest](docs/QUESTS_CAMPANHA_PS1.md).
+
+---
+
 ## Studio FM v1.9.10 — Quests de doação na campanha PS1
 
 Em **Edição do Mod → Quests da campanha**, ative a opção de teste,

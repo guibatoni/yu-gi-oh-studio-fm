@@ -50,18 +50,22 @@ def main():
                                          text=True).splitlines())}
         sections = quest_sections(executable.read_bytes())
     address, payload = sections['.quest']
-    win_at, win = sections['.quest_win']
+    duel_at, duel = sections['.quest_before']
     answer_at, answer = sections['.quest_answer']
+    shop_at, shop = sections['.quest_shop']
     if (address != BASE or names['QuestConfiguration'] != BASE + len(payload)
-            or names['QuestWinLoader'] != win_at or names['QuestAnswerLoader'] != answer_at):
+            or names['QuestDuelLoader'] != duel_at or names['QuestAnswerLoader'] != answer_at
+            or names['QuestShopLoader'] != shop_at):
         raise ValueError('Endereços do código MIPS divergentes.')
     header = ['"""Gerado por tools/compile_ps1_campaign_quests.py."""',
               f'BASE = 0x{BASE:08X}', f'SIZE = {len(payload)}',
               f'SHA256 = {hashlib.sha256(payload).hexdigest()!r}', 'ENTRY_POINTS = {']
     header.extend(f'    {name!r}: 0x{names[name]:08X},' for name in
-                  ('QuestAfterWin', 'QuestAnswer', 'QuestCountMissing', 'QuestConfiguration'))
-    header.extend(('}', f'SECTOR_OFFSET = {names["QuestSectorImmediate"] - win_at}'))
-    for name, data in (('WIN_LOADER', win), ('ANSWER_LOADER', answer),
+                  ('QuestBeforeDuel', 'QuestAnswer', 'QuestResumeShop', 'QuestCountMissing',
+                   'QuestConfiguration'))
+    header.extend(('}', f'SECTOR_OFFSET = {names["QuestSectorImmediate"] - duel_at}',
+                   f'RELAY_OFFSET = {names["QuestShopRelay"] - shop_at}'))
+    for name, data in (('DUEL_LOADER', duel), ('ANSWER_LOADER', answer), ('SHOP_LOADER', shop),
                        ('PAYLOAD', payload.rstrip(b'\0'))):
         header += [f'{name} = bytes.fromhex("""']
         header.extend(data[i:i + 32].hex(' ') for i in range(0, len(data), 32))

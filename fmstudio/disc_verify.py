@@ -211,7 +211,10 @@ def describe(result):
         text.append('Rank ao vivo incompleto na cópia. Gere outro BIN/CUE.')
     quests = result.get('quests_campanha_ps1', {})
     if quests.get('status') == 'aplicado':
-        text.append(f'Quests de doação confirmadas no BIN para {quests["duelistas"]} duelistas.')
+        text.append(f'Quests antes do duelo confirmadas no BIN para {quests["duelistas"]} duelistas. '
+                    'Simon está liberado e a saída do Card Shop retoma o duelo pendente.')
+    elif quests.get('status') == 'pos_vitoria':
+        text.append('Esta cópia usa as quests após a vitória. Gere outro BIN/CUE para usar as quests pré-duelo.')
     elif quests.get('ativado_no_projeto'):
         text.append('As quests do projeto não foram encontradas completas no BIN selecionado.')
     if runtime.get('status')=='aplicado':

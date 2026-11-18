@@ -1,3 +1,14 @@
+## v1.9.11 — Quests antes do duelo e retorno à loja
+
+- Simon Muran livre. Os outros 37 duelistas cobram a doação antes da luta.
+- Editor por NPC com seleção de carta, tipo, atributo, Guardian Star ou
+  raridade e quantidade. A seed gera separadamente a quest de cada NPC.
+- A confirmação exige as cópias reais do baú e protege o deck ativo.
+  Simon permite obter cartas no Free Duel assim que a primeira quest aparece.
+- O Card Shop oferece um ponto de retorno para preparar o deck, salvar e
+  retomar o confronto pendente, inclusive na reta final.
+- O relatório BIN/CUE diferencia a edição pós-vitória da edição pré-duelo.
+
 ## v1.9.10 — Quests de doação na campanha PS1
 
 - Aba **Quests da campanha** em **Edição do Mod** com ativação por projeto,

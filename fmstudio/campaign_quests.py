@@ -15,7 +15,8 @@ from .rarities import RARITIES
 from .tables import (ATTR_NAMES, CARD_COUNT, DECK_SIZE, DUELIST_NAMES_REFERENCE,
                      GUARDIAN_FIELDS, POOL_TOTAL, STAR_NAMES, TYPE_NAMES)
 
-STORY_DUELISTS = range(1, 39)
+SIMON_MURAN = 1
+STORY_DUELISTS = range(2, 39)
 DROP_RANKS = ('pow', 'bcd', 'tec')
 CRITERIA = ('carta', 'tipo', 'atributo', 'guardian_star', 'raridade')
 CATEGORY_NAMES = {
@@ -24,20 +25,29 @@ CATEGORY_NAMES = {
 }
 CATEGORY_LABEL = {'tipo': 'Tipo', 'atributo': 'Atrib.', 'guardian_star': 'Estrela', 'raridade': 'Classe'}
 MAX_CRITERIA = 4
-FORMAT = 'fm-campaign-quests-v1'
+FORMAT = 'fm-campaign-quests-v2'
+LEGACY_FORMAT = 'fm-campaign-quests-v1'
+CHEST_CARD_LIMIT = 250
 LABEL_WIDTH = 22
-TABLE_PREFIX = b'FMQ1'
+TABLE_PREFIX = b'FMQ2'
 TABLE_START = (4 + 39 * 2 + 95 + CARD_COUNT + 1) & ~1
 RECORD = struct.Struct(f'<BBHH{LABEL_WIDTH}s')
 
 
 def guaranteed_predecessors(opponent: int) -> tuple[int, ...]:
-    """Required victories shared by all routes. Early and shrine duels can branch."""
-    if opponent <= 7:
+    """Simon is available in Free Duel. Other sources require a prior story win."""
+    if opponent <= SIMON_MURAN:
         return ()
-    previous = [7, *range(9, min(opponent, 19))]
+    previous = [SIMON_MURAN]
+    if opponent > 7:
+        previous.extend((7, *range(9, min(opponent, 18))))
+    # Jono and Teana at Hiding can be encountered before the Palace guard.
+    if opponent >= 21:
+        previous.append(18)
     if opponent in range(22, 31, 2):
         previous.append(opponent - 1)
+    if opponent == 32:
+        previous.append(31)
     if opponent >= 33:
         previous.extend(range(21, 31))
         previous.extend(range(33, opponent))
@@ -139,7 +149,7 @@ class QuestCatalog:
 
 def normalize_overrides(raw):
     """Read manual requirements or retain the criteria from a previous export."""
-    if isinstance(raw, dict) and raw.get('formato') == FORMAT:
+    if isinstance(raw, dict) and raw.get('formato') in (FORMAT, LEGACY_FORMAT):
         rows = raw.get('quests')
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ModError('Arquivo de quests incompleto.')
@@ -152,6 +162,8 @@ def normalize_overrides(raw):
     result = {}
     for key, requirements in raw.items():
         duel = str(_integer(key, 'Duelista da campanha', 1, 38))
+        if duel == str(SIMON_MURAN):
+            continue  # Projects and exports from v1 can still contain Simon's requirement.
         if duel in result or not isinstance(requirements, list) or not 1 <= len(requirements) <= MAX_CRITERIA:
             raise ModError(f'Duelista #{duel}: informe de 1 a {MAX_CRITERIA} requisitos uma vez.')
         result[duel] = []
@@ -186,7 +198,7 @@ def _requirements(cards):
 
 
 def _source(catalog, earlier, eligible):
-    # Prefer a replayable source and then the best odds per rank/sort.
+    """Find the best rank among opponents available to farm before the quest."""
     best = None
     for opponent in earlier:
         for rank in DROP_RANKS:
@@ -196,24 +208,24 @@ def _source(catalog, earlier, eligible):
                 weight = sum(pool[card] for card in available)
                 if best is None or weight > best['peso']:
                     best = {'origem': 'drop', 'duelista_id': opponent, 'grupo': rank, 'peso': weight,
-                            'carta_reserva': max(available, key=pool.get), 'denominador': POOL_TOTAL}
-    if best:
-        return best
-    for group, (draws, pool) in sorted(catalog.starters.items()):
-        if not draws:
-            continue
-        available = sorted(eligible.intersection(pool))
-        if available:
-            weight = sum(pool[card] for card in available)
-            if best is None or weight > best['peso']:
-                best = {'origem': 'inicial', 'grupo': group, 'compras_iniciais': draws, 'peso': weight,
-                        'carta_reserva': max(available, key=pool.get), 'denominador': POOL_TOTAL}
+                            'carta_fonte': max(available, key=pool.get), 'denominador': POOL_TOTAL}
     return best
+
+
+def _validate_inventory_capacity(opponent, criteria, choices, obtainable):
+    """Each subset of requirements needs distinct spares within the chest capacity."""
+    eligible = [choices[row['tipo']][row['alvo']][1] & obtainable for row in criteria]
+    for mask in range(1, 1 << len(criteria)):
+        subset = [i for i in range(len(criteria)) if mask & (1 << i)]
+        ids = set().union(*(eligible[i] for i in subset))
+        needed = sum(criteria[i]['quantidade'] for i in subset)
+        if needed > len(ids) * CHEST_CARD_LIMIT - DECK_SIZE:
+            raise ModError(f'Duelista #{opponent}: as doações exigem mais cópias '
+                           'disponíveis por carta do que o baú comporta com o deck protegido.')
 
 
 def generate_quests(catalog: QuestCatalog, seed: str, overrides=None):
     manual = normalize_overrides({} if overrides is None else overrides)
-    rng = Random(str(seed))
     choices = _requirements(catalog.cards)
     kinds = CRITERIA if len(choices['raridade']) > 1 else CRITERIA[:-1]
     quests = []
@@ -235,10 +247,11 @@ def generate_quests(catalog: QuestCatalog, seed: str, overrides=None):
             for row in manual[str(opponent)]:
                 match = candidate(row['tipo'], row['alvo'], row['quantidade'])
                 if match is None:
-                    raise ModError(f'Duelista #{opponent}: {row["tipo"]} {row["alvo"]} exige '
-                                   'uma fonte no deck inicial ou em um antecessor garantido.')
+                    raise ModError(f'Duelista #{opponent}: {row["tipo"]} {row["alvo"]} deve estar '
+                                   'nos drops de Simon ou de um antecessor garantido.')
                 criteria.append(match)
         else:
+            rng = Random(f'{seed}:{opponent}')
             options = {kind: [row for target in sorted(choices[kind])
                               if (row := candidate(kind, target)) is not None] for kind in kinds}
             available = [kind for kind in kinds if options[kind]]
@@ -247,16 +260,19 @@ def generate_quests(catalog: QuestCatalog, seed: str, overrides=None):
             for kind in rng.sample(available, rng.randint(1, min(2, len(available)))):
                 selected = rng.choices(options[kind], [row['prova']['peso'] for row in options[kind]])[0]
                 proof = selected['prova']
-                draws = proof.get('compras_iniciais') or rng.randint(12, 36 + opponent // 2)
+                draws = rng.randint(12, 36 + opponent // 2)
                 selected['quantidade'] = max(1, min(10 if kind == 'carta' else 50,
                                                    round(draws * proof['peso'] / POOL_TOTAL)))
                 criteria.append(selected)
         criteria.sort(key=lambda row: row['tipo'] != 'carta')
+        obtainable = set().union(*(catalog.drops.get((prior, rank), {})
+                                   for prior in earlier for rank in DROP_RANKS))
+        _validate_inventory_capacity(opponent, criteria, choices, obtainable)
         quests.append({'oponente_id': opponent, 'oponente': DUELIST_NAMES_REFERENCE[opponent],
                        'antecessores': list(earlier), 'criterios': criteria,
                        'dialogo': [f"{row['rotulo']}: {{baú}}/{row['quantidade']}" for row in criteria]})
     return {'formato': FORMAT, 'seed': str(seed), 'sha256_dados': catalog.fingerprint(),
-            'reserva': 'apenas_faltantes_na_entrega', 'quests': quests}
+            'momento': 'antes_do_duelo', 'isentos': [SIMON_MURAN], 'quests': quests}
 
 
 def verify_quests(config, catalog):
@@ -266,7 +282,7 @@ def verify_quests(config, catalog):
         raise ModError('As origens das quests divergem das cartas, drops ou deck inicial.')
     manual = normalize_overrides(config)
     if set(manual) != {str(duel) for duel in STORY_DUELISTS}:
-        raise ModError('A tabela precisa incluir os 38 duelistas da história.')
+        raise ModError(f'A tabela precisa incluir os {len(STORY_DUELISTS)} duelistas com quest.')
     return generate_quests(catalog, config['seed'], manual)
 
 
@@ -290,13 +306,14 @@ def compile_table(config, catalog, glyphs):
             if row['tipo'] == 'carta' and (not label or len(label) > LABEL_WIDTH):
                 label = f"#{row['alvo']} ".encode('ascii') + label
             table += RECORD.pack(CRITERIA.index(row['tipo']), row['quantidade'], row['alvo'],
-                                 row['prova']['carta_reserva'], label[:LABEL_WIDTH])
+                                 row['prova']['carta_fonte'], label[:LABEL_WIDTH])
     return bytes(table)
 
 
 def table_size(data):
     """Validate the offsets and return the on-disc table length."""
-    if not data.startswith(TABLE_PREFIX) or len(data) < TABLE_START:
+    if (not data.startswith(TABLE_PREFIX) or len(data) < TABLE_START
+            or struct.unpack_from('<H', data, 4 + 2 * SIMON_MURAN)[0]):
         raise ModError('Cabeçalho da tabela de quests divergente.')
     end = TABLE_START
     for duel in STORY_DUELISTS:
@@ -307,8 +324,8 @@ def table_size(data):
         if next_end > len(data):
             raise ModError('Tabela binária de quests truncada.')
         for start in range(end + 2, next_end, RECORD.size):
-            kind, amount, target, reserve, _ = RECORD.unpack_from(data, start)
-            if kind >= len(CRITERIA) or not amount or not 1 <= reserve <= CARD_COUNT:
+            kind, amount, _, source, _ = RECORD.unpack_from(data, start)
+            if kind >= len(CRITERIA) or not amount or not 1 <= source <= CARD_COUNT:
                 raise ModError(f'Requisito binário inválido para duelista #{duel}.')
         end = next_end
     return end

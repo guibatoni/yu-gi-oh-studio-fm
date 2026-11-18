@@ -7,10 +7,94 @@ import secrets
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from .campaign_quests import normalize_overrides
+from .campaign_quests import CATEGORY_NAMES, MAX_CRITERIA, STORY_DUELISTS, normalize_overrides
 from .core import ModError, ps1_supports_god24
 from .ps1_campaign_quests import preview_project_quests, quest_settings, save_quest_settings
-from .tables import DUELIST_NAMES_REFERENCE
+from .tables import CARD_COUNT, DUELIST_NAMES_REFERENCE
+
+
+CRITERION_LABELS = {'': 'Vazio', 'carta': 'Carta', 'tipo': 'Tipo', 'atributo': 'Atributo',
+                    'guardian_star': 'Guardian Star', 'raridade': 'Raridade'}
+
+
+class QuestRequirementsDialog(tk.Toplevel):
+    def __init__(self, parent, opponent, cards, requirements):
+        super().__init__(parent)
+        self.title(f'Quest de {DUELIST_NAMES_REFERENCE[opponent]}')
+        self.transient(parent.winfo_toplevel())
+        self.opponent = str(opponent)
+        self.result = None
+        self.inputs = []
+        self.labels = {label: kind for kind, label in CRITERION_LABELS.items()}
+        self.targets = {kind: [f'{idx} · {label}' for idx, label in enumerate(names) if label]
+                        for kind, names in CATEGORY_NAMES.items()}
+        self.targets['carta'] = [f'{cid} · {card.get("nome") or f"Carta {cid}"}'
+                                 for cid, card in cards.items()]
+
+        pane = ttk.Frame(self, padding=13)
+        pane.pack(fill='both', expand=True)
+        ttk.Label(pane, text='Escolha o critério, o alvo e a quantidade. Digite o nome ou o ID para buscar cartas.',
+                  wraplength=560).grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 9))
+        for column, label in enumerate(('Critério', 'Carta ou categoria', 'Quantidade')):
+            ttk.Label(pane, text=label).grid(row=1, column=column, sticky='w', padx=4)
+        pane.columnconfigure(1, weight=1)
+        for index in range(MAX_CRITERIA):
+            row = index + 2
+            initial = requirements[index] if index < len(requirements) else {}
+            kind = tk.StringVar(self, value=CRITERION_LABELS[initial.get('tipo', '')])
+            quantity = tk.StringVar(self, value=str(initial.get('quantidade', 1)))
+            selector = ttk.Combobox(pane, width=13, state='readonly', textvariable=kind,
+                                    values=list(self.labels))
+            selector.grid(row=row, column=0, padx=4, pady=4, sticky='ew')
+            target = ttk.Combobox(pane, width=32)
+            target.grid(row=row, column=1, padx=4, pady=4, sticky='ew')
+            amount = ttk.Spinbox(pane, from_=1, to=255, width=5, textvariable=quantity)
+            amount.grid(row=row, column=2, padx=4, pady=4, sticky='ew')
+            self.inputs.append((kind, target, quantity))
+
+            def set_kind(_event=None, *, kind=kind, target=target, amount=amount):
+                key = self.labels[kind.get()]
+                target.set('')
+                target.configure(values=self.targets.get(key, ()),
+                                 state='normal' if key == 'carta' else 'readonly' if key else 'disabled')
+                amount.configure(state='normal' if key else 'disabled')
+
+            def search(_event, *, kind=kind, target=target):
+                if self.labels[kind.get()] == 'carta':
+                    query = target.get().casefold().lstrip('#').strip()
+                    target.configure(values=[value for value in self.targets['carta']
+                                             if query in value.casefold()])
+
+            selector.bind('<<ComboboxSelected>>', set_kind)
+            target.bind('<KeyRelease>', search)
+            set_kind()
+            if initial:
+                prefix = f"{initial['alvo']} · "
+                target.set(next((label for label in self.targets[initial['tipo']] if label.startswith(prefix)),
+                                str(initial['alvo'])))
+
+        actions = ttk.Frame(pane)
+        actions.grid(row=MAX_CRITERIA + 2, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        ttk.Button(actions, text='Usar a seed deste NPC', command=self._restore).pack(side='left')
+        ttk.Button(actions, text='Cancelar', command=self.destroy).pack(side='right', padx=(6, 0))
+        ttk.Button(actions, text='Aplicar requisitos', style='Accent.TButton', command=self._apply).pack(side='right')
+        self.grab_set()
+
+    def _restore(self):
+        self.result = []
+        self.destroy()
+
+    def _apply(self):
+        rows = [{'tipo': self.labels[kind.get()],
+                 'alvo': target.get().split(' · ', 1)[0].strip().lstrip('#'),
+                 'quantidade': quantity.get()} for kind, target, quantity in self.inputs
+                if self.labels[kind.get()]]
+        try:
+            self.result = normalize_overrides({self.opponent: rows})[self.opponent]
+        except ModError as exc:
+            messagebox.showerror('Editar quest', str(exc), parent=self)
+            return
+        self.destroy()
 
 
 class CampaignQuestEditor(ttk.Frame):
@@ -20,6 +104,7 @@ class CampaignQuestEditor(ttk.Frame):
         self.studio = studio
         self.project = None
         self.requirements = {}
+        self.preview_requirements = {}
         self.enabled = tk.BooleanVar(self)
         self.seed = tk.StringVar(self)
         self.status = tk.StringVar(self)
@@ -27,8 +112,8 @@ class CampaignQuestEditor(ttk.Frame):
 
         ttk.Label(self, text='Doações para avançar na campanha',
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(0, 5))
-        ttk.Label(self, text='Ao vencer um duelista, confira o progresso no baú e confirme a entrega '
-                  'para continuar a história. As cartas do deck ativo ficam protegidas.',
+        ttk.Label(self, text='Simon Muran está liberado. Antes dos outros duelos, entregue as cópias '
+                  'do baú. Volte ao Card Shop para preparar o deck ou buscar cartas no Duelo Livre.',
                   wraplength=675, justify='left').pack(anchor='w', pady=(0, 8))
         self.toggle = ttk.Checkbutton(self, text='Ativar quests no BIN/CUE de teste', variable=self.enabled)
         self.toggle.pack(anchor='w')
@@ -46,11 +131,21 @@ class CampaignQuestEditor(ttk.Frame):
                                       command=self._save)
         self.save_button.pack(side='right')
 
+        editor = ttk.Frame(self)
+        editor.pack(fill='x', pady=(0, 7))
+        ttk.Label(editor, text='Duelista').pack(side='left', padx=(0, 5))
+        self.duelists = {f'#{op:02d} · {DUELIST_NAMES_REFERENCE[op]}': op for op in STORY_DUELISTS}
+        self.opponent = ttk.Combobox(editor, state='readonly', values=list(self.duelists), width=27)
+        self.opponent.pack(side='left')
+        self.opponent.current(0)
+        self.edit_button = ttk.Button(editor, text='Editar quest', command=self._edit_quest)
+        self.edit_button.pack(side='left', padx=5)
+
         manual = ttk.Frame(self)
         manual.pack(fill='x', pady=(0, 7))
         self.import_button = ttk.Button(manual, text='Importar requisitos JSON', command=self._import)
         self.import_button.pack(side='left')
-        self.clear_button = ttk.Button(manual, text='Remover importados', command=self._clear_manual)
+        self.clear_button = ttk.Button(manual, text='Limpar requisitos manuais', command=self._clear_manual)
         self.clear_button.pack(side='left', padx=5)
         ttk.Label(manual, textvariable=self.manual_status).pack(side='left', padx=4)
 
@@ -65,6 +160,7 @@ class CampaignQuestEditor(ttk.Frame):
         scroll = ttk.Scrollbar(preview, command=self.table.yview)
         self.table.configure(yscrollcommand=scroll.set)
         self.table.pack(side='left', fill='both', expand=True)
+        self.table.bind('<Double-1>', self._select_preview)
         scroll.pack(side='right', fill='y')
         ttk.Label(self, textvariable=self.status, wraplength=675).pack(anchor='w', pady=(7, 0))
         self.seed.trace_add('write', self._invalidate_preview)
@@ -78,8 +174,9 @@ class CampaignQuestEditor(ttk.Frame):
         self.project = project
         state = 'normal' if project else 'disabled'
         for control in (self.toggle, self.seed_entry, self.random_button, self.preview_button,
-                        self.save_button, self.import_button):
+                        self.save_button, self.import_button, self.edit_button):
             control.configure(state=state)
+        self.opponent.configure(state='readonly' if project else 'disabled')
         error = ''
         try:
             settings = quest_settings(project)
@@ -100,6 +197,7 @@ class CampaignQuestEditor(ttk.Frame):
             self.status.set('Gere a prévia com os drops e o deck inicial salvos no projeto.')
 
     def _invalidate_preview(self, *_):
+        self.preview_requirements = {}
         items = self.table.get_children()
         if items:
             self.table.delete(*items)
@@ -107,7 +205,7 @@ class CampaignQuestEditor(ttk.Frame):
 
     def _manual_changed(self):
         self.clear_button.configure(state='normal' if self.requirements else 'disabled')
-        self.manual_status.set(f'{len(self.requirements)} duelista(s) com requisitos importados'
+        self.manual_status.set(f'{len(self.requirements)} duelista(s) com requisitos manuais'
                                if self.requirements else 'Requisitos gerados pela seed')
         self._invalidate_preview()
 
@@ -130,6 +228,34 @@ class CampaignQuestEditor(ttk.Frame):
     def _clear_manual(self):
         self.requirements = {}
         self._manual_changed()
+
+    def _select_preview(self, event):
+        item = self.table.identify_row(event.y)
+        if item:
+            opponent = self.table.item(item, 'values')[0]
+            self.opponent.set(next(label for label, op in self.duelists.items()
+                                   if DUELIST_NAMES_REFERENCE[op] == opponent))
+            self._edit_quest()
+
+    def _edit_quest(self):
+        if not self.project or self.studio._extract_running:
+            return
+        opponent = self.duelists.get(self.opponent.get())
+        if opponent is None:
+            return
+        key = str(opponent)
+        requirements = self.requirements.get(key, self.preview_requirements.get(key, []))
+        cards = {cid: self.project.get(cid) for cid in sorted(self.project.cards) if cid <= CARD_COUNT}
+        dialog = QuestRequirementsDialog(self, opponent, cards, requirements)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        if dialog.result:
+            self.requirements[key] = dialog.result
+        else:
+            self.requirements.pop(key, None)
+        self._manual_changed()
+        self.status.set('Quest editada. Gere a prévia para validar a origem das cartas e salve a configuração.')
 
     def _preview(self):
         if not self.project or self.studio._extract_running:
@@ -159,10 +285,10 @@ class CampaignQuestEditor(ttk.Frame):
             return
         ranks = {'pow': 'S/A-POW', 'bcd': 'B/C/D', 'tec': 'S/A-TEC'}
         for quest in config['quests']:
+            self.preview_requirements[str(quest['oponente_id'])] = quest['criterios']
             for requirement in quest['criterios']:
                 proof = requirement['prova']
-                origin = ('Deck inicial' if proof['origem'] == 'inicial' else
-                          f"{DUELIST_NAMES_REFERENCE[proof['duelista_id']]} · {ranks[proof['grupo']]}")
+                origin = f"{DUELIST_NAMES_REFERENCE[proof['duelista_id']]} · {ranks[proof['grupo']]}"
                 label = f"{requirement['rotulo']} ×{requirement['quantidade']}"
                 self.table.insert('', 'end', values=(quest['oponente'], label, origin,
                                                      f"{proof['peso']} / {proof['denominador']}"))

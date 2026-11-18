@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 import struct
 import tempfile
@@ -12,7 +13,8 @@ try:
 except ImportError:
     Uc = None
 
-from fmstudio.campaign_quests import QuestCatalog, compile_table, generate_quests, table_size, verify_quests
+from fmstudio.campaign_quests import (LEGACY_FORMAT, QuestCatalog, compile_table, generate_quests,
+                                      normalize_overrides, table_size, verify_quests)
 from fmstudio.core import ModError, Project
 from fmstudio.deep_extract import exe_pos
 from fmstudio.ps1_campaign_quests import (
@@ -23,7 +25,7 @@ from fmstudio.ps1_expansion import EXPANDED_LEVELS, EXTRA_SLOTS
 from fmstudio.tables import PS1_SUPREME, STATS_ADDR
 
 GLYPHS = {i: chr(i) for i in range(32, 127)}
-MANUAL = {'1': [{'tipo': 'tipo', 'alvo': 8, 'quantidade': 1},
+MANUAL = {'2': [{'tipo': 'tipo', 'alvo': 8, 'quantidade': 1},
                 {'tipo': 'atributo', 'alvo': 1, 'quantidade': 1},
                 {'tipo': 'guardian_star', 'alvo': 16, 'quantidade': 1}]}
 
@@ -33,24 +35,27 @@ def sample_quests():
                   atributo_id=int(cid == 1), guardian_1_id=1 if cid == 1 else 16 if cid < 4 else 2,
                   guardian_2_id=2, raridade='rara' if cid == 2 else 'comum')
              for cid in range(1, 723)]
-    drops = [dict(duelista_id=op, grupo='pow', carta_id=cid, peso=2048)
-             for op, cid in ((1, 4), (7, 5), (21, 6), (23, 7), (39, 8))]
-    starters = [dict(grupo=0, compras=40, carta_id=cid, peso=weight)
-                for cid, weight in ((1, 1024), (2, 512), (3, 512))]
+    drops = [dict(duelista_id=1, grupo='pow', carta_id=cid, peso=weight)
+             for cid, weight in ((1, 1024), (2, 512), (3, 512))]
+    drops.extend(dict(duelista_id=op, grupo='pow', carta_id=cid, peso=2048)
+                 for op, cid in ((7, 5), (18, 10), (21, 6), (23, 7), (39, 8)))
+    starters = [dict(grupo=0, compras=40, carta_id=9, peso=2048)]
     return QuestCatalog.from_rows(cards, drops, starters)
 
 
 def compiled_overlay():
     catalog = sample_quests()
+    overrides = {**MANUAL, '38': MANUAL['2']}
     with patch('fmstudio.ps1_campaign_quests.glyph_map', return_value=(GLYPHS, [])):
-        return build_quest_overlay(b'', catalog, {'seed': 'teste', 'requisitos': MANUAL},
+        return build_quest_overlay(b'', catalog, {'seed': 'teste', 'requisitos': overrides},
                                    level_address=EXPANDED_LEVELS)
 
 
 def executable():
     exe = bytearray(0x1e0800)
-    for op, address in HOOKS.items():
-        struct.pack_into('<I', exe, exe_pos(COMMAND_TABLE + 4 * op, exe, 4), address)
+    native = list(HOOKS.values()) + [(COMMAND_TABLE + 4 * 0x19, 0x80038AB0)]
+    for hook, address in native:
+        struct.pack_into('<I', exe, exe_pos(hook, exe, 4), address)
     return bytes(exe)
 
 
@@ -66,19 +71,20 @@ class CampaignQuestsTests(unittest.TestCase):
                 save_quest_settings(project, enabled=True, seed='', requirements=MANUAL)
             self.assertEqual(quest_settings(project), settings)
 
-    def test_seed_and_previous_guaranteed_drops(self):
+    def test_seed_and_previous_farmable_drops(self):
         catalog = sample_quests()
         config = generate_quests(catalog, 'seed')
         self.assertEqual(config, generate_quests(catalog, 'seed'))
         self.assertNotEqual(config['quests'], generate_quests(catalog, 'outra')['quests'])
-        self.assertEqual(len(config['quests']), 38)
+        self.assertEqual([row['oponente_id'] for row in config['quests']], list(range(2, 39)))
+        self.assertEqual(config['isentos'], [1])
         for quest in config['quests']:
             for requirement in quest['criterios']:
                 proof = requirement['prova']
-                if proof['origem'] == 'drop':
-                    self.assertIn(proof['duelista_id'], quest['antecessores'])
-                    self.assertLess(proof['duelista_id'], quest['oponente_id'])
-        for opponent, card in ((2, 4), (24, 6), (22, 7), (38, 8)):
+                self.assertEqual(proof['origem'], 'drop')
+                self.assertIn(proof['duelista_id'], quest['antecessores'])
+                self.assertLess(proof['duelista_id'], quest['oponente_id'])
+        for opponent, card in ((2, 9), (24, 6), (22, 7), (38, 8), (19, 10)):
             with self.assertRaisesRegex(ModError, 'antecessor'):
                 generate_quests(catalog, 'seed', {opponent: [
                     {'tipo': 'carta', 'alvo': card, 'quantidade': 1}
@@ -86,7 +92,23 @@ class CampaignQuestsTests(unittest.TestCase):
         actual = generate_quests(catalog, 'seed', {22: [
             {'tipo': 'carta', 'alvo': 6, 'quantidade': 2}
         ]})
-        self.assertEqual(actual['quests'][21]['criterios'][0]['prova']['duelista_id'], 21)
+        self.assertEqual(actual['quests'][20]['criterios'][0]['prova']['duelista_id'], 21)
+        self.assertEqual(generate_quests(catalog, 'seed', MANUAL)['quests'][1:], config['quests'][1:])
+
+    def test_migrating_previous_requirements_leaves_simon_out(self):
+        previous = {'formato': LEGACY_FORMAT, 'quests': [
+            {'oponente_id': 1, 'criterios': [{'tipo': 'carta', 'alvo': 9, 'quantidade': 20}]},
+            {'oponente_id': 2, 'criterios': MANUAL['2']},
+        ]}
+        self.assertEqual(normalize_overrides(previous), MANUAL)
+
+    def test_requirements_must_fit_the_chest_including_overlapping_targets(self):
+        catalog = sample_quests()
+        with self.assertRaisesRegex(ModError, 'baú comporta'):
+            generate_quests(catalog, 'seed', {2: [
+                {'tipo': 'carta', 'alvo': 1, 'quantidade': 150},
+                {'tipo': 'atributo', 'alvo': 1, 'quantidade': 61},
+            ]})
 
     def test_binary_offsets_and_changes_in_real_drop_proof(self):
         catalog = sample_quests()
@@ -100,40 +122,51 @@ class CampaignQuestsTests(unittest.TestCase):
         with self.assertRaisesRegex(ModError, 'divergem'):
             verify_quests(config, catalog)
 
-    def test_loader_and_table_readback_detect_conflict_or_corruption(self):
+    def test_loader_conflict_old_image_and_archive_readback(self):
         exe = executable()
         regions = [(0x801CE200, 0x801CE800), (0x801CFE00, 0x801CFE80)]
         addresses, free = reserve_quest_handlers(exe, regions)
         for address in addresses.values():
             self.assertFalse(any(lo <= address < hi for lo, hi in free))
         self.assertEqual(inspect_quest_overlay(exe)['status'], 'ausente')
+        previous = bytearray(exe)
+        for hook in (HOOKS['answer'][0], COMMAND_TABLE + 4 * 0x19):
+            struct.pack_into('<I', previous, exe_pos(hook, previous, 4), 0x801CF000)
+        self.assertEqual(inspect_quest_overlay(previous)['status'], 'pos_vitoria')
         patched = install_quest_handlers(exe, addresses, 2)
         self.assertEqual(inspect_quest_overlay(patched)['status'], 'aguardando_wa')
         with self.assertRaisesRegex(ModError, 'Conflito'):
             install_quest_handlers(patched, addresses, 2)
         payload, _, _ = compiled_overlay()
-        wa = bytes((2 + EXTRA_SLOTS) * 2048) + payload
-        self.assertEqual(inspect_quest_overlay(patched, wa, expanded=True)['status'], 'aplicado')
-        self.assertEqual(inspect_quest_overlay(patched, wa[:-1], expanded=True)['status'], 'divergente')
+        reader = 'fmstudio.ps1_campaign_quests'
+        script = bytes(2 * 2048)
+        digest = hashlib.sha256(script).hexdigest()
+        wa = bytes(EXTRA_SLOTS * 2048) + script + payload
+        with (patch(f'{reader}.CAMPAIGN_SCRIPT_SECTOR', 0),
+              patch(f'{reader}.CAMPAIGN_SCRIPT_HASH', digest)):
+            self.assertEqual(inspect_quest_overlay(patched, wa, expanded=True)['status'], 'aplicado')
+            self.assertEqual(inspect_quest_overlay(patched, wa[:-1], expanded=True)['status'], 'divergente')
+            wrong = bytes(EXTRA_SLOTS * 2048) + b'\xff' + script[1:] + payload
+            self.assertEqual(inspect_quest_overlay(patched, wrong, expanded=True)['status'], 'divergente')
 
 
 @unittest.skipIf(Uc is None, 'MIPS verification needs Unicorn')
 class CampaignMipsTests(unittest.TestCase):
-    def test_loader_overlapping_goals_and_no_deck_debit(self):
-        for full_transfer, mode, spares in ((True, 2, True), (True, 2, False),
-                                            (False, 2, True), (True, 6, True)):
-            with self.subTest(full_transfer=full_transfer, mode=mode, spares=spares):
-                self.check_route(full_transfer, mode, spares)
+    def test_enforced_gate_simon_and_shop_resume(self):
+        for opponent, mode, action in ((1, 2, 'native'), (2, 6, 'native'), (2, 2, 'pay'),
+                                       (2, 2, 'early'), (10, 2, 'tournament'), (38, 2, 'hiding')):
+            with self.subTest(opponent=opponent, action=action):
+                self.check_route(opponent, mode, action)
 
-    def check_route(self, full_transfer, mode, spares):
+    def check_route(self, opponent, mode, action):
         exe = executable()
-        addresses, _ = reserve_quest_handlers(exe, [(0x801CF800, 0x801CFF00)])
+        addresses, _ = reserve_quest_handlers(exe, [(0x801CF700, 0x801CFF00)])
         patched = install_quest_handlers(exe, addresses, 18432)
         payload, _, _ = compiled_overlay()
         cpu = Uc(UC_ARCH_MIPS, UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN)
         cpu.mem_map(0, 0x200000)
-        channel, victory, stop = 0x80111000, 0x801B191F, 0x80010000
-        trunk, deck, flags = 0x801D0250, 0x801D0200, 0x801D0618
+        channel, shop_channel, stop = 0x80111000, 0x800EB0F8, 0x80010000
+        entry, trunk, deck, flags = 0x801B191F, 0x801D0250, 0x801D0200, 0x801D0618
 
         def write(address, data):
             cpu.mem_write(address & 0x1fffffff, data)
@@ -146,17 +179,24 @@ class CampaignMipsTests(unittest.TestCase):
                 write(address, struct.pack('<I', value))
             return struct.unpack('<I', read(address, 4))[0]
 
-        def call(address):
+        def call(name, channel):
             cpu.reg_write(UC_MIPS_REG_SP, 0x801FF000)
             cpu.reg_write(UC_MIPS_REG_RA, stop)
             cpu.reg_write(UC_MIPS_REG_A0, channel)
-            cpu.emu_start(address, stop, count=1_000_000, timeout=2_000_000)
+            cpu.emu_start(addresses[name], stop, count=1_000_000, timeout=2_000_000)
             self.assertEqual(cpu.reg_read(UC_MIPS_REG_PC), stop)
 
+        def choose(channel, option):
+            prompt = word(channel)
+            dialogue = read(prompt, 256)
+            branch = dialogue.index(b'\xfb\x80') + 2
+            target = (prompt & 0xFFFF0000) | struct.unpack_from('<H', dialogue, branch + option * 2)[0]
+            word(channel, target + 4)
+            call('answer', channel)
+
         write(0x80010000, patched[0x800:])
-        for address in (HOOKS[0x19], 0x800137E4, 0xA0):
+        for address in (HOOKS['duel'][1], HOOKS['shop'][1], 0x8002e5ac, 0x800137E4, 0xA0):
             write(address, struct.pack('<II', 0x03E00008, 0))
-        # Request returns nonzero after checking the native argument positions.
         write(0x80014E1C, struct.pack('<III', 0x24020001, 0x03E00008, 0))
         events = []
 
@@ -165,49 +205,72 @@ class CampaignMipsTests(unittest.TestCase):
                 self.assertEqual(cpu.reg_read(UC_MIPS_REG_A2), 18432)
                 self.assertEqual(cpu.reg_read(UC_MIPS_REG_A3), OVERLAY_SECTORS)
                 self.assertEqual(word(cpu.reg_read(UC_MIPS_REG_SP) + 24), OVERLAY_START)
-                write(OVERLAY_START, payload if full_transfer else payload[:-2048])
+                write(OVERLAY_START, payload)
                 events.append('read')
             elif address == 0xA0:
                 self.assertEqual(cpu.reg_read(UC_MIPS_REG_T1), 0x44)
                 events.append('flush')
+            elif address == HOOKS['duel'][1]:
+                events.append(('native', word(cpu.reg_read(UC_MIPS_REG_A0))))
+                write(0x8009B26C, b'\x03')
 
         cpu.hook_add(UC_HOOK_CODE, device)
-        write(victory, b'\x01\xff')
+        write(entry - 2, bytes((0xF8, 0x0D, opponent, 96, 97, 0, 0, 0x72)))
         write(0x8009B26C, bytes([mode]))
-        write(0x8009B361, b'\x01\x00')
         for cid, species, guard in ((1, 8, 1), (2, 8, PS1_SUPREME), (3, 0, PS1_SUPREME)):
             word(STATS_ADDR + 4 * (cid - 1), (species << 26) | (guard << 22))
-        write(EXPANDED_LEVELS + 1, b'\x10')  # The only eligible Dark card.
+        write(EXPANDED_LEVELS + 1, b'\x10')
         initial_deck = struct.pack('<40H', 1, 1, 2, 3, 723, 740, *range(100, 134))
         write(deck, initial_deck)
-        inventory = b'\x03\x02\x02' if spares else b'\x03\x01\x01'
-        write(trunk, inventory)
+        write(trunk, b'\x03\x01\x01')
         write(trunk + 722, b'\x04')
-        word(channel, victory)
-        call(addresses[0x19])
-        self.assertEqual(events, ([] if mode != 2 else ['read', 'flush'] if full_transfer else ['read']))
-        if mode != 2 or not full_transfer:
-            self.assertEqual(word(channel), victory)
-            self.assertEqual(read(trunk, 3), inventory)
+        flag = flags + ((0x750 + opponent) >> 3)
+        mask = 0x80 >> ((0x750 + opponent) & 7)
+        if action == 'hiding':
+            write(flags + 0x47 // 8, b'\x01')
+        word(channel, entry)
+        call('duel', channel)
+        if action == 'native':
+            self.assertEqual(events, [('native', entry)])
             return
+        self.assertEqual(events, ['read', 'flush'])
+        self.assertEqual(read(flags + 0x20 // 8, 1), b'\0')
+        self.assertEqual(read(flags + 0x6e1 // 8, 1), b'\x40')
+        if action in ('early', 'hiding', 'tournament'):
+            choose(channel, 1)
+            self.assertEqual(read(flag, 1), b'\0')
+            self.assertEqual(read(trunk, 3), b'\x03\x01\x01')
+            if action == 'tournament':
+                self.assertEqual(read(0x8009B26C, 1), b'\x02')
+                self.assertEqual(read(0x8009B27A, 1), bytes([190]))
+                return
+            self.assertEqual(read(0x8009B26C, 1), b'\x05')
+            self.assertEqual(read(0x8009B363, 1), bytes([13 if action == 'early' else 15]))
+            self.assertEqual(read(0x801D0708, 4), struct.pack('<HBB', entry & 0xffff, opponent, 0x4d))
+            write(0x8009B26C, b'\x42')
+            shop = 0x801A8295 if action == 'early' else 0x801A8B1D
+            word(0x8009B290, shop)
+            call('shop', 0)
+            self.assertEqual(events[-2:], ['read', 'flush'])
+            self.assertEqual(word(0x8009B290), shop - 1)
+            channel = shop_channel
         prompt = word(channel)
-        dialogue = read(prompt, 256)
-        self.assertEqual(dialogue.count(b'1/1'), 3 if spares else 1)
-        self.assertIn(b'Confirmar doacao' if spares else b'Entregar com reserva', dialogue)
-        flag = flags + (0x751 >> 3)
+        self.assertIn(b'Rever requisitos', read(prompt, 256))
+        choose(channel, 0)
+        self.assertEqual(word(channel), prompt)
         self.assertEqual(read(flag, 1), b'\0')
-        branch = dialogue.index(b'\xfb\x80') + 2
-        for option in (1, 0):
-            target = (prompt & 0xFFFF0000) | struct.unpack_from('<H', dialogue, branch + 2 * option)[0]
-            word(channel, target + 4)
-            call(addresses[0x12])
-            if option:
-                self.assertEqual(read(trunk, 3), inventory)
-                self.assertEqual(word(channel), prompt)
+        write(trunk, b'\x03\x02\x02')
+        choose(channel, 0)
+        self.assertEqual(read(word(channel), 256).count(b'1/1'), 3)
+        choose(channel, 0)
+        self.assertEqual(events[-1], ('native', entry))
         self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
-        self.assertEqual(read(trunk + 722, 1), b'\x04')
         self.assertEqual(read(deck, 80), initial_deck)
-        self.assertEqual(read(flag, 1), b'\x40')
-        self.assertEqual(word(channel), victory)
-        call(addresses[0x19])
-        self.assertEqual(word(channel), victory)
+        self.assertEqual(read(trunk+722, 1), b'\x04')
+        self.assertEqual(read(flag, 1), bytes([mask]))
+        self.assertEqual(read(0x801D070B, 1), b'\0')
+        write(0x8009B26C, b'\x42')
+        word(channel, entry)
+        call('duel', channel)
+        self.assertEqual(events[-1], ('native', entry))
+        self.assertEqual(read(trunk, 3), b'\x02\x01\x01')

@@ -41,7 +41,7 @@ def audit(project) -> dict:
     from .ps1_campaign_quests import quest_settings
     if quest_settings(project)['ativado']:
         if native_profile and wa_pinned:
-            supported.append('Quests de doação na campanha PS1, geradas pelas fontes do BIN/CUE')
+            supported.append('Quests pré-duelo na campanha PS1 e retorno ao Card Shop')
         else:
             blocked.append('Quests de campanha exigem o BIN/CUE Original Drop x15 importado no projeto.')
     from .ps1_expansion import PS1_CARD_CAPACITY, compile_expansion
