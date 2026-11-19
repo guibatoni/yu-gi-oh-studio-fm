@@ -52,9 +52,8 @@ QuestDuelLoader:
     lbu $t3, -1($t1)
     addiu $t2, $zero, 0x0D
     bne $t3, $t2, .Loriginal
-    nop
-
-    lbu $t4, 0($t1)         /* Keep opponent ID across check_overlay. */
+    lbu $t4, 0($t1)         /* Delay slot: valid bank address; remember opponent. */
+    nop                    /* Real PS1 MIPS I load delay before reading $t4. */
     addiu $t1, $t4, -2     /* Simon and non-campaign IDs use native. */
     sltiu $t1, $t1, 37
     beq $t1, $zero, .Loriginal
@@ -131,8 +130,8 @@ QuestAnswerLoader:
     sb $zero, 0x070B($t0)
     lui $t1, 0x800A
     lbu $t2, -0x4D94($t1)
+    addiu $t3, $zero, 2  /* Load-delay filler before consuming $t2. */
     andi $t2, $t2, 31
-    addiu $t3, $zero, 2
     bne $t2, $t3, .Lanswer_return
     nop
 
@@ -140,19 +139,20 @@ QuestAnswerLoader:
        be replayed on the NEXT retail VM tick. Native mode changes must not
        occur within the F8 12 choice callback or while quest C is active. */
     lbu $t2, 0x58($a0)
+    ori $t4, $zero, 0x801B  /* Filler before using text stream depth. */
     sll $t2, $t2, 2
     addu $t5, $a0, $t2
     lw $t2, 0($t5)
+    lhu $t6, 0x0708($t0)   /* Filler before using loaded text cursor. */
     srl $t3, $t2, 16
-    ori $t4, $zero, 0x801B
     bne $t3, $t4, .Lanswer_return
     nop
-    lhu $t3, 0x0708($t0)
     andi $t4, $t2, 0xFFFF
-    bne $t3, $t4, .Lanswer_return
+    bne $t6, $t4, .Lanswer_return
     nop
     lbu $t3, 0x070A($t0)
     lbu $t4, 0($t2)
+    addiu $t2, $t2, -2     /* Filler before comparing loaded opponent ID. */
     bne $t3, $t4, .Lanswer_return
     nop
 
@@ -160,7 +160,6 @@ QuestAnswerLoader:
        to F8 0D; TEXT_YIELD=1 was set by QuestAnswer. Return through this
        resident adapter, leaving the interpreter to dispatch F8 0D itself
        on the next tick, with the donation flag already committed. */
-    addiu $t2, $t2, -2
     sw $t2, 0($t5)
     beq $zero, $zero, .Lanswer_return
     nop
