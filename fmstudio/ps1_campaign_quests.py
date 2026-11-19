@@ -42,6 +42,13 @@ SCENE_PREFIX_SECTORS = CAMPAIGN_SCRIPT_SECTOR - CAMPAIGN_SCENE_SECTOR + 2
 DIAGNOSTIC_ENV = 'FMSTUDIO_DIAGNOSTICO_QUEST_RA'
 # Physical PCs reported by ePSXe in QOV3..QOV5 after "Doar e duelar".
 OBSERVED_CRASH_PCS = (0x801AAE78, 0x801AAE80)
+
+
+def active_diagnostic_mode() -> int:
+    """Crash-catcher mode requested by the diagnostic launcher (0 = off)."""
+    return {'1': 1, '2': 2}.get(os.environ.get(DIAGNOSTIC_ENV, ''), 0)
+
+
 QUEST_HANDLERS = {'duel': overlay.DUEL_LOADER, 'answer': overlay.ANSWER_LOADER,
                   'shop': overlay.SHOP_LOADER}
 
@@ -143,7 +150,7 @@ def build_quest_overlay(exe: bytes, catalog: QuestCatalog, settings: dict, *, le
     glyphs, _ = glyph_map(exe)
     if diagnostic is None:
         # '1': trap at $ra (ePSXe shows it). '2': register dump + freeze for a save state.
-        diagnostic = {'1': 1, '2': 2}.get(os.environ.get(DIAGNOSTIC_ENV, ''), 0)
+        diagnostic = active_diagnostic_mode()
     if diagnostic:
         base = overlay.ENTRY_POINTS['QuestConfiguration']
         if not (base + TABLE_START < min(OBSERVED_CRASH_PCS)

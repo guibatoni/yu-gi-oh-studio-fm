@@ -741,7 +741,10 @@ class FieldDialog(tk.Toplevel):
 class Studio(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f'Yu-Gi-Oh Studio Card FM | v{__version__}')
+        from .ps1_campaign_quests import active_diagnostic_mode
+        mode = active_diagnostic_mode()
+        self.title(f'Yu-Gi-Oh Studio Card FM | v{__version__}'
+                   + (f' | DIAGNÓSTICO DE QUEST — MODO {mode}' if mode else ''))
         self.geometry('1390x825')
         self.minsize(1050,650)
         self.configure(bg=BG)

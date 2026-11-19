@@ -44,7 +44,6 @@ jobs:
           Copy-Item dist/FM-Mod-Studio-Updater.exe release/FM-Mod-Studio-Updater.exe
           Copy-Item LEIA-ME.txt release/LEIA-ME.txt
           Copy-Item INICIAR.bat release/INICIAR.bat
-          Copy-Item DIAGNOSTICO_QUEST_RA.bat release/DIAGNOSTICO_QUEST_RA.bat
           Copy-Item DIAGNOSTICO_QUEST_DUMP.bat release/DIAGNOSTICO_QUEST_DUMP.bat
           Copy-Item docs/DIAGNOSTICO_QUEST_RA.md release/DIAGNOSTICO_QUEST_RA.md
           Compress-Archive -Path release/* -DestinationPath Studio-FM-Diagnostico-Quest-RA.zip -Force
@@ -64,5 +63,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "diag-quest-ra-${{ github.run_number }}"
-          $notes = "Build de DIAGNOSTICO, nao e correcao. Modo 2 (atual): abra pelo DIAGNOSTICO_QUEST_DUMP.bat, gere um BIN/CUE novo, escolha Doar e duelar; quando o jogo congelar na tela preta, salve um save state (F1) e envie o arquivo da pasta sstates do ePSXe. Pre-release: o atualizador do Studio nao a instala. Nao distribuir o BIN gerado."
+          $notes = "Build de DIAGNOSTICO, nao e correcao. Modo 2 (atual): abra pelo DIAGNOSTICO_QUEST_DUMP.bat, gere um BIN/CUE novo, escolha Doar e duelar; quando o jogo congelar na tela preta, salve um save state (F1) e envie o arquivo da pasta sstates do ePSXe. O nome do BIN gerado termina em _QUESTS_DIAG2 e o titulo do Studio mostra MODO 2. Pre-release: o atualizador do Studio nao a instala. Nao distribuir o BIN gerado."
           gh release create $tag Studio-FM-Diagnostico-Quest-RA.zip Studio-FM-Diagnostico-Quest-RA.zip.sha256 --prerelease --target $env:GITHUB_SHA --title "Studio FM - Diagnostico quest RA (teste)" --notes $notes

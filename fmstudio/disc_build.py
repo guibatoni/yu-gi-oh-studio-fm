@@ -606,6 +606,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     safe_name=safe_name.strip(' .')[:96].rstrip(' .') or 'JOGO'
     name_id=hashlib.sha256(original_bin.name.encode('utf-8')).hexdigest()[:10]
     suffix = '_QUESTS' if quest_enabled else ''
+    if quest_enabled:
+        from .ps1_campaign_quests import active_diagnostic_mode
+        # A diagnostic image must never be confused with (or silently replaced by) a normal one.
+        if active_diagnostic_mode():
+            suffix += f'_DIAG{active_diagnostic_mode()}'
     bin_file=base/f'FM_STUDIO_TESTE_{safe_name}_{name_id}{suffix}.bin'
     cue_file=bin_file.with_suffix('.cue')
     meta_file=bin_file.with_suffix('.json')
