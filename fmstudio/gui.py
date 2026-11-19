@@ -1284,6 +1284,7 @@ class Studio(tk.Tk):
                 ('Validar e gerar o BIN/CUE', 'exportar')), start=1):
             line = tk.Label(flow, text=f'{number}.  {label}  ›', bg=SURFACE, fg=TEXT, anchor='w',
                             cursor='hand2', pady=4)
+            line._i18n_line = (number, label)
             line.pack(fill='x')
             line.bind('<Button-1>', lambda _e, key=key: self.show_section(key))
             line.bind('<Enter>', lambda _e, w=line: w.configure(fg=ACCENT))
@@ -2145,7 +2146,8 @@ class Studio(tk.Tk):
                      'A classe visual Deus é configurada pela raridade.')
             else:
                 msg='Tipo não reconhecido.'
-            self.card_type_warning.configure(text=msg)
+            from . import i18n
+            self.card_type_warning.configure(text=i18n.t(msg))
         except (ValueError,KeyError):
             self.card_type_warning.configure(text='Verifique o tipo da carta.')
 

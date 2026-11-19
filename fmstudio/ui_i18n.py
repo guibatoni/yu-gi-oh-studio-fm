@@ -36,8 +36,15 @@ def _translate_widget(widget):
         return
     try:
         if cls in TEXT_CLASSES:
-            if str(widget.cget('textvariable') or ''):
+            line = widget.__dict__.get('_i18n_line')
+            if line:                                   # "n.  rótulo  ›" (lista numerada)
+                widget.configure(text=f'{line[0]}.  {i18n.translate(line[1])}  ›')
                 return
+            try:
+                if str(widget.cget('textvariable') or ''):
+                    return
+            except tk.TclError:
+                pass                                   # ttk.Labelframe não tem textvariable
             current = widget.cget('text')
             if isinstance(current, str) and current:
                 original = _remember(widget, 'text', current)
