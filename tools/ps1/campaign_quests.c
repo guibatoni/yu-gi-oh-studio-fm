@@ -7,7 +7,7 @@ typedef unsigned int u32;
 #define DECK_SIZE 40
 #define CRITERIA 4
 #define MASKS (1 << CRITERIA)
-#define LABEL_WIDTH 22
+#define LABEL_WIDTH 24
 #define QUEST_FLAG_BASE 0x750
 #define SIMON_UNLOCK_FLAG 0x6e1
 #define EGYPT_TWO_FLAG 0x47
@@ -26,6 +26,7 @@ typedef unsigned int u32;
 #define TEXT_YIELD (*(volatile u32 *)0x8009b350)
 #define TEXT_CHOICE_LAYOUT (*(volatile u32 *)0x8009b340)
 #define PAD1_PRESSED (*(volatile u16 *)0x8009b398)
+#define SELECTED_CARD (*(volatile u16 *)0x8009b338)  /* gDuel_wSelectedCardID */
 #define PAD_CONFIRM 0xc0
 #define GAME_DUEL ((void (*)(u8 *))0x80038530)
 #define GAME_MAP ((void (*)(void))0x8002eb48)
@@ -38,6 +39,9 @@ typedef unsigned int u32;
 
 enum { EXACT_CARD, TYPE, ATTRIBUTE, GUARDIAN, RARITY };
 enum { REVIEW, DONATE, RETREAT };
+/* Inline F8 12 commands inside the quest page: point the native card-field
+   command (F8 00) at a card before it draws a type icon or a card name. */
+enum { SET_CARD = 0x40, RESTORE_CARD = 0x41 };
 
 struct Criterion {
     u8 kind, quantity;
@@ -76,12 +80,13 @@ static struct {
     const volatile u8 *retreat;
     const struct Quest *quest;
     u8 opponent;
-    u8 dialog[256];
+    u8 card_saved;
+    u16 saved_card;
+    u8 dialog[512];
 } active;
 
 static struct {
-    u8 spare[CARD_COUNT];
-    u8 masks[CARD_COUNT];
+    u8 masks[CARD_COUNT];   /* the chest itself (TRUNK) holds the spare counts */
     u16 unused[MASKS];
     u16 claims[MASKS][CRITERIA];
     u16 progress[CRITERIA];
@@ -182,16 +187,14 @@ unsigned QuestCountMissing(const struct Quest *quest)
     /* The chest count already excludes the 40 deck cards (the Build Deck
        screen shows them as separate quantities: func_800323F8). Only chest
        copies can be donated, so the deck is never touched. */
-    for (card = 0; card < CARD_COUNT; ++card)
-        inventory.spare[card] = TRUNK[card];
     for (card = 0; card < CARD_COUNT; ++card) {
         mask = 0;
-        if (inventory.spare[card]) {
+        if (TRUNK[card]) {
             for (req = 0; req < quest->count; ++req)
                 if (eligible(card + 1, &quest->criteria[req]))
                     mask |= 1u << req;
             if (mask && inventory.unused[mask] < 255 * CRITERIA)
-                inventory.unused[mask] += inventory.spare[card];
+                inventory.unused[mask] += TRUNK[card];
         }
         inventory.masks[card] = mask;
     }
@@ -215,7 +218,7 @@ static void take_claimed_cards(void)
         for (card = 0; pending && card < CARD_COUNT; ++card) {
             if (mask != inventory.masks[card])
                 continue;
-            count = inventory.spare[card];
+            count = TRUNK[card];
             if (count > pending)
                 count = pending;
             TRUNK[card] -= count;
@@ -288,6 +291,32 @@ static void start_quest_page(u8 *channel)
     *cursor(channel) = active.dialog;
 }
 
+static volatile u8 *set_card(volatile u8 *out, unsigned card)
+{
+    *out++ = 0xf8;
+    *out++ = 0x12;
+    *out++ = SET_CARD;
+    *out++ = card;
+    *out++ = card >> 8;
+    return out;
+}
+
+static volatile u8 *card_field(volatile u8 *out, unsigned op)
+{
+    *out++ = 0xf8;
+    *out++ = 0x00;  /* native card field: 0x00 = type icon, 0x20 = name */
+    *out++ = op;
+    return out;
+}
+
+static void restore_card(void)
+{
+    if (active.card_saved) {
+        SELECTED_CARD = active.saved_card;
+        active.card_saved = 0;
+    }
+}
+
 static void show_quest(void)
 {
     const struct Quest *quest = active.quest;
@@ -301,17 +330,39 @@ static void show_quest(void)
             *out++ = phrase[i] == '\n' ? 0xfe : glyph(phrase[i]);
         *out++ = 0xfa;
     }
-    out = text(out, "Antes do duelo", 24);
+    out = text(out, "Antes de duelar vamos", 24);
     *out++ = 0xfe;
+    out = text(out, "precisar de:", 24);
+    *out++ = 0xfa;
+    /* One page per requirement: request, what, progress. */
     for (req = 0; req < quest->count; ++req) {
         const struct Criterion *criterion = &quest->criteria[req];
-        out = text(out, criterion->label, LABEL_WIDTH);
-        *out++ = glyph(' ');
+        out = text(out, "Vou precisar de:", 24);
+        *out++ = 0xfe;
+        if (criterion->kind == EXACT_CARD) {
+            out = set_card(out, criterion->target);
+            out = card_field(out, 0x20);
+        } else {
+            out = text(out, criterion->label, LABEL_WIDTH);
+        }
+        *out++ = 0xfe;
+        if (criterion->kind == TYPE) {
+            out = set_card(out, criterion->source_card);
+            out = card_field(out, 0x00);
+            *out++ = glyph(' ');
+        } else if (criterion->kind == EXACT_CARD) {
+            *out++ = glyph('#');
+            out = number(out, criterion->target);
+            *out++ = glyph(' ');
+        }
         out = number(out, inventory.progress[req]);
         *out++ = glyph('/');
         out = number(out, criterion->quantity);
-        *out++ = req + 1 == quest->count || req == 1 ? 0xfa : 0xfe;
+        *out++ = 0xfa;
     }
+    *out++ = 0xf8;
+    *out++ = 0x12;
+    *out++ = RESTORE_CARD;
     *out++ = 0xf8;
     *out++ = 0x12;
     active.options = out;
@@ -361,6 +412,7 @@ void QuestBeforeDuel(u8 *channel)
 static void leave_for_shop(void)
 {
     unsigned id = active.opponent;
+    restore_card();
     active.channel = 0;
     TEXT_YIELD = 1;
     if (id >= 9 && id <= 17) {
@@ -381,10 +433,26 @@ static void leave_for_shop(void)
 
 void QuestAnswer(u8 *channel)
 {
-    const u8 *operation;
+    const u8 *operation = *cursor(channel);
+    if (active.channel == channel && operation >= (const u8 *)active.dialog
+            && operation < (const u8 *)active.dialog + sizeof active.dialog) {
+        if (*operation == SET_CARD) {
+            if (!active.card_saved) {
+                active.saved_card = SELECTED_CARD;
+                active.card_saved = 1;
+            }
+            SELECTED_CARD = operation[1] | operation[2] << 8;
+            *cursor(channel) = operation + 3;
+            return;
+        }
+        if (*operation == RESTORE_CARD) {
+            restore_card();
+            *cursor(channel) = operation + 1;
+            return;
+        }
+    }
     if (active.channel != channel || (MODE & 31) != 2)
         return;
-    operation = *cursor(channel);
     if (operation == active.options) {
         /* The VM can enter the menu in the same frame as the page advance.
            Consume that confirm so selecting an option takes a second press. */
@@ -417,6 +485,7 @@ void QuestAnswer(u8 *channel)
      */
     const u8 *resume = active.resume;
     unsigned opponent = active.opponent;
+    restore_card();
     take_claimed_cards();
     set_flag(QUEST_FLAG_BASE + opponent);
     clear_pending(opponent);

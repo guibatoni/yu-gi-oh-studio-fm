@@ -1,3 +1,22 @@
+## v1.9.18 — Novo pedido das quests
+
+- Página fixa para todos: **"Antes de duelar vamos / precisar de:"** (depois da
+  frase do duelista, se houver).
+- Uma página por requisito: **"Vou precisar de:"**, o requisito na linha
+  seguinte e o progresso na terceira (ex.: `0/10`).
+  - Tipo: "Cartas tipo Fiend" + **ícone do tipo** desenhado pelo próprio jogo
+    (comando de texto `F8 00 00`), antes do progresso.
+  - Carta específica: **nome da carta pelo jogo** (`F8 00 20`, passa pela cor de
+    tier do Studio) e `#ID` antes do progresso.
+  - Tier e atributo: "Cartas tier Comum", "Cartas atributo Earth" (texto; o FM
+    não tem símbolo de atributo para desenhar).
+- Para o ícone e o nome, a página usa dois comandos internos `F8 12 40 id`
+  ("selecionar carta") e `F8 12 41` ("restaurar"), tratados por `QuestAnswer`. A
+  carta selecionada antes da quest é devolvida ao sair, na doação e ao ir à loja.
+- Rótulos com até 24 caracteres. O vetor `inventory.spare` (cópia do baú) foi
+  removido, liberando espaço na cena.
+- Validado no ePSXe pelo usuário: textos, ícone do tipo e nome da carta.
+
 ## v1.9.17 — Frase do duelista, cartas por vitória (1–100) e equipamentos
 
 ### Frase do duelista nas quests

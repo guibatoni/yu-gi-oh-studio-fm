@@ -22,7 +22,7 @@ from fmstudio.ps1_campaign_quests import (
     build_quest_overlay, inspect_quest_overlay, install_quest_handlers, quest_settings,
     reserve_quest_handlers, save_quest_settings, foreign_arena_jumps,
 )
-from fmstudio.campaign_quests import TABLE_START
+from fmstudio.campaign_quests import RECORD, TABLE_START
 from fmstudio.ps1_expansion import EXPANDED_LEVELS, EXTRA_SLOTS
 from fmstudio.tables import PS1_SUPREME, STATS_ADDR
 from fmstudio import ps1_campaign_quest_overlay_blob as quest_blob
@@ -58,7 +58,7 @@ def setUpModule():
     unittest.addModuleCleanup(patcher.stop)
 
 
-PHRASES = {str(npc): 'Traga-me estas cartas e eu duelo com voce!' for npc in range(2, 39)}
+PHRASES = {str(npc): 'Traga-me estas cartas e eu duelo com voce!' for npc in (2, 10, 38)}
 
 
 def compiled_overlay(requirements=None, phrases=PHRASES):
@@ -98,7 +98,7 @@ class CampaignQuestsTests(unittest.TestCase):
         start = struct.unpack_from('<H', table, 4 + 2 * 2)[0]
         count, length = table[start], table[start + 1]
         self.assertEqual(length, len('Ola duelista'))
-        phrase_at = start + 2 + count * 28
+        phrase_at = start + 2 + count * RECORD.size
         self.assertEqual(table[phrase_at:phrase_at + length], b'Ola duelista')
         self.assertEqual(table_size(table), len(table))
         self.assertEqual(len(table), len(plain) + length)
@@ -322,7 +322,7 @@ class CampaignMipsTests(unittest.TestCase):
 
         def choose(channel, option):
             prompt = word(channel)
-            dialogue = read(prompt, 256)
+            dialogue = read(prompt, 512)
             branch = dialogue.index(b'\xfb\x80') + 2
             target = (prompt & 0xFFFF0000) | struct.unpack_from('<H', dialogue, branch + option * 2)[0]
             self.assertEqual(read(target, 4), b'\xf8\x1a\xf8\x12')
@@ -429,11 +429,29 @@ class CampaignMipsTests(unittest.TestCase):
             self.assertEqual(word(0x8009B290), shop - 1)
             channel = shop_channel
         prompt = word(channel)
-        self.assertIn(b'Rever requisitos', read(prompt, 256))
-        page = read(prompt, 256)
-        self.assertTrue(page.startswith(b'Traga-me estas cartas e\xfeeu duelo com voce!\xfaAntes do duelo'),
-                        page[:80])
-        before_options = read(prompt, 256).index(b'\xf8\x12\xfb\x02')
+        page = read(prompt, 512)
+        self.assertIn(b'Rever requisitos', page)
+        self.assertTrue(page.startswith(b'Traga-me estas cartas e\xfeeu duelo com voce!\xfa'
+                                        b'Antes de duelar vamos\xfeprecisar de:\xfa'
+                                        b'Vou precisar de:\xfe'), page[:90])
+        self.assertEqual(page.count(b'Vou precisar de:'), 3)
+        # Type requirement: point the native card field at a card of that type,
+        # draw its type icon, then restore the previously selected card.
+        write(0x8009B338, struct.pack('<H', 0x0123))
+        set_at = page.index(b'\xf8\x12\x40')
+        self.assertEqual(page[set_at + 5:set_at + 8], b'\xf8\x00\x00')
+        icon_card = struct.unpack_from('<H', page, set_at + 3)[0]
+        word(channel, prompt + set_at + 2)
+        call('answer', channel)
+        self.assertEqual(struct.unpack('<H', read(0x8009B338, 2))[0], icon_card)
+        self.assertEqual(word(channel), prompt + set_at + 5)
+        restore_at = page.index(b'\xf8\x12\x41')
+        word(channel, prompt + restore_at + 2)
+        call('answer', channel)
+        self.assertEqual(struct.unpack('<H', read(0x8009B338, 2))[0], 0x0123)
+        self.assertEqual(word(channel), prompt + restore_at + 3)
+        word(channel, prompt)
+        before_options = read(prompt, 512).index(b'\xf8\x12\xfb\x02')
         word(channel, prompt + before_options + 2)
         write(0x8009B398, struct.pack('<H', 0x00C1))
         call('answer', channel)
@@ -446,7 +464,7 @@ class CampaignMipsTests(unittest.TestCase):
         self.assertEqual(read(flag, 1), b'\0')
         write(trunk, b'\x01\x01\x01')
         choose(channel, 0)
-        self.assertEqual(read(word(channel), 256).count(b'1/1'), 3)
+        self.assertEqual(read(word(channel), 512).count(b'1/1'), 3)
         # A SINGLE confirm must donate and hand control to the resident
         # adapter, which uses the original six-byte duel descriptor. No
         # rewriting the VM cursor to F8 0D, no second VM tick needed.

@@ -23,12 +23,13 @@ CATEGORY_NAMES = {
     'tipo': TYPE_NAMES, 'atributo': ATTR_NAMES, 'guardian_star': STAR_NAMES,
     'raridade': tuple(name for name, _ in RARITIES.values()),
 }
-CATEGORY_LABEL = {'tipo': 'Tipo', 'atributo': 'Atrib.', 'guardian_star': 'Estrela', 'raridade': 'Classe'}
+CATEGORY_LABEL = {'tipo': 'Cartas tipo', 'atributo': 'Cartas atributo', 'guardian_star': 'Cartas estrela',
+                  'raridade': 'Cartas tier'}
 MAX_CRITERIA = 4
 FORMAT = 'fm-campaign-quests-v2'
 LEGACY_FORMAT = 'fm-campaign-quests-v1'
 CHEST_CARD_LIMIT = 250
-LABEL_WIDTH = 22
+LABEL_WIDTH = 24
 TABLE_PREFIX = b'FMQ2'
 TABLE_START = (4 + 39 * 2 + 95 + CARD_COUNT + 1) & ~1
 RECORD = struct.Struct(f'<BBHH{LABEL_WIDTH}s')
