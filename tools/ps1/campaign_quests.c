@@ -395,12 +395,28 @@ void QuestAnswer(u8 *channel)
         show_quest();
         return;
     }
+    /*
+     * Never invoke the game's duel command from the F8 12 choice handler.
+     * It can reload the 0x801A9000..0x801AC000 scene arena while this
+     * QuestAnswer() stack frame still has to return into that very arena.
+     * On ePSXe the return path then fetches quest-table data as opcodes
+     * (observed PC=0x801AAE80), crashing after the donation.
+     *
+     * Complete the inventory/flag change first, then defer the retail
+     * F8 0D descriptor to the next text-VM step. Its existing duel hook
+     * sees the completed flag and tail-calls the native handler.
+     */
+    const u8 *resume = active.resume;
+    unsigned opponent = active.opponent;
     take_claimed_cards();
-    set_flag(QUEST_FLAG_BASE + active.opponent);
-    *cursor(channel) = active.resume;
-    clear_pending(active.opponent);
+    set_flag(QUEST_FLAG_BASE + opponent);
+    clear_pending(opponent);
     active.channel = 0;
-    GAME_DUEL(channel);
+    active.quest = 0;
+    PAD1_PRESSED &= ~PAD_CONFIRM;
+    TEXT_CHOICE_LAYOUT = 0;
+    *cursor(channel) = resume - 2;  /* Replay the original F8 0D command. */
+    TEXT_YIELD = 1;
 }
 
 void QuestResumeShop(void)
