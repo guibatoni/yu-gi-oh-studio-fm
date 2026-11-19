@@ -822,8 +822,8 @@ class ModEditor(ttk.Frame):
             ttk.Frame(self.tabs, padding=9) for _ in range(7)]
         self.deck_pane = deck_pane
         for pane, name in zip((deck_pane, drop_pane, start_pane, lp_pane, quest_pane, magic_pane, frame_pane),
-                              ('Deck do oponente', 'Drops do oponente', 'Decks iniciais', 'Config. MOD',
-                               'Quests da campanha', 'Mágicas e armadilhas', 'Molduras')):
+                              ('Deck oponente', 'Drops', 'Decks iniciais', 'Config. MOD',
+                               'Quests', 'Mágicas/Traps', 'Molduras')):
             self.tabs.add(pane, text=name)
         from .quest_gui import CampaignQuestEditor
         self.quest_editor = CampaignQuestEditor(quest_pane, studio)

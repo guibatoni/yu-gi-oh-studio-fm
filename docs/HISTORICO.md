@@ -11,6 +11,9 @@
   Cartas escurecidas ou destacadas pelo jogo mantêm o efeito original.
 - Primeira etapa: mão e campo. A carta ampliada e a tela do baú vêm depois de
   validar o visual no ePSXe.
+- Abas da Edição do Mod com nomes curtos (Deck oponente, Drops, Decks iniciais,
+  Config. MOD, Quests, Mágicas/Traps, Molduras), para as sete caberem na janela.
+  O Tkinter não quebra a linha das abas, e a última ficava escondida.
 
 ## v1.9.19 — Mágicas e armadilhas: cura, dano, destruição por tipo, campos e limites
 
