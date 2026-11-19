@@ -88,6 +88,26 @@ with tempfile.TemporaryDirectory() as temp:
     assert project.edits['2']['ataque'] == 2500 and project.edits['3']['raridade'] == 'epica'
     assert 'Salvo' in root.statusbar.saved.cget('text')
 
+    # Bônus por cartas no campo: opção de contar uma carta específica (vai para o campo por padrão).
+    from fmstudio.gui import EffectDialog, SpecificCardEffectDialog
+    added = []
+    effect = EffectDialog(root, added.append)
+    effect._choice('acao', 'bonus_por_tipo')
+    root.update()
+    assert effect.specific_button.winfo_manager() == 'grid'
+    assert 'no campo' in effect.specific_button.cget('text')
+    effect._open_specific()
+    root.update()
+    specific = next(w for w in effect.winfo_children() if isinstance(w, SpecificCardEffectDialog))
+    assert specific.origin.get() == 'campo'
+    specific.selected.set(next(label for label, cid in specific.labels.items() if cid == 2))
+    specific.attack.set('300')
+    specific.submit()
+    root.update()
+    assert added and added[0]['acao'] == 'bonus_por_carta_id' and added[0]['carta_referencia_id'] == 2
+    assert added[0]['origem_contagem'] == 'campo', added[0]
+    assert not effect.winfo_exists()
+
     # Operação longa: a janela continua viva e a exceção volta para a interface.
     assert root.run_blocking('Teste…', lambda a, b=0: a + b, 2, b=3) == 5
     try:

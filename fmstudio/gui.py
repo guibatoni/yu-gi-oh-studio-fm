@@ -16,7 +16,7 @@ from .core import (Project, ModError, check_effect, EVENTS, ACTIONS, TARGETS, SC
 from .drafts import DraftSession
 from .disc import DiscError
 from .tables import CARD_COUNT, TYPE_NAMES, ATTR_NAMES, STAR_NAMES, SUPREME
-from .continuous import EFFECT_ACTIONS, EQUIPMENT_ACTIONS, SCALING_ACTIONS
+from .continuous import COUNT_ZONES, EFFECT_ACTIONS, EQUIPMENT_ACTIONS, SCALING_ACTIONS
 from .abilities import QUICK_ACTIONS, BOOLEAN_ACTIONS, quick_settings
 from . import __version__
 from .rarities import RARITIES, DEFAULT_RARITY, name_style, rarity_options
@@ -479,7 +479,12 @@ class EffectDialog(tk.Toplevel):
         elif self.vars['valor'].get()=='0' and not (continuous or marker):
             self.vars['valor'].set('500' if action!='descartar_alvo' else '1')
         self.value_entry.configure(state='disabled' if protection else 'normal')
-        self.specific_button.grid() if action == 'bonus_deck_tipo' else self.specific_button.grid_remove()
+        if action in COUNT_ZONES:
+            zone = {'campo': 'no campo', 'deck': 'do deck', 'mao': 'na mão', 'cemiterio': 'no cemitério'}[COUNT_ZONES[action]]
+            self.specific_button.configure(text=f'Contar uma carta específica {zone} em vez do tipo…')
+            self.specific_button.grid()
+        else:
+            self.specific_button.grid_remove()
         if action == 'vinculo_vida':
             self.labels['valor'].configure(text='Cura automática: ATK efetivo do atacante')
             help_text='⚔ ♥ Ao declarar um ataque, restaura LP iguais ao ATK efetivo. Funciona mesmo se o alvo defender. Disponível no simulador; PS1 ainda não suporta.'
@@ -535,7 +540,8 @@ class EffectDialog(tk.Toplevel):
             else:
                 self.on_save(entry)
                 self.destroy()
-        SpecificCardEffectDialog(self, catalog, submit, default_origin='deck')
+        SpecificCardEffectDialog(self, catalog, submit,
+                                 default_origin=COUNT_ZONES.get(self.vars['acao'].get(), 'deck'))
 
     def _submit(self):
         try:
@@ -583,7 +589,7 @@ class SpecificCardEffectDialog(tk.Toplevel):
         self.origin=tk.StringVar(value=self.initial_effect.get('origem_contagem', 'campo')
                                  if self.initial_effect else default_origin)
         for label,val in [('Campo (inclusive cartas viradas para baixo)','campo'),('Monte de compra','deck'),
-                          ('Mão','mao'),('Cemitério','cemiterio')]:
+                          ('Mão (só no simulador do Studio)','mao'),('Cemitério (só no simulador do Studio)','cemiterio')]:
             ttk.Radiobutton(pane,text=label,value=val,variable=self.origin).pack(anchor='w',pady=3)
         ttk.Label(pane,text='Quais decks/campos contam?').pack(anchor='w',pady=(7,3))
         self.scope=tk.StringVar(value=self.initial_effect.get('escopo', 'aliados')
