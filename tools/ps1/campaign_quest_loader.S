@@ -32,12 +32,50 @@ QuestDuelLoader:
     srl $t3, $t1, 16
     bne $t3, $t2, .Loriginal
     nop
-    lbu $t1, 0($t1)
+    /* Enforce the full campaign script window and the F8 0D marker here,
+       not only in the overlay. Calling the native handler from an overlay
+       fallback would leave a return address inside the reloadable arena. */
+    lui $t2, 0x801B
+    ori $t2, $t2, 0x1102
+    sltu $t3, $t1, $t2
+    bne $t3, $zero, .Loriginal
     nop
-    addiu $t1, $t1, -2      /* Simon and non-campaign IDs go straight to native. */
+    lui $t2, 0x801B
+    ori $t2, $t2, 0xFB4B
+    sltu $t3, $t1, $t2
+    beq $t3, $zero, .Loriginal
+    nop
+    lbu $t3, -2($t1)
+    addiu $t2, $zero, 0xF8
+    bne $t3, $t2, .Loriginal
+    nop
+    lbu $t3, -1($t1)
+    addiu $t2, $zero, 0x0D
+    bne $t3, $t2, .Loriginal
+    nop
+
+    lbu $t4, 0($t1)         /* Keep opponent ID across check_overlay. */
+    addiu $t1, $t4, -2     /* Simon and non-campaign IDs use native. */
     sltiu $t1, $t1, 37
     beq $t1, $zero, .Loriginal
     nop
+
+    /* The quest is already donated: jump DIRECTLY from this resident
+       adapter to the original F8 0D handler. Do not call GAME_DUEL
+       from QuestBeforeDuel while its code lives in the scene arena. */
+    addiu $t0, $t4, 0x750  /* flag id = QUEST_FLAG_BASE + opponent */
+    srl $t1, $t0, 3
+    lui $t2, 0x801D
+    ori $t2, $t2, 0x0618  /* FLAGS */
+    addu $t2, $t2, $t1
+    lbu $t2, 0($t2)
+    andi $t0, $t0, 7
+    addiu $t1, $zero, 0x80
+    srlv $t1, $t1, $t0
+    and $t2, $t2, $t1
+    bne $t2, $zero, .Loriginal
+    nop
+
     check_overlay .Loriginal
     j QuestBeforeDuel
     nop
