@@ -1,4 +1,6 @@
-## v1.9.17 (em desenvolvimento) — Frase do duelista nas quests
+## v1.9.17 — Frase do duelista, cartas por vitória (1–100) e equipamentos
+
+### Frase do duelista nas quests
 
 - Em **Edição do Mod → Quests da campanha → Editar quest**, cada duelista pode
   ter uma frase própria. Ela aparece numa página antes dos requisitos (até
@@ -8,21 +10,21 @@
 - Frases ocupam espaço da cena do PS1. Se não couber, a exportação é recusada
   com mensagem.
 
-### Cartas por vitória (1x, 3x, 5x, 15x, 30x)
+### Cartas por vitória (1 a 100)
 
-- Nova aba **Cartas por vitória** em Passwords e baú. O Drop x15 sorteia 5 cartas
-  por vitória no próprio código residente (`0x801AAC40..0x801AAEE0`). O Studio
-  altera os limites do laço de sorteio (`0x801AAC78`), da entrega por
-  `Duel_AwardCard` (`0x801AAD74`) e do rodízio do nome no resultado (`0x801AADEC`).
-- A lista sorteada cabe em `0x801AAC20..0x801AAC3F` até 15 cartas. Com 30, a base
-  passa para `0x801AABE0` (três `addiu`). Essa área é o buffer de IA do campo,
-  recarregado a cada duelo.
-- Todas as cópias reconhecidas do código do mod são alteradas: a do SLUS é
-  obrigatória, e as do WA_MRG são incluídas quando existem. O relatório de
-  exportação mostra quantas cópias foram alteradas. As quests continuam
-  validando o código do mod pela forma canônica.
-- Ainda a validar no ePSXe: entrega e exibição das cartas para cada opção,
-  inclusive 30x.
+- Nova aba **Cartas por vitória** em Passwords e baú, com barra e caixa de texto
+  de 1 a 100, e a opção "padrão do mod" (sem alteração).
+- O código residente do Drop x15 (`0x801AAC40..0x801AAEE0`) sorteia e entrega
+  5 cartas. A tela de resultado repete os nomes das sorteadas. O Studio altera
+  os limites do laço de sorteio (`0x801AAC78`), da entrega por `Duel_AwardCard`
+  (`0x801AAD74`) e do rodízio do nome (`0x801AADEC`).
+- A lista sorteada cabe em `0x801AAC20..0x801AAC3F` até 15 cartas. Acima disso, a
+  base passa para `0x801AAB50` (três `addiu`, espaço para 100). Essa área é o
+  buffer de IA do campo, recarregado a cada duelo.
+- Todas as cópias reconhecidas do código do mod são alteradas (SLUS obrigatória e
+  WA_MRG quando existe). As quests validam o código do mod pela forma canônica.
+- Validado no ePSXe pelo usuário: 1 carta por vitória, conferida pela contagem do
+  baú. Ainda a validar: valores acima de 15 (nova base da lista).
 
 ### Equipamentos: bônus e alvos
 
@@ -37,6 +39,7 @@
 - Alvos: lista de monstros com busca e seleção múltipla (Ctrl/Shift),
   "Selecionar visíveis" e "Limpar visíveis", sincronizada com o campo de IDs.
 - Ainda a validar no ePSXe: valor aplicado, animação e Reverse Trap.
+- Frase das quests: ainda a validar no ePSXe.
 
 ## v1.9.16 — Quests preservam o código do Drop x15 (QOV7)
 

@@ -1,4 +1,4 @@
-"""Cartas recebidas por vitória no Drop x15: 1, 3, 5 (padrão do mod), 15 ou 30.
+"""Cartas recebidas por vitória no Drop x15: de 1 a 100 (o código do mod entrega 5).
 
 O Drop x15 sorteia as cartas no próprio código residente (0x801AAC40..0x801AAEE0):
 
@@ -6,10 +6,11 @@ O Drop x15 sorteia as cartas no próprio código residente (0x801AAC40..0x801AAE
 * ``0x801AAD74`` laço da entrega (``Duel_AwardCard``), ``li s7, N+1``;
 * ``0x801AADEC`` rodízio do nome exibido no resultado, ``li s7, N``;
 * a lista sorteada fica em ``base + 0x20 + 2*k`` (k = 1..N), com
-  ``base = 0x801AAC00``. Cabem 15 cartas antes do código do mod; para 30 a
-  base passa a ``0x801AABE0`` (``addiu`` em ``0x801AAC44``, ``0x801AAD50`` e
-  ``0x801AADD0``). Essa área faz parte do buffer de script de IA do campo,
-  que é recarregado a cada duelo; o sorteio acontece depois do combate.
+  ``base = 0x801AAC00``. Cabem 15 cartas antes do código do mod; acima disso
+  a base passa a ``0x801AAB50`` (``addiu`` em ``0x801AAC44``, ``0x801AAD50`` e
+  ``0x801AADD0``), com espaço para 100. Essa área faz parte do buffer de script
+  de IA do campo, que é recarregado a cada duelo; o sorteio acontece depois
+  do combate.
 
 O código do mod existe no SLUS e nos registros do WA_MRG que o recarregam;
 todas as cópias reconhecidas (SHA-256 canônico) são alteradas da mesma forma.
@@ -20,7 +21,8 @@ import struct
 
 from .core import ModError
 
-CHOICES = (1, 3, 5, 15, 30)
+COUNT_MIN, COUNT_MAX = 1, 100
+CHOICES = tuple(range(COUNT_MIN, COUNT_MAX + 1))
 MOD_DEFAULT = 5
 SETTINGS_KEY = 'ps1_cartas_por_vitoria'
 SCRATCH_LIMIT = 15  # entradas que cabem em 0x801AAC20..0x801AAC3F
@@ -33,12 +35,12 @@ BASE_DRAW = (0x004, 0x27BDAC00)
 BASE_AWARD = (0x110, 0x2484AC00)
 BASE_SHOW = (0x190, 0x2442AC00)
 SITES = (LIMIT_DRAW, LIMIT_AWARD, LIMIT_SHOW, BASE_DRAW, BASE_AWARD, BASE_SHOW)
-WIDE_BASE = 0xABE0  # 0x801AABE0 (0x801B0000 - 0x5420)
+WIDE_BASE = 0xAB50  # 0x801AAB50 (0x801B0000 - 0x54B0): 0x20 + 2*101 bytes before 0x801AAC40
 
 
 def words_for(count: int) -> dict[int, int]:
-    if count not in CHOICES:
-        raise ModError(f'Cartas por vitória: escolha {", ".join(map(str, CHOICES))}.')
+    if isinstance(count, bool) or not isinstance(count, int) or not COUNT_MIN <= count <= COUNT_MAX:
+        raise ModError(f'Cartas por vitória: escolha de {COUNT_MIN} a {COUNT_MAX}.')
     words = {LIMIT_DRAW[0]: 0x24170000 | (count + 1), LIMIT_AWARD[0]: 0x24170000 | (count + 1),
              LIMIT_SHOW[0]: 0x24170000 | count}
     for offset, original in (BASE_DRAW, BASE_AWARD, BASE_SHOW):
@@ -52,9 +54,11 @@ def _read(code: bytes, offset: int) -> int:
 
 def count_of(code: bytes) -> int | None:
     """Quantidade gravada numa cópia do código do mod (None se não reconhecida)."""
-    for count in CHOICES:
-        if all(_read(code, offset) == word for offset, word in words_for(count).items()):
-            return count
+    count = _read(code, LIMIT_SHOW[0]) - 0x24170000
+    if not COUNT_MIN <= count <= COUNT_MAX:
+        return None
+    if all(_read(code, offset) == word for offset, word in words_for(count).items()):
+        return count
     return None
 
 
@@ -107,7 +111,7 @@ def cards_per_win(project) -> int | None:
     value = (getattr(project, 'metadata', None) or {}).get(SETTINGS_KEY)
     if value is None:
         return None
-    if isinstance(value, bool) or value not in CHOICES:
+    if isinstance(value, bool) or not isinstance(value, int) or not COUNT_MIN <= value <= COUNT_MAX:
         raise ModError('Configuração de cartas por vitória inválida no projeto.')
     return value
 
@@ -131,7 +135,7 @@ def apply(exe: bytes, wa: bytes | None, count: int) -> tuple[bytes, bytes | None
     if wa is not None:
         wa, wa_hits = patch_copies(wa, count, required=False)
     return exe, wa, {'status': 'aplicado', 'cartas': count, 'copias_slus': len(exe_hits),
-                     'copias_wa': len(wa_hits), 'base_lista': '0x801AABE0' if count > SCRATCH_LIMIT
+                     'copias_wa': len(wa_hits), 'base_lista': '0x801AAB50' if count > SCRATCH_LIMIT
                      else '0x801AAC00', 'validado_epsxe': False}
 
 

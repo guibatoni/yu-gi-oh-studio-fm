@@ -1,3 +1,18 @@
+## Studio FM v1.9.17 — Frase das quests, cartas por vitória e equipamentos
+
+- **Frase do duelista:** em Edição do Mod → Quests da campanha → Editar quest.
+  Até 2 linhas de 24 caracteres, mostradas numa página antes dos requisitos.
+- **Cartas por vitória (1 a 100):** em Passwords e baú → Cartas por vitória,
+  com barra e caixa de texto. Altera o próprio código de drops do Drop x15.
+- **Equipamentos:** em Relações → Equipamentos, novo **bônus de ATK/DEF** por
+  equipamento (0–5000; padrão +500, Megamorph +1000) e lista de alvos com busca e
+  seleção múltipla.
+- É necessário **gerar um BIN/CUE novo**.
+
+[Detalhes técnicos](docs/HISTORICO.md).
+
+---
+
 ## Studio FM v1.9.16 — Quests: "Doar e duelar" sem travar no Drop x15
 
 Corrigida a causa real do erro `unknown opcode ... at 801AAE78` ao escolher

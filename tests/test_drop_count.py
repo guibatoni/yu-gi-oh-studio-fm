@@ -1,4 +1,4 @@
-"""Cartas por vitória (1/3/5/15/30) no código residente do Drop x15."""
+"""Cartas por vitória (1 a 100) no código residente do Drop x15."""
 import hashlib
 from pathlib import Path
 import struct
@@ -39,6 +39,7 @@ class DropCountTests(unittest.TestCase):
         for count in drops.CHOICES:
             patched, positions = drops.patch_copies(MOD, count, required=True)
             self.assertEqual(positions, [0])
+            self.assertEqual(len(drops.CHOICES), 100)
             self.assertEqual(drops.count_of(patched), count)
             self.assertEqual(drops.canonical(patched), MOD)
             draw = struct.unpack_from('<I', patched, drops.LIMIT_DRAW[0])[0]
@@ -56,7 +57,7 @@ class DropCountTests(unittest.TestCase):
             base = 0x801B0000 + (low - 0x10000 if low & 0x8000 else low)
             last_entry_end = base + 0x20 + 2 * count + 2
             self.assertLessEqual(last_entry_end, DROP15_CODE, count)
-            self.assertEqual(base, 0x801AAC00 if count <= 15 else 0x801AABE0)
+            self.assertEqual(base, 0x801AAC00 if count <= 15 else 0x801AAB50)
 
     def test_all_copies_in_an_archive_are_patched(self):
         archive = b'\x11' * 1000 + MOD + b'\x22' * 333 + MOD + b'\x33' * 7
@@ -89,8 +90,11 @@ class DropCountTests(unittest.TestCase):
             self.assertIsNone(drops.cards_per_win(project))
             drops.set_cards_per_win(project, 30)
             self.assertEqual(drops.cards_per_win(Project.open(Path(folder))), 30)
-            with self.assertRaisesRegex(ModError, 'escolha'):
-                drops.set_cards_per_win(project, 7)
+            for bad in (0, 101, True, '5'):
+                with self.assertRaisesRegex(ModError, 'escolha'):
+                    drops.set_cards_per_win(project, bad)
+            drops.set_cards_per_win(project, 77)
+            self.assertEqual(drops.cards_per_win(project), 77)
             drops.set_cards_per_win(project, None)
             self.assertIsNone(drops.cards_per_win(project))
 
