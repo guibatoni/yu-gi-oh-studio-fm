@@ -60,9 +60,11 @@ with tempfile.TemporaryDirectory() as temp:
     assert root._section == 'quests'
 
     # Barra lateral e biblioteca.
+    before = root.nav.collapsed
     root.toggle_sidebar(); root.update()
-    assert root.nav.collapsed and root.prefs['barra_recolhida']
+    assert root.nav.collapsed != before and root.prefs['barra_recolhida'] == root.nav.collapsed
     root.toggle_sidebar(); root.update()
+    assert root.nav.collapsed == before
     root.show_section('cartas'); root.update()
     root.toggle_library(); root.update()
     assert not root.library_shown()

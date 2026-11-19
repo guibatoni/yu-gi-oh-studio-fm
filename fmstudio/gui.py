@@ -738,7 +738,7 @@ class Studio(tk.Tk):
         self.prefs = ui_prefs.load()
         geometry = self.prefs['geometria']
         self.geometry(geometry if ui_prefs.valid_geometry(geometry) else '1390x825')
-        self.minsize(1050,650)
+        self.minsize(min(1050, self.winfo_screenwidth() - 40), min(650, self.winfo_screenheight() - 80))
         if self.prefs.get('maximizada'):
             try:
                 self.state('zoomed')
@@ -769,6 +769,7 @@ class Studio(tk.Tk):
         for field in (self.filter, self.filter_type, self.filter_star, self.filter_from, self.filter_to):
             field.trace_add('write', lambda *_: self._refresh_cards() if not self._suspend_filters else None)
         self._bind_shortcuts()
+        self.bind('<Configure>', self._on_resize, add='+')
         self.protocol('WM_DELETE_WINDOW',self._on_close)
         start = self.prefs.get('secao', 'inicio')
         self.show_section(start if start in ui_nav.BY_KEY else 'inicio')
@@ -797,35 +798,34 @@ class Studio(tk.Tk):
         self.forward_button.pack(side='left', padx=(3, 0))
         Tooltip(self.back_button, 'Voltar à tela anterior (Alt+←)')
         Tooltip(self.forward_button, 'Avançar (Alt+→)')
-        titleframe = tk.Frame(header,bg=SURFACE)
-        titleframe.pack(side='left')
-        self.section_title = tk.Label(titleframe,text='Início',font=('Segoe UI',14,'bold'),bg=SURFACE,fg=TEXT)
-        self.section_title.pack(anchor='w')
-        self.section_hint = tk.Label(titleframe,text='',font=('Segoe UI',9),bg=SURFACE,fg=MUTED)
-        self.section_hint.pack(anchor='w')
-        self.proj_title = tk.Label(header,text='Nenhum projeto aberto',font=('Segoe UI',10),bg=SURFACE,fg=MUTED)
-
         actions = tk.Frame(header, bg=SURFACE)
-        actions.pack(side='right')
-        self.search_button = ttk.Button(actions, text='⌕  Buscar tela ou ação   Ctrl+K', command=self.open_palette)
+        actions.pack(side='right')          # empacotado antes do título: os botões têm prioridade
+        self.search_button = ttk.Button(actions, text='⌕ Buscar  Ctrl+K', command=self.open_palette)
         self.search_button.pack(side='left', padx=(0, 6))
+        Tooltip(self.search_button, 'Ir para qualquer tela ou ação pelo nome')
         for title, options in (
                 ('Projeto', [('Novo projeto', self.new_project, 'Ctrl+N'),
                              ('Abrir projeto', self.open_project, 'Ctrl+O'),
-                             ('Salvar projeto', self.save_project, 'Ctrl+S')]),
+                             ('Salvar projeto', self.save_project, 'Ctrl+S'),
+                             None,
+                             ('Exportar alterações (JSON e SLUS auxiliar)', self.export, None),
+                             ('Verificar integridade do projeto', self.verify, None)]),
                 ('Importar', [('Importar CSVs', self.import_csv, None),
                               ('Importar BIN/CUE', self.import_bin, None),
                               ('Extrair máximo', self.extract_max, None),
                               ('Vincular SLUS', self.attach_slus, None)])):
             group = ttk.Menubutton(actions, text=title)
             menu = self._menu(group)
-            for label, action, shortcut in options:
+            for option in options:
+                if option is None:
+                    menu.add_separator()
+                    continue
+                label, action, shortcut = option
                 menu.add_command(label=label, command=action, accelerator=shortcut or '')
             group.configure(menu=menu)
             group.pack(side='left', padx=(0, 5))
+        # Mantido para o código que habilita/desabilita botões; a ação fica no menu Projeto.
         self.export_button = ttk.Button(actions, text='Exportar', command=self.export, state='disabled')
-        self.export_button.pack(side='left', padx=(0, 5))
-        Tooltip(self.export_button, 'Exportar alterações (JSON e SLUS auxiliar)')
         self.save_button = ttk.Button(actions, text='Salvar', style='Accent.TButton',
                                       command=self.save_project, state='disabled')
         self.save_button.pack(side='left', padx=(0, 5))
@@ -837,6 +837,13 @@ class Studio(tk.Tk):
         self.update_button = ttk.Button(actions, text='⟳', width=3, command=self.check_updates)
         self.update_button.pack(side='left')
         Tooltip(self.update_button, 'Verificar atualizações do Studio')
+        titleframe = tk.Frame(header,bg=SURFACE)
+        titleframe.pack(side='left', fill='x', expand=True)
+        self.section_title = tk.Label(titleframe,text='Início',font=('Segoe UI',14,'bold'),bg=SURFACE,fg=TEXT,anchor='w')
+        self.section_title.pack(fill='x')
+        self.section_hint = tk.Label(titleframe,text='',font=('Segoe UI',9),bg=SURFACE,fg=MUTED,anchor='w')
+        self.section_hint.pack(fill='x')
+        self.proj_title = tk.Label(header,text='Nenhum projeto aberto',font=('Segoe UI',10),bg=SURFACE,fg=MUTED)
         self.toast = tk.Label(self, bg='#22454a', fg=TEXT, font=('Segoe UI', 10, 'bold'),
                               padx=13, pady=9, wraplength=360, justify='left')
         self.palette = CommandPalette(self)
@@ -1042,10 +1049,29 @@ class Studio(tk.Tk):
         self._apply_library_visibility()
 
     def toggle_sidebar(self):
+        self._auto_collapsed = False
         self.nav.set_collapsed(not self.nav.collapsed)
 
     def _sidebar_collapsed(self, collapsed):
-        self.prefs['barra_recolhida'] = collapsed
+        if not getattr(self, '_auto_collapsed', False):
+            self.prefs['barra_recolhida'] = collapsed
+
+    COMPACT_WIDTH = 1280
+
+    def _on_resize(self, event):
+        """Em janelas estreitas (ex.: 1024×768) o menu recolhe sozinho, sem mudar a preferência."""
+        if event.widget is not self:
+            return
+        narrow = event.width < self.COMPACT_WIDTH
+        if narrow == getattr(self, '_was_narrow', False):
+            return                       # só age quando cruza o limite
+        self._was_narrow = narrow
+        if narrow and not self.nav.collapsed:
+            self._auto_collapsed = True
+            self.nav.set_collapsed(True)
+        elif not narrow and getattr(self, '_auto_collapsed', False):
+            self.nav.set_collapsed(bool(self.prefs.get('barra_recolhida')))
+            self._auto_collapsed = False
 
     def go_back(self):
         key = self.history.go_back()
@@ -1167,12 +1193,19 @@ class Studio(tk.Tk):
             line.bind('<Enter>', lambda _e, w=line: w.configure(fg=ACCENT))
             line.bind('<Leave>', lambda _e, w=line: w.configure(fg=TEXT))
         tk.Label(flow, text='ATALHOS', bg=SURFACE, fg=ACCENT, font=('Segoe UI', 10, 'bold')).pack(anchor='w', pady=(12, 2))
-        tk.Label(flow, justify='left', anchor='w', bg=SURFACE, fg=MUTED, font=('Segoe UI', 9), text=(
-            'Ctrl+K  buscar tela ou ação        Ctrl+S  salvar\n'
-            'Ctrl+F  buscar carta               Ctrl+B  gerar BIN/CUE\n'
-            'Ctrl+1…6  cartas, efeitos, deck, drops, iniciais, quests\n'
-            'Alt+← / Alt+→  voltar / avançar    Ctrl+L  biblioteca\n'
-            'Ctrl+\\  recolher menu   ·   Na biblioteca: Ctrl+A, Ctrl+C, Ctrl+E (lote)')).pack(anchor='w')
+        keys = tk.Frame(flow, bg=SURFACE)
+        keys.pack(anchor='w', fill='x')
+        for row, (combo, text) in enumerate((
+                ('Ctrl+K', 'buscar tela ou ação'), ('Ctrl+S', 'salvar projeto'),
+                ('Ctrl+B', 'gerar BIN/CUE'), ('Ctrl+F', 'buscar carta'),
+                ('Ctrl+1…6', 'cartas, efeitos, deck, drops, iniciais, quests'),
+                ('Alt+← →', 'voltar / avançar'), ('Ctrl+L', 'mostrar/ocultar biblioteca'),
+                ('Ctrl+\\', 'recolher o menu'),
+                ('Ctrl+E', 'edição em lote (biblioteca)'))):
+            tk.Label(keys, text=combo, bg=SURFACE, fg=TEXT, font=('Consolas', 9), anchor='w').grid(
+                row=row, column=0, sticky='w', padx=(0, 10))
+            tk.Label(keys, text=text, bg=SURFACE, fg=MUTED, font=('Segoe UI', 9), anchor='w').grid(
+                row=row, column=1, sticky='w')
 
     def _refresh_home(self):
         if not hasattr(self, 'recent_tree'):

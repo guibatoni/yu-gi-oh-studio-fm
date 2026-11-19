@@ -47,8 +47,10 @@ class CardBatchDialog(tk.Toplevel):
         self.ids = sorted(set(ids))
         self.rows = None
         self.title(f'Edição em lote — {len(self.ids)} cartas')
-        self.geometry('860x640')
-        self.minsize(720, 520)
+        width = min(860, studio.winfo_screenwidth() - 40)
+        height = min(640, studio.winfo_screenheight() - 80)
+        self.geometry(f'{width}x{height}')
+        self.minsize(min(720, width), min(520, height))
         self.transient(studio)
         self.bind('<Escape>', lambda _e: self.destroy())
         body = ttk.Frame(self, padding=14)
