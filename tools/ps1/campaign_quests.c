@@ -173,19 +173,17 @@ static int claim(unsigned requirement, unsigned visited)
 
 unsigned QuestCountMissing(const struct Quest *quest)
 {
-    unsigned card, slot, mask, req, missing = 0;
+    unsigned card, mask, req, missing = 0;
     for (mask = 0; mask < MASKS; ++mask) {
         inventory.unused[mask] = 0;
         for (req = 0; req < CRITERIA; ++req)
             inventory.claims[mask][req] = 0;
     }
+    /* The chest count already excludes the 40 deck cards (the Build Deck
+       screen shows them as separate quantities: func_800323F8). Only chest
+       copies can be donated, so the deck is never touched. */
     for (card = 0; card < CARD_COUNT; ++card)
         inventory.spare[card] = TRUNK[card];
-    for (slot = 0; slot < DECK_SIZE; ++slot) {
-        card = DECK[slot];
-        if (card >= 1 && card <= CARD_COUNT && inventory.spare[card - 1])
-            --inventory.spare[card - 1];
-    }
     for (card = 0; card < CARD_COUNT; ++card) {
         mask = 0;
         if (inventory.spare[card]) {

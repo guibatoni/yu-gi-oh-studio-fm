@@ -82,3 +82,20 @@ cena do PS1", em vez de gerar um jogo que trava.
 3. Boot limpo, Memory Card, **Doar e duelar**: o baú/deck deve abrir.
 4. Termine o duelo (vitória e derrota) e confira os drops.
 5. "Ir ao Card Shop", Simon Muran sem quest, salvar e recarregar.
+
+## Correção adicional: contagem do baú
+
+Os save states do baú no Drop x15 mostram que `gLibrary_abCardChest`
+(`0x801D0250`) **não inclui** as cartas do deck: 25 das 31 cartas do deck têm
+quantidade 0 no baú. A tela Build Deck (`func_800323F8`) mostra as duas
+quantidades separadas. `QuestCountMissing` subtraía as cópias do deck da
+contagem do baú, como se ela as incluísse, e por isso exigia cópias a mais.
+Agora usa só o baú. O deck continua intocado, porque a doação só debita do baú.
+
+## Pendente: retirada não observada no ePSXe
+
+Teste do usuário com QOV7 (19/11/2026): sem travamento. A quest mostrava
+"Jinzo 1/1" e "Doar e duelar" levou ao baú e ao duelo, mas as cartas não
+pareceram sair do baú. Aguardando save states (página da quest antes da
+escolha / baú depois) para comparar `0x801D0250`, a flag `0x750 + id` e o
+estado `active`/`inventory` em `0x801AAEE0..0x801AB650`.

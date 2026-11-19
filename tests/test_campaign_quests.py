@@ -343,7 +343,8 @@ class CampaignMipsTests(unittest.TestCase):
         write(EXPANDED_LEVELS + 1, b'\x10')
         initial_deck = struct.pack('<40H', 1, 1, 2, 3, 723, 740, *range(100, 134))
         write(deck, initial_deck)
-        write(trunk, b'\x03\x01\x01')
+        # Chest counts exclude the deck (card 1 is only in the deck here).
+        write(trunk, b'\x00\x01\x01')
         write(trunk + 722, b'\x04')
         flag = flags + ((0x750 + opponent) >> 3)
         mask = 0x80 >> ((0x750 + opponent) & 7)
@@ -374,7 +375,7 @@ class CampaignMipsTests(unittest.TestCase):
         if action in ('early', 'hiding', 'tournament'):
             choose(channel, 1)
             self.assertEqual(read(flag, 1), b'\0')
-            self.assertEqual(read(trunk, 3), b'\x03\x01\x01')
+            self.assertEqual(read(trunk, 3), b'\x00\x01\x01')
             if action == 'tournament':
                 self.assertEqual(read(0x8009B26C, 1), b'\x02')
                 self.assertEqual(read(0x8009B27A, 1), bytes([190]))
@@ -397,12 +398,12 @@ class CampaignMipsTests(unittest.TestCase):
         call('answer', channel)
         self.assertEqual(read(0x8009B398, 2), b'\x01\0')
         self.assertEqual(word(0x8009B350), 1)
-        self.assertEqual(read(trunk, 3), b'\x03\x01\x01')
+        self.assertEqual(read(trunk, 3), b'\x00\x01\x01')
         word(channel, prompt)
         choose(channel, 0)
         self.assertEqual(word(channel), prompt)
         self.assertEqual(read(flag, 1), b'\0')
-        write(trunk, b'\x03\x02\x02')
+        write(trunk, b'\x01\x01\x01')
         choose(channel, 0)
         self.assertEqual(read(word(channel), 256).count(b'1/1'), 3)
         # A SINGLE confirm must donate and hand control to the resident
@@ -416,7 +417,7 @@ class CampaignMipsTests(unittest.TestCase):
         self.assertEqual(read(0x8009B26C,1), b'\x03')
         self.assertEqual(word(0x8009B350), 1)
         self.assertEqual(read(0x8009B398, 2), b'\x01\0')
-        self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
+        self.assertEqual(read(trunk, 3), b'\x00\x00\x00')
         self.assertEqual(read(deck, 80), initial_deck)
         self.assertEqual(read(trunk+722, 1), b'\x04')
         self.assertEqual(read(flag, 1), bytes([mask]))
@@ -429,4 +430,4 @@ class CampaignMipsTests(unittest.TestCase):
         call('duel', channel)
         self.assertEqual(len(entered_overlay), overlay_entries)
         self.assertEqual(events[-1], ('native', entry))
-        self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
+        self.assertEqual(read(trunk, 3), b'\x00\x00\x00')
