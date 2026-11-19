@@ -1,3 +1,22 @@
+## v1.9.16 — Quests preservam o código do Drop x15 (QOV7)
+
+- Causa raiz do travamento em **Doar e duelar** (`801AAE78/801AAE80`),
+  confirmada com save states do ePSXe: o Drop x15 mantém código em
+  `0x801AAC40..0x801AAEE0` (área de salvamento desde `0x801AAC00`), chamado
+  pelo sorteio de drops, pelas recompensas de fim de duelo e pelo comando de
+  texto do nome da carta. O overlay das quests (QOV3–QOV5) sobrescrevia essa
+  área.
+- Overlay **QOV7**: BSS em `0x801AAEE0`, cabeçalho da tabela abaixo de
+  `0x801AAC00`, bytes do mod copiados do SLUS com SHA-256 conferido, registros
+  das quests ao redor deles. A exportação é recusada se houver outro desvio para
+  a área ou se as quests não couberem (até 3 requisitos × 37 duelistas).
+- A contagem do baú não subtrai mais as cartas do deck, que já ficam fora do baú
+  no FM.
+- Validado no ePSXe pelo usuário: doação, retirada do baú (Jinzo 2 → 1, 11 cartas
+  de atributo Terra), abertura do baú/deck, início do duelo e "Ir ao Card Shop".
+- Ainda a validar no ePSXe: fim de duelo com drops, salvar/recarregar,
+  Simon Muran, torneio e Egito.
+
 ## v1.9.15 — Handoff residente das quests para baú/deck
 
 - Tratado o segundo crash de ePSXe: `unknown opcode 63697473 at
