@@ -26,6 +26,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends xvfb python3-tk
           python -m pip install ziglang==0.13.0 unicorn==2.1.4 pillow
+      - name: Verificar sintaxe do blob versionado antes de recompilar
+        run: python -m py_compile fmstudio/ps1_campaign_quest_overlay_blob.py
       - name: Compilar overlay MIPS real (mips1)
         shell: bash
         run: |
