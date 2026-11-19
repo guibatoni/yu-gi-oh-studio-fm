@@ -25,15 +25,8 @@ from .richtext import NATIVE_ICONS, CUSTOM_ICONS, TEXT_COLORS, tokens
 from .updates import read_latest, start_updater, UpdateError
 from .guardian import SUPREME_COLOR, guardian_name
 
-BG = '#0d1220'
-SURFACE = '#171f32'
-SURFACE2 = '#212c44'
-TEXT = '#f2f5fb'
-MUTED = '#a8b5cb'
-ACCENT = '#32cfb4'
-BLUE = '#589bfa'
-BORDER = '#344259'
-ROW_ALT = '#1c263a'
+from .ui_theme import BG, SURFACE, SURFACE2, TEXT, MUTED, ACCENT, BLUE, BORDER, ROW_ALT, WARNING
+from . import ui_theme, ui_prefs, ui_nav
 EFFECT_ATTRIBUTE_NAMES = (*ATTR_NAMES, *(f'Atributo {i:02d}' for i in range(len(ATTR_NAMES), 16)))
 
 
@@ -742,8 +735,18 @@ class Studio(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f'Yu-Gi-Oh Studio Card FM | v{__version__}')
-        self.geometry('1390x825')
+        self.prefs = ui_prefs.load()
+        geometry = self.prefs['geometria']
+        self.geometry(geometry if ui_prefs.valid_geometry(geometry) else '1390x825')
         self.minsize(1050,650)
+        if self.prefs.get('maximizada'):
+            try:
+                self.state('zoomed')
+            except tk.TclError:
+                pass
+        self.history = ui_nav.History()
+        self._section = None
+        self._busy = None
         self.configure(bg=BG)
         self.project: Project | None = None
         self.drafts: DraftSession | None = None
@@ -765,90 +768,85 @@ class Studio(tk.Tk):
         self._build()
         for field in (self.filter, self.filter_type, self.filter_star, self.filter_from, self.filter_to):
             field.trace_add('write', lambda *_: self._refresh_cards() if not self._suspend_filters else None)
-        self.bind('<Control-f>', lambda _event: self.focus_catalog())
-        self.bind('<Control-s>',lambda _ : self.save_project())
-        self.bind('<Control-o>',lambda _ : self.open_project())
+        self._bind_shortcuts()
         self.protocol('WM_DELETE_WINDOW',self._on_close)
+        start = self.prefs.get('secao', 'inicio')
+        self.show_section(start if start in ui_nav.BY_KEY else 'inicio')
 
     def _style(self):
-        s = ttk.Style(self)
-        s.theme_use('clam')
-        s.configure('.', font=('Segoe UI',10), background=BG, foreground=TEXT, fieldbackground=SURFACE, bordercolor=BORDER)
-        s.configure('TFrame',background=BG)
-        s.configure('TLabel',background=BG,foreground=TEXT)
-        for style, resting, hover, pressed, color in (
-                ('TButton', SURFACE2, '#354562', '#283852', TEXT),
-                ('TMenubutton', SURFACE2, '#354562', '#283852', TEXT),
-                ('Accent.TButton', ACCENT, '#60e2cb', '#25a992', '#06171a'),
-                ('Danger.TButton', '#3b293b', '#603347', '#4b2939', '#ffd9df')):
-            s.configure(style, background=resting, foreground=color, padding=(10, 6), relief='flat')
-            s.map(style, background=[('disabled', '#172033'), ('pressed', pressed), ('active', hover)],
-                  foreground=[('disabled', '#7f8da5')], bordercolor=[('focus', ACCENT)])
-        s.configure('Accent.TButton', font=('Segoe UI',10,'bold'))
-        s.configure('TCheckbutton', padding=(5, 5), indicatorbackground=SURFACE2)
-        s.map('TCheckbutton', background=[('active', SURFACE2)],
-              foreground=[('disabled', '#7f8da5')],
-              indicatorbackground=[('selected', ACCENT), ('pressed', '#25a992')])
-        s.configure('TSpinbox', fieldbackground=SURFACE, foreground=TEXT, insertcolor=TEXT, padding=(4, 3))
-        s.configure('TEntry',fieldbackground=SURFACE,foreground=TEXT,padding=(7,8),insertcolor=TEXT)
-        s.configure('TCombobox',fieldbackground=SURFACE,foreground=TEXT,selectbackground=SURFACE2,padding=(7,7))
-        s.map('TCombobox',fieldbackground=[('readonly',SURFACE)],foreground=[('readonly',TEXT)])
-        s.configure('TNotebook',background=BG,borderwidth=0)
-        s.configure('TNotebook.Tab',background=SURFACE2,foreground=MUTED,padding=(10, 8))
-        s.map('TNotebook.Tab',background=[('selected',SURFACE),('active','#354562')],
-              foreground=[('selected',ACCENT),('active',TEXT)])
-        s.configure('Treeview',background=SURFACE,fieldbackground=SURFACE,foreground=TEXT,rowheight=27,borderwidth=0)
-        s.map('Treeview',background=[('selected','#265b67')],foreground=[('selected',TEXT)])
-        s.configure('Treeview.Heading',background=SURFACE2,foreground=TEXT,font=('Segoe UI',9,'bold'),relief='flat')
-        s.configure('TScrollbar',background=SURFACE2,troughcolor=BG)
-        s.configure('TLabelframe', background=BG, bordercolor=BORDER)
-        s.configure('TLabelframe.Label', background=BG, foreground=ACCENT)
+        ui_theme.apply(self)
 
     def _build(self):
-        header = tk.Frame(self,bg=SURFACE,padx=14,pady=9)
-        header.pack(fill='x')
-        tk.Label(header,text='FM',font=('Segoe UI',25,'bold'),bg=SURFACE,fg=ACCENT).pack(side='left')
-        titleframe = tk.Frame(header,bg=SURFACE)
-        titleframe.pack(side='left',padx=10)
-        tk.Label(titleframe,text='STUDIO CARD FM',font=('Segoe UI',16,'bold'),bg=SURFACE,fg=TEXT).pack(anchor='w')
-        tk.Label(titleframe,text='Yu-Gi-Oh! Forbidden Memories',font=('Segoe UI',9),bg=SURFACE,fg=MUTED).pack(anchor='w')
-        self.proj_title = tk.Label(header,text='Nenhum projeto aberto',font=('Segoe UI',10),bg=SURFACE,fg=MUTED)
-        self.proj_title.pack(side='right')
-        self.update_button = ttk.Button(header, text='⟳ Atualizar', command=self.check_updates)
-        self.update_button.pack(side='right',padx=(0,16))
+        from .ui_shell import NavSidebar, StatusBar, CommandPalette, Tooltip
+        self.status = tk.StringVar(value='Abra ou crie um projeto para editar suas cartas.')
+        self.statusbar = StatusBar(self, self.status)
+        self.statusbar.pack(side='bottom', fill='x')
+        self.nav = NavSidebar(self, self.show_section, collapsed=self.prefs.get('barra_recolhida', False))
+        self.nav.on_collapse = self._sidebar_collapsed
+        self.nav.pack(side='left', fill='y')
+        workspace = tk.Frame(self, bg=BG)
+        workspace.pack(side='left', fill='both', expand=True)
 
-        bar = ttk.Frame(self)
-        bar.pack(fill='x',padx=12,pady=8)
+        header = tk.Frame(workspace,bg=SURFACE,padx=12,pady=7)
+        header.pack(fill='x')
+        history = tk.Frame(header, bg=SURFACE)
+        history.pack(side='left', padx=(0, 10))
+        self.back_button = ttk.Button(history, text='◀', width=3, style='Small.TButton', command=self.go_back)
+        self.back_button.pack(side='left')
+        self.forward_button = ttk.Button(history, text='▶', width=3, style='Small.TButton', command=self.go_forward)
+        self.forward_button.pack(side='left', padx=(3, 0))
+        Tooltip(self.back_button, 'Voltar à tela anterior (Alt+←)')
+        Tooltip(self.forward_button, 'Avançar (Alt+→)')
+        titleframe = tk.Frame(header,bg=SURFACE)
+        titleframe.pack(side='left')
+        self.section_title = tk.Label(titleframe,text='Início',font=('Segoe UI',14,'bold'),bg=SURFACE,fg=TEXT)
+        self.section_title.pack(anchor='w')
+        self.section_hint = tk.Label(titleframe,text='',font=('Segoe UI',9),bg=SURFACE,fg=MUTED)
+        self.section_hint.pack(anchor='w')
+        self.proj_title = tk.Label(header,text='Nenhum projeto aberto',font=('Segoe UI',10),bg=SURFACE,fg=MUTED)
+
+        actions = tk.Frame(header, bg=SURFACE)
+        actions.pack(side='right')
+        self.search_button = ttk.Button(actions, text='⌕  Buscar tela ou ação   Ctrl+K', command=self.open_palette)
+        self.search_button.pack(side='left', padx=(0, 6))
         for title, options in (
-                ('Projeto', [('Novo projeto', self.new_project, None),
-                             ('Abrir projeto', self.open_project, 'Ctrl+O')]),
+                ('Projeto', [('Novo projeto', self.new_project, 'Ctrl+N'),
+                             ('Abrir projeto', self.open_project, 'Ctrl+O'),
+                             ('Salvar projeto', self.save_project, 'Ctrl+S')]),
                 ('Importar', [('Importar CSVs', self.import_csv, None),
                               ('Importar BIN/CUE', self.import_bin, None),
                               ('Extrair máximo', self.extract_max, None),
                               ('Vincular SLUS', self.attach_slus, None)])):
-            group = ttk.Menubutton(bar, text=title)
+            group = ttk.Menubutton(actions, text=title)
             menu = self._menu(group)
             for label, action, shortcut in options:
                 menu.add_command(label=label, command=action, accelerator=shortcut or '')
             group.configure(menu=menu)
             group.pack(side='left', padx=(0, 5))
-        self.save_button = ttk.Button(bar, text='Salvar projeto', style='Accent.TButton',
+        self.export_button = ttk.Button(actions, text='Exportar', command=self.export, state='disabled')
+        self.export_button.pack(side='left', padx=(0, 5))
+        Tooltip(self.export_button, 'Exportar alterações (JSON e SLUS auxiliar)')
+        self.save_button = ttk.Button(actions, text='Salvar', style='Accent.TButton',
                                       command=self.save_project, state='disabled')
-        self.save_button.pack(side='left', padx=5)
-        self.build_button = ttk.Button(bar, text='Gerar jogo BIN/CUE', style='Accent.TButton',
+        self.save_button.pack(side='left', padx=(0, 5))
+        Tooltip(self.save_button, 'Salvar projeto (Ctrl+S)')
+        self.build_button = ttk.Button(actions, text='Gerar BIN/CUE', style='Accent.TButton',
                                        command=self.build_disc, state='disabled')
-        self.build_button.pack(side='right')
-        self.export_button = ttk.Button(bar, text='Exportar alterações', command=self.export, state='disabled')
-        self.export_button.pack(side='right', padx=(0, 5))
-        self.status = tk.StringVar(value='Abra ou crie um projeto para editar suas cartas.')
-        tk.Label(self,textvariable=self.status,bg=SURFACE,fg=MUTED,anchor='w',padx=14,pady=6).pack(side='bottom',fill='x')
+        self.build_button.pack(side='left', padx=(0, 5))
+        Tooltip(self.build_button, 'Gerar o jogo modificado em BIN/CUE (Ctrl+B)')
+        self.update_button = ttk.Button(actions, text='⟳', width=3, command=self.check_updates)
+        self.update_button.pack(side='left')
+        Tooltip(self.update_button, 'Verificar atualizações do Studio')
         self.toast = tk.Label(self, bg='#22454a', fg=TEXT, font=('Segoe UI', 10, 'bold'),
                               padx=13, pady=9, wraplength=360, justify='left')
-        outer = tk.PanedWindow(self, orient='horizontal', bg=BG, sashwidth=8, bd=0)
-        outer.pack(fill='both',expand=True,padx=12,pady=(0,6))
+        self.palette = CommandPalette(self)
+        outer = tk.PanedWindow(workspace, orient='horizontal', bg=BG, sashwidth=6, bd=0)
+        outer.pack(fill='both',expand=True,padx=(8,8),pady=(8,6))
+        self.outer = outer
 
         sidebar = tk.Frame(outer,bg=SURFACE)
-        outer.add(sidebar, width=327, minsize=260, stretch='never')
+        self.library = sidebar
+        outer.add(sidebar, width=self.prefs.get('largura_biblioteca', 327), minsize=240, stretch='never')
         tk.Label(sidebar,text='BIBLIOTECA DE CARTAS',bg=SURFACE,fg=TEXT,font=('Segoe UI',11,'bold')).pack(anchor='w',padx=14,pady=(17,8))
         self.new_card_button = ttk.Button(sidebar, text='＋ Nova carta', style='Accent.TButton',
                                           command=self.add_new_card, state='disabled')
@@ -887,18 +885,28 @@ class Studio(tk.Tk):
         self.tree.bind('<Control-a>', self._select_visible_cards)
         self.tree.bind('<Double-1>', lambda _event: self.tabs.select(self.tab_cards) if self.tree.selection() else None)
         self.card_menu = self._menu(self)
-        self.card_menu.add_command(label='Abrir carta', command=lambda: self.tabs.select(self.tab_cards))
+        self.card_menu.add_command(label='Abrir no editor', accelerator='Enter',
+                                   command=lambda: self.show_section('cartas'))
         self.card_menu.add_command(label='Adicionar selecionadas ao deck do oponente',
                                    command=self._add_selected_to_deck)
+        self.card_menu.add_command(label='Editar selecionadas em lote…', accelerator='Ctrl+E',
+                                   command=self.open_bulk_edit)
+        self.card_menu.add_command(label='Copiar linhas', accelerator='Ctrl+C', command=self._copy_card_rows)
+        self.card_menu.add_separator()
+        self.card_menu.add_command(label='Selecionar todas as visíveis', accelerator='Ctrl+A',
+                                   command=self._select_visible_cards)
         self.count_label = tk.Label(sidebar,text='Importe suas tabelas para começar',bg=SURFACE,fg=MUTED,font=('Segoe UI',9))
         self.count_label.pack(anchor='w',padx=14,pady=(0,5))
         self.pending_label = tk.Label(sidebar,text='Nenhuma edição pendente',bg=SURFACE,fg=MUTED,font=('Segoe UI',9,'bold'))
         self.pending_label.pack(anchor='w',padx=14,pady=(0,13))
 
         main = ttk.Frame(outer)
+        self.main_pane = main
         outer.add(main, minsize=655, stretch='always')
-        self.tabs = ttk.Notebook(main)
+        self.tabs = ttk.Notebook(main, style='Hidden.TNotebook')
         self.tabs.pack(fill='both',expand=True)
+        self.tab_home = ttk.Frame(self.tabs)
+        self.tabs.add(self.tab_home, text='Início')
         self.tab_cards = ttk.Frame(self.tabs)
         self.tab_effects = ttk.Frame(self.tabs)
         self.tab_fusions = ttk.Frame(self.tabs)
@@ -919,10 +927,350 @@ class Studio(tk.Tk):
         self._extract_tab()
         from .mod_gui import ModEditor
         self.mod_editor = ModEditor(self.tab_mod,self)
+        self.mod_editor.tabs.configure(style='Hidden.TNotebook')
+        self._home_tab()
+        self.tabs.bind('<<NotebookTabChanged>>', lambda _e: self._sync_section(), add='+')
+        self.mod_editor.tabs.bind('<<NotebookTabChanged>>', lambda _e: self._sync_section(), add='+')
 
     def _menu(self, parent):
-        return tk.Menu(parent, tearoff=False, bg=SURFACE, fg=TEXT, activebackground='#354562',
-                       activeforeground=TEXT, relief='flat', borderwidth=1)
+        return ui_theme.menu(parent)
+
+    # ── navegação ────────────────────────────────────────────────────────
+    def _bind_shortcuts(self):
+        def global_key(sequence, action):
+            def handler(event):
+                try:
+                    if event.widget.winfo_toplevel() is not self:
+                        return None
+                except (AttributeError, tk.TclError):
+                    pass
+                if self.grab_current() not in (None, self) or self._busy:
+                    return 'break'
+                action()
+                return 'break'
+            self.bind(sequence, handler)
+            # Campos de texto têm atalhos de classe (ex.: Ctrl+K apaga a linha no
+            # Tk); a combinação do Studio tem prioridade dentro da janela principal.
+            for widget_class in ('Text', 'Entry', 'TEntry', 'TCombobox', 'TSpinbox'):
+                self.bind_class(widget_class, sequence, handler)
+        global_key('<Control-f>', self.focus_catalog)
+        global_key('<Control-s>', self.save_project)
+        global_key('<Control-o>', self.open_project)
+        global_key('<Control-n>', self.new_project)
+        global_key('<Control-b>', self.build_disc)
+        global_key('<Control-k>', self.open_palette)
+        global_key('<Control-l>', self.toggle_library)
+        global_key('<Control-backslash>', self.toggle_sidebar)
+        global_key('<Alt-Left>', self.go_back)
+        global_key('<Alt-Right>', self.go_forward)
+        global_key('<F1>', lambda: self.show_section('inicio'))
+        for number, key in enumerate(('cartas', 'efeitos', 'deck', 'drops', 'iniciais', 'quests'), start=1):
+            global_key(f'<Control-Key-{number}>', lambda key=key: self.show_section(key))
+        self.tree.bind('<Return>', lambda _e: self.show_section('cartas') if self.tree.selection() else None)
+        self.tree.bind('<Control-c>', self._copy_card_rows)
+        self.tree.bind('<Control-e>', lambda _e: (self.open_bulk_edit(), 'break')[1])
+        self.effect_tree.bind('<Delete>', lambda _e: self.remove_effect())
+
+    def show_section(self, key):
+        section = ui_nav.BY_KEY.get(key)
+        if section is None:
+            return
+        self.tabs.select(getattr(self, section.tab))
+        if section.mod is not None:
+            self.mod_editor.tabs.select(section.mod)
+        self._sync_section()
+
+    def _current_section(self):
+        try:
+            tab = self.tabs.select()
+        except tk.TclError:
+            return None
+        name = next((attr for attr in ('tab_home', 'tab_cards', 'tab_effects', 'tab_fusions', 'tab_mod',
+                                       'tab_proj', 'tab_extract') if str(getattr(self, attr, '')) == tab), None)
+        mod = self.mod_editor.tabs.index('current') if name == 'tab_mod' else None
+        return ui_nav.section_for(name, mod) if name else None
+
+    def _sync_section(self):
+        key = self._current_section()
+        if key is None or key == self._section:
+            return
+        self._section = key
+        section = ui_nav.BY_KEY[key]
+        self.history.visit(key)
+        self.nav.set_active(key)
+        self.section_title.configure(text=section.label)
+        self.section_hint.configure(text=section.hint)
+        self.back_button.configure(state='normal' if self.history.back else 'disabled')
+        self.forward_button.configure(state='normal' if self.history.forward else 'disabled')
+        if section.tab == 'tab_mod':
+            self.mod_editor.show_duelist_header(key in ('deck', 'drops', 'iniciais', 'quests'))
+        self._apply_library_visibility()
+        self.prefs['secao'] = key
+        if key == 'inicio':
+            self._refresh_home()
+
+    def _apply_library_visibility(self):
+        section = ui_nav.BY_KEY.get(self._section or 'inicio')
+        wanted = bool(section and section.library and self.prefs.get('biblioteca_visivel', True))
+        shown = str(self.library) in self.outer.panes()
+        if wanted and not shown:
+            self.outer.add(self.library, before=self.main_pane, width=self.prefs.get('largura_biblioteca', 327),
+                           minsize=240, stretch='never')
+        elif not wanted and shown:
+            self._remember_library_width()
+            self.outer.forget(self.library)
+
+    def _remember_library_width(self):
+        try:
+            if str(self.library) in self.outer.panes() and self.library.winfo_width() > 100:
+                self.prefs['largura_biblioteca'] = int(self.library.winfo_width())
+        except tk.TclError:
+            pass
+
+    def toggle_library(self):
+        section = ui_nav.BY_KEY.get(self._section or 'inicio')
+        if section and not section.library and not self.prefs.get('biblioteca_visivel', True):
+            self.prefs['biblioteca_visivel'] = True
+        elif section and not section.library:
+            self.show_section('cartas')
+            return
+        else:
+            self.prefs['biblioteca_visivel'] = not self.prefs.get('biblioteca_visivel', True)
+        self._apply_library_visibility()
+
+    def toggle_sidebar(self):
+        self.nav.set_collapsed(not self.nav.collapsed)
+
+    def _sidebar_collapsed(self, collapsed):
+        self.prefs['barra_recolhida'] = collapsed
+
+    def go_back(self):
+        key = self.history.go_back()
+        if key:
+            self._section = key
+            self.show_section(key)
+            self._after_history_jump(key)
+
+    def go_forward(self):
+        key = self.history.go_forward()
+        if key:
+            self._section = key
+            self.show_section(key)
+            self._after_history_jump(key)
+
+    def _after_history_jump(self, key):
+        # show_section não registra de novo no histórico (já é a seção atual).
+        section = ui_nav.BY_KEY[key]
+        self.nav.set_active(key)
+        self.section_title.configure(text=section.label)
+        self.section_hint.configure(text=section.hint)
+        self.back_button.configure(state='normal' if self.history.back else 'disabled')
+        self.forward_button.configure(state='normal' if self.history.forward else 'disabled')
+        if section.tab == 'tab_mod':
+            self.mod_editor.show_duelist_header(key in ('deck', 'drops', 'iniciais', 'quests'))
+        self._apply_library_visibility()
+        if key == 'inicio':
+            self._refresh_home()
+
+    def open_palette(self):
+        self.palette.open()
+
+    def run_action(self, method):
+        target = getattr(self, method, None) or getattr(self.mod_editor, method, None)
+        if callable(target):
+            target()
+
+    def open_passwords(self):
+        self.show_section('deck')
+        self.mod_editor.open_passwords()
+
+    def _copy_card_rows(self, _event=None):
+        rows = []
+        for item in self.tree.selection():
+            values = self.tree.item(item, 'values')
+            rows.append('\t'.join(str(v).strip() for v in values))
+        if rows:
+            self.clipboard_clear()
+            self.clipboard_append('\n'.join(rows))
+            self._update_status(f'{len(rows)} linha(s) copiada(s) da biblioteca.')
+        return 'break'
+
+    # ── painel inicial ──────────────────────────────────────────────────
+    def _home_tab(self):
+        from .ui_shell import Tooltip
+        body = tk.Frame(self.tab_home, bg=BG, padx=22, pady=18)
+        body.pack(fill='both', expand=True)
+        body.columnconfigure(0, weight=3, uniform='home')
+        body.columnconfigure(1, weight=2, uniform='home')
+        body.rowconfigure(1, weight=1)
+        summary = tk.Frame(body, bg=SURFACE, padx=16, pady=14, highlightthickness=1, highlightbackground=BORDER)
+        summary.grid(row=0, column=0, columnspan=2, sticky='ew', pady=(0, 12))
+        self.home_title = tk.Label(summary, text='Nenhum projeto aberto', bg=SURFACE, fg=TEXT,
+                                   font=('Segoe UI', 15, 'bold'))
+        self.home_title.pack(anchor='w')
+        self.home_details = tk.Label(summary, text='Crie um projeto novo ou abra um existente para começar.',
+                                     bg=SURFACE, fg=MUTED, justify='left', anchor='w', wraplength=900)
+        self.home_details.pack(anchor='w', pady=(4, 10))
+        quick = tk.Frame(summary, bg=SURFACE)
+        quick.pack(anchor='w')
+        for text, command, style, tip in (
+                ('＋ Novo projeto', self.new_project, 'TButton', 'Ctrl+N'),
+                ('Abrir projeto…', self.open_project, 'TButton', 'Ctrl+O'),
+                ('Importar BIN/CUE', self.import_bin, 'TButton', 'Lê cartas, textos e tabelas de uma cópia do jogo'),
+                ('Gerar BIN/CUE', self.build_disc, 'Accent.TButton', 'Ctrl+B')):
+            button = ttk.Button(quick, text=text, style=style, command=command)
+            button.pack(side='left', padx=(0, 6))
+            Tooltip(button, tip)
+
+        recent = tk.Frame(body, bg=SURFACE, padx=14, pady=12, highlightthickness=1, highlightbackground=BORDER)
+        recent.grid(row=1, column=0, sticky='nsew', padx=(0, 12))
+        tk.Label(recent, text='PROJETOS RECENTES', bg=SURFACE, fg=ACCENT, font=('Segoe UI', 10, 'bold')).pack(anchor='w')
+        tk.Label(recent, text='Clique duas vezes ou Enter para abrir.', bg=SURFACE, fg=MUTED,
+                 font=('Segoe UI', 9)).pack(anchor='w', pady=(0, 6))
+        holder = tk.Frame(recent, bg=SURFACE)
+        holder.pack(fill='both', expand=True)
+        self.recent_tree = ttk.Treeview(holder, columns=('nome', 'pasta'), show='headings', selectmode='browse', height=8)
+        self.recent_tree.heading('nome', text='Projeto')
+        self.recent_tree.heading('pasta', text='Pasta')
+        self.recent_tree.column('nome', width=180, stretch=False)
+        self.recent_tree.column('pasta', width=320, stretch=True)
+        self.recent_tree.pack(side='left', fill='both', expand=True)
+        recent_scroll = ttk.Scrollbar(holder, orient='vertical', command=self.recent_tree.yview)
+        recent_scroll.pack(side='right', fill='y')
+        self.recent_tree.configure(yscrollcommand=recent_scroll.set)
+        self.recent_tree.bind('<Double-1>', lambda _e: self.open_recent())
+        self.recent_tree.bind('<Return>', lambda _e: self.open_recent())
+        self.recent_tree.bind('<Delete>', lambda _e: self.forget_recent())
+        row = tk.Frame(recent, bg=SURFACE)
+        row.pack(fill='x', pady=(8, 0))
+        ttk.Button(row, text='Abrir selecionado', command=self.open_recent).pack(side='left')
+        ttk.Button(row, text='Remover da lista', command=self.forget_recent).pack(side='left', padx=6)
+
+        flow = tk.Frame(body, bg=SURFACE, padx=14, pady=12, highlightthickness=1, highlightbackground=BORDER)
+        flow.grid(row=1, column=1, sticky='nsew')
+        tk.Label(flow, text='FLUXO DE TRABALHO', bg=SURFACE, fg=ACCENT, font=('Segoe UI', 10, 'bold')).pack(anchor='w')
+        for number, (label, key) in enumerate((
+                ('Editar cartas (atributos, arte, descrição)', 'cartas'),
+                ('Efeitos e bônus', 'efeitos'),
+                ('Decks dos oponentes', 'deck'),
+                ('Drops por duelista', 'drops'),
+                ('Quests da campanha', 'quests'),
+                ('Configurar o MOD (LP, IA, vitórias)', 'config'),
+                ('Validar e gerar o BIN/CUE', 'exportar')), start=1):
+            line = tk.Label(flow, text=f'{number}.  {label}  ›', bg=SURFACE, fg=TEXT, anchor='w',
+                            cursor='hand2', pady=4)
+            line.pack(fill='x')
+            line.bind('<Button-1>', lambda _e, key=key: self.show_section(key))
+            line.bind('<Enter>', lambda _e, w=line: w.configure(fg=ACCENT))
+            line.bind('<Leave>', lambda _e, w=line: w.configure(fg=TEXT))
+        tk.Label(flow, text='ATALHOS', bg=SURFACE, fg=ACCENT, font=('Segoe UI', 10, 'bold')).pack(anchor='w', pady=(12, 2))
+        tk.Label(flow, justify='left', anchor='w', bg=SURFACE, fg=MUTED, font=('Segoe UI', 9), text=(
+            'Ctrl+K  buscar tela ou ação        Ctrl+S  salvar\n'
+            'Ctrl+F  buscar carta               Ctrl+B  gerar BIN/CUE\n'
+            'Ctrl+1…6  cartas, efeitos, deck, drops, iniciais, quests\n'
+            'Alt+← / Alt+→  voltar / avançar    Ctrl+L  biblioteca\n'
+            'Ctrl+\\  recolher menu   ·   Na biblioteca: Ctrl+A, Ctrl+C, Ctrl+E (lote)')).pack(anchor='w')
+
+    def _refresh_home(self):
+        if not hasattr(self, 'recent_tree'):
+            return
+        if self.project:
+            pr = self.project
+            pending = self.drafts.count if self.drafts else 0
+            slus = (pr.folder/'base'/'source_SLUS_014.11').is_file()
+            self.home_title.configure(text=pr.metadata.get('nome', 'Projeto'))
+            self.home_details.configure(text=(
+                f'{pr.folder}\n'
+                f'{len(pr.cards)} cartas carregadas  ·  {len(pr.new_cards)} criadas  ·  {len(pr.edits)} alteradas e salvas  ·  '
+                f'{pending} com alteração pendente\n'
+                f'Base: {pr.metadata.get("base_source") or "não importada"}  ·  SLUS {"vinculado" if slus else "não vinculado"}'))
+        else:
+            self.home_title.configure(text='Nenhum projeto aberto')
+            self.home_details.configure(text='Crie um projeto novo ou abra um existente para começar.')
+        self.recent_tree.delete(*self.recent_tree.get_children())
+        for folder in self.prefs.get('recentes', []):
+            path = Path(folder)
+            name = path.name
+            try:
+                import json
+                name = json.loads((path/'projeto.json').read_text(encoding='utf-8')).get('nome') or name
+            except (OSError, ValueError, AttributeError):
+                name = f'{name} (não encontrado)'
+            self.recent_tree.insert('', 'end', iid=folder, values=(name, folder))
+
+    def open_recent(self):
+        selection = self.recent_tree.selection()
+        if selection:
+            self.open_project(Path(selection[0]))
+
+    def forget_recent(self):
+        for folder in self.recent_tree.selection():
+            ui_prefs.forget_project(self.prefs, folder)
+        self._refresh_home()
+
+    def _remember_project(self):
+        if self.project:
+            ui_prefs.remember_project(self.prefs, self.project.folder)
+            ui_prefs.save(self.prefs)
+
+    # ── edição em lote das cartas ───────────────────────────────────────
+    def open_bulk_edit(self):
+        if self._extract_running or not self._ensure_project() or not self.drafts:
+            return
+        ids = [int(cid) for cid in self.tree.selection()]
+        if len(ids) < 2:
+            messagebox.showinfo('Edição em lote', 'Selecione duas ou mais cartas na biblioteca '
+                                '(Ctrl+clique, Shift+clique ou Ctrl+A).', parent=self)
+            return
+        self._stage_current()
+        from .card_batch_gui import CardBatchDialog
+        CardBatchDialog(self, ids)
+
+    def _after_batch(self, count):
+        self._refresh_cards()
+        self._load_card()
+        self._refresh_project()
+        self._update_pending_label()
+        self.notify(f'{count} carta(s) alterada(s) em lote. Salve o projeto (Ctrl+S) para gravar.')
+
+    # ── operações longas ────────────────────────────────────────────────
+    def run_blocking(self, label, function, *args, **kwargs):
+        """Executa ``function`` numa thread mantendo a janela redesenhando.
+
+        A interface fica bloqueada para cliques (grab na barra de status) e
+        mostra progresso indeterminado: a operação não informa porcentagem.
+        Exceções são relançadas aqui, na thread da interface."""
+        import time
+        result = {}
+        def worker():
+            try:
+                result['value'] = function(*args, **kwargs)
+            except BaseException as exc:  # repassado para a thread da interface
+                result['error'] = exc
+        self._busy = label
+        self.statusbar.begin(label)
+        self.configure(cursor='watch')
+        try:
+            self.statusbar.grab_set()
+        except tk.TclError:
+            pass
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        try:
+            while thread.is_alive():
+                self.update()
+                time.sleep(0.03)
+        finally:
+            try:
+                self.statusbar.grab_release()
+            except tk.TclError:
+                pass
+            self.configure(cursor='')
+            self.statusbar.end()
+            self._busy = None
+        if 'error' in result:
+            raise result['error']
+        return result.get('value')
 
     def focus_catalog(self):
         if self.grab_current() is None:
@@ -1452,16 +1800,18 @@ class Studio(tk.Tk):
             return
         self.drafts=DraftSession(self.project)
         self.selected_id=None
+        self._remember_project()
         self._refresh_all()
         self._update_status('Projeto criado. Importe analysis\\tabelas ou selecione a imagem .BIN/.CUE.')
 
-    def open_project(self):
+    def open_project(self, folder=None):
         if self._extract_running:
             messagebox.showinfo("Extração em andamento","Conclua a extração antes de editar, importar ou trocar de projeto.",parent=self)
             return False
         if not self._confirm_switch():
             return
-        folder=filedialog.askdirectory(title='Selecione a pasta com projeto.json')
+        if folder is None:
+            folder=filedialog.askdirectory(title='Selecione a pasta com projeto.json')
         if not folder:
             return
         try:
@@ -1471,6 +1821,7 @@ class Studio(tk.Tk):
             return
         self.drafts=DraftSession(self.project)
         self.selected_id=None
+        self._remember_project()
         self._refresh_all()
         self._update_status('Projeto aberto: '+self.project.metadata['nome'])
 
@@ -1578,6 +1929,10 @@ class Studio(tk.Tk):
 
     def _update_pending_label(self):
         count = self.drafts.count if self.drafts else 0
+        if hasattr(self, 'statusbar'):
+            self.statusbar.set_saved(count, has_project=bool(self.project))
+            self.title(f'{"● " if count else ""}Yu-Gi-Oh Studio Card FM | v{__version__}'
+                       + (f' — {self.project.metadata.get("nome", "")}' if self.project else ''))
         if hasattr(self, 'pending_label'):
             self.pending_label.configure(text=(f'● {count} carta(s) pendente(s) • clique Salvar projeto'
                 if count else '✓ Todas as edições salvas'),fg=('#edc47e' if count else ACCENT))
@@ -2900,6 +3255,19 @@ class Studio(tk.Tk):
         self._refresh_extract()
         self.mod_editor.refresh()
         self._update_pending_label()
+        self._refresh_frame_status()
+        self._refresh_home()
+
+    def _refresh_frame_status(self):
+        pr = self.project
+        self.statusbar.set_project(pr.metadata.get('nome') if pr else None)
+        if pr:
+            slus = (pr.folder/'base'/'source_SLUS_014.11').is_file()
+            base = pr.metadata.get('base_source') or ''
+            base = Path(str(base)).name if base else 'sem base importada'
+            self.statusbar.set_disc(f'Base: {base}  ·  SLUS {"vinculado" if slus else "não vinculado"}')
+        else:
+            self.statusbar.set_disc('')
 
     def verify(self):
         if not self._ensure_project():
@@ -3028,7 +3396,7 @@ class Studio(tk.Tk):
             return
         try:
             from .disc_build import build_test_disc, DescriptionCompatibilityError
-            manifest = build_test_disc(self.project, Path(source))
+            manifest = self.run_blocking('Gerando BIN/CUE…', build_test_disc, self.project, Path(source))
         except DescriptionCompatibilityError as exc:
             failed = list(exc.failures)
             summary = '\n'.join('• ' + item for item in failed[:6])
@@ -3048,8 +3416,8 @@ class Studio(tk.Tk):
                 self._update_status('BIN/CUE preservado: corrija as descrições incompatíveis.')
                 return
             try:
-                manifest = build_test_disc(
-                    self.project, Path(source),
+                manifest = self.run_blocking(
+                    'Gerando BIN/CUE…', build_test_disc, self.project, Path(source),
                     description_policy='preserve_incompatible')
             except (OSError, ValueError, ModError, DiscError) as retry_exc:
                 messagebox.showerror(
@@ -3286,11 +3654,25 @@ class Studio(tk.Tk):
         self.destroy()
 
     def _on_close(self):
+        if self._busy:
+            return
         if self._extract_running:
             messagebox.showwarning("Extração em andamento","A extração está em curso. Aguarde a mensagem de conclusão para não interromper a escrita dos arquivos.",parent=self)
             return
         if self._confirm_switch():
+            self._save_prefs()
             self.destroy()
+
+    def _save_prefs(self):
+        try:
+            zoomed = self.state() == 'zoomed'
+        except tk.TclError:
+            zoomed = False
+        self.prefs['maximizada'] = zoomed
+        if not zoomed:
+            self.prefs['geometria'] = self.geometry()
+        self._remember_library_width()
+        ui_prefs.save(self.prefs)
 
 
 def run():

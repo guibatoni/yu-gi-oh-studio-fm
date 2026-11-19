@@ -32,7 +32,7 @@ jobs:
       - name: Instalar Zig 0.13, Unicorn e dependencias
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends xvfb python3-tk
+          sudo apt-get install -y --no-install-recommends xvfb python3-tk imagemagick
           python -m pip install ziglang==0.13.0 unicorn==2.1.4 pillow
       - name: Compilar overlay MIPS com Zig 0.13 (fonte da verdade do blob)
         shell: bash
@@ -45,6 +45,24 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*quest*.py" -v
       - name: Regressao completa do Studio
         run: xvfb-run -a python -m unittest discover -s tests -v
+      - name: Testes de interface (janela real sob xvfb)
+        shell: bash
+        env:
+          FMSTUDIO_UI_PREFS: ${{ runner.temp }}/interface.json
+        run: |
+          set -e
+          for test in tests/gui*_smoke.py; do
+            echo "== $test"
+            PYTHONPATH=. xvfb-run -a -s '-screen 0 1600x950x24' python "$test"
+          done
+      - name: Capturas de tela da interface (Linux)
+        env:
+          FMSTUDIO_UI_PREFS: ${{ runner.temp }}/capturas.json
+        run: xvfb-run -a -s '-screen 0 1600x950x24' python tools/ui_screenshots.py capturas-linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capturas-linux
+          path: capturas-linux
       - name: Gravar blob reproduzivel na branch
         id: commit
         shell: bash
@@ -71,6 +89,18 @@ jobs:
         run: python -m pip install pillow unicorn==2.1.4 pyinstaller
       - name: Testes das quests no Windows
         run: python -m unittest discover -s tests -p "test_*quest*.py" -v
+      - name: Interface no Windows (smoke + capturas)
+        shell: bash
+        env:
+          FMSTUDIO_UI_PREFS: ${{ runner.temp }}/interface.json
+        run: |
+          PYTHONPATH=. python tests/gui_shell_smoke.py
+          PYTHONPATH=. python tools/ui_screenshots.py capturas-windows
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-windows
+          path: capturas-windows
       - name: Compilar Studio de teste
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --add-data "assets/icons;assets/icons" --collect-all PIL --name FM-Studio-TESTE app.py
       - name: Empacotar

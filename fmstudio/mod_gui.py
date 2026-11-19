@@ -800,7 +800,7 @@ class ModEditor(ttk.Frame):
         self.campaign_badge_text = tk.StringVar()
         self.rank_ids = {f'{label} (grupo PS1)': key for key, label in DROP_GROUPS.items()}
         self.rank_ids.update({rank: rank for rank in RANK_GROUPS if rank != 'B/C/D'})
-        head = ttk.Frame(self)
+        head = self.head = ttk.Frame(self)
         head.pack(fill='x', pady=(0, 8))
         ttk.Label(head, text='Duelista').pack(side='left', padx=(0, 5))
         chooser = ttk.Combobox(head, textvariable=self.duelist, state='readonly', values=list(self.duelist_ids), width=34)
@@ -1127,6 +1127,14 @@ class ModEditor(ttk.Frame):
             self._load_drop()
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Drops', str(exc), parent=self)
+
+    def show_duelist_header(self, visible: bool):
+        """Seletor de duelista só nas telas que dependem dele (deck, drops, iniciais, quests)."""
+        shown = bool(self.head.winfo_manager())
+        if visible and not shown:
+            self.head.pack(fill='x', pady=(0, 8), before=self.tabs)
+        elif not visible and shown:
+            self.head.pack_forget()
 
     def open_passwords(self):
         if self.project is None or self.studio._extract_running:
