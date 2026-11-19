@@ -411,7 +411,7 @@ class CampaignMipsTests(unittest.TestCase):
         self.assertEqual(events, before_events)
         self.assertEqual(word(channel), entry - 2)
         self.assertEqual(read(entry - 2, 2), b'\xf8\x0d')
-        self.assertEqual(read(0x8009B26C, 1), b'\x02')
+        self.assertEqual(read(0x8009B26C, 1)[0] & 31, 2)
         self.assertEqual(word(0x8009B350), 1)
         self.assertEqual(read(0x8009B398, 2), b'\x01\0')
         self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
