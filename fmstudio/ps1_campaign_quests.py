@@ -21,16 +21,23 @@ HOOKS = {
 }
 SETTINGS_KEY = 'ps1_campaign_quests'
 SECTOR_BYTES = 2048
-OVERLAY_MAGIC = b'QOV2'
-OVERLAY_SECTORS = 8
+OVERLAY_MAGIC = b'QOV3'
+OVERLAY_SECTORS = 6
 OVERLAY_SIZE = OVERLAY_SECTORS * SECTOR_BYTES
-OVERLAY_START = 0x801DC000
+OVERLAY_START = 0x801A9000
 OVERLAY_HEADER = struct.Struct('<4sI8x')
 INSTALLABLE_PROFILE = 'Quests PS1 exigem o BIN/CUE Original Drop x15 reconhecido pelo Studio.'
+CAMPAIGN_SCENE_SECTOR = 0x1E57
+CAMPAIGN_SCENE_SECTORS = 0x31
+QUEST_SCENE_SECTORS = CAMPAIGN_SCENE_SECTORS + OVERLAY_SECTORS
+SCENE_SECTOR_OPERAND = 0x8002FD34
 # The resident shop hook recognizes the three Leave Shop operands in this
 # script. Validate the exact bytecode in both the input and the exported BIN.
 CAMPAIGN_SCRIPT_SECTOR = 0x1E68
 CAMPAIGN_SCRIPT_HASH = '3fad8492631848e6074de293b809057644beaadf932af410c9500aa6dc2f73b1'
+SCENE_PREFIX_SECTORS = CAMPAIGN_SCRIPT_SECTOR - CAMPAIGN_SCENE_SECTOR + 2
+QUEST_HANDLERS = {'duel': overlay.DUEL_LOADER, 'answer': overlay.ANSWER_LOADER,
+                  'shop': overlay.SHOP_LOADER}
 
 
 def quest_settings(project):
@@ -74,6 +81,16 @@ def validate_quest_source(project, wa, *, native_profile):
 def _shop_script_matches(wa, *, shift=0):
     start = (CAMPAIGN_SCRIPT_SECTOR + shift) * SECTOR_BYTES
     return hashlib.sha256(wa[start:start + 2 * SECTOR_BYTES]).hexdigest() == CAMPAIGN_SCRIPT_HASH
+
+
+def append_quest_scene(wa, payload):
+    """Reuse the campaign's staged load: graphics, script with quests, portraits."""
+    start = CAMPAIGN_SCENE_SECTOR * SECTOR_BYTES
+    split = start + SCENE_PREFIX_SECTORS * SECTOR_BYTES
+    end = start + CAMPAIGN_SCENE_SECTORS * SECTOR_BYTES
+    if end > len(wa) or len(wa) % SECTOR_BYTES or len(payload) != OVERLAY_SIZE:
+        raise ModError('Pacote de cena do PS1 incompleto para instalar as quests.')
+    return wa + wa[start:split] + payload + wa[split:end]
 
 
 def project_quest_catalog(project, wa, *, exe=None, level_address=LEVEL_ADDR, supreme=False):
@@ -128,8 +145,7 @@ def reserve_quest_handlers(exe, regions):
     """Use free intervals shared with the description allocator."""
     free = list(regions)
     addresses = {}
-    for name, loader in (('duel', overlay.DUEL_LOADER), ('answer', overlay.ANSWER_LOADER),
-                         ('shop', overlay.SHOP_LOADER)):
+    for name, loader in QUEST_HANDLERS.items():
         size = len(loader)
         for index, (lo, hi) in sorted(enumerate(free), key=lambda item: item[1][1] - item[1][0]):
             address = (hi - size) & ~3
@@ -147,25 +163,27 @@ def reserve_quest_handlers(exe, regions):
     return addresses, free
 
 
-def _loader_payloads(sector, addresses):
-    if not 0 < sector <= 65535:
-        raise ModError('Setor das quests fora do intervalo do carregador.')
-    duel = bytearray(overlay.DUEL_LOADER)
-    pos = overlay.SECTOR_OFFSET
-    if struct.unpack_from('<I', duel, pos)[0] != 0x34060000:
-        raise ModError('Operando de setor do carregador de quests divergente.')
-    struct.pack_into('<I', duel, pos, 0x34060000 | sector)
-    shop = bytearray(overlay.SHOP_LOADER)
-    pos = overlay.RELAY_OFFSET
-    if struct.unpack_from('<I', shop, pos)[0] != 0x08000000:
-        raise ModError('Salto de retorno da loja divergente.')
-    struct.pack_into('<I', shop, pos, 0x08000000 | ((addresses['duel'] >> 2) & 0x3FFFFFF))
-    return {'duel': bytes(duel), 'answer': overlay.ANSWER_LOADER, 'shop': bytes(shop)}
+def _scene_patches(sector):
+    if not CAMPAIGN_SCENE_SECTOR + CAMPAIGN_SCENE_SECTORS <= sector <= 0xFFFF:
+        raise ModError('Setor da cena de quests fora do intervalo do carregador.')
+    # Grow the script phase at 0x801A8000 to the end of the arena at 0x801AC000.
+    # The native function returns through the game's FlushCache trampoline.
+    return (
+        (SCENE_SECTOR_OPERAND, 0x24061E57, 0x34060000 | sector),
+        (0x8002FD38, 0x24070031, 0x24070000 | QUEST_SCENE_SECTORS),
+        (0x8002FCAC, 0x24031000, 0x24030000 | (2 * SECTOR_BYTES + OVERLAY_SIZE)),
+        (0x8002FEC8, 0x03E00008, 0x0801D03C),
+    )
 
 
 def install_quest_handlers(exe, addresses, sector):
     result = bytearray(exe)
-    for name, loader in _loader_payloads(sector, addresses).items():
+    for address, expected, replacement in _scene_patches(sector):
+        at = exe_pos(address, exe, 4)
+        if struct.unpack_from('<I', exe, at)[0] != expected:
+            raise ModError(f'Conflito no carregamento da cena de quests em 0x{address:08X}.')
+        struct.pack_into('<I', result, at, replacement)
+    for name, loader in QUEST_HANDLERS.items():
         hook, expected = HOOKS[name]
         at = exe_pos(hook, exe, 4)
         start = exe_pos(addresses[name], exe, len(loader))
@@ -193,9 +211,20 @@ def inspect_quest_overlay(exe, wa=None, *, expanded=False):
                 return {'status': 'pos_vitoria'}
         if any(not DUEL_STATE <= addr < BANK_END or addr & 3 for addr in addresses.values()):
             return {'status': 'não reconhecido'}
-        pos = exe_pos(addresses['duel'] + overlay.SECTOR_OFFSET, exe, 4)
-        sector = struct.unpack_from('<H', exe, pos)[0]
-        for name, loader in _loader_payloads(sector, addresses).items():
+        def instruction(address):
+            return struct.unpack_from('<I', exe, exe_pos(address, exe, 4))[0]
+
+        request = instruction(SCENE_SECTOR_OPERAND)
+        if request == 0x24061E57:
+            # v1.9.11 synchronously loads QOV2 inside the text interpreter.
+            if (instruction(addresses['duel'] + 176), instruction(addresses['duel'] + 180)) == (
+                    0x3C0B3256, 0x356B4F51):
+                return {'status': 'carregamento_dialogo_antigo'}
+            return {'status': 'divergente'}
+        sector = request & 0xFFFF
+        if any(instruction(address) != value for address, _, value in _scene_patches(sector)):
+            return {'status': 'divergente'}
+        for name, loader in QUEST_HANDLERS.items():
             at = exe_pos(addresses[name], exe, len(loader))
             if exe[at:at + len(loader)] != loader:
                 return {'status': 'divergente'}
@@ -204,8 +233,17 @@ def inspect_quest_overlay(exe, wa=None, *, expanded=False):
         shift = EXTRA_SLOTS if expanded else 0
         if not _shop_script_matches(wa, shift=shift):
             return {'status': 'divergente'}
-        sector += shift
+        scene_sector = sector + shift
+        scene_start = scene_sector * SECTOR_BYTES
+        original_start = (CAMPAIGN_SCENE_SECTOR + shift) * SECTOR_BYTES
+        prefix_size = SCENE_PREFIX_SECTORS * SECTOR_BYTES
+        original_size = CAMPAIGN_SCENE_SECTORS * SECTOR_BYTES
+        sector = scene_sector + SCENE_PREFIX_SECTORS
         at = sector * SECTOR_BYTES
+        if (wa[scene_start:at] != wa[original_start:original_start + prefix_size]
+                or wa[at + OVERLAY_SIZE:scene_start + original_size + OVERLAY_SIZE]
+                != wa[original_start + prefix_size:original_start + original_size]):
+            return {'status': 'divergente'}
         payload = wa[at:at + OVERLAY_SIZE]
         level_address = EXPANDED_LEVELS if expanded else LEVEL_ADDR
         if (len(payload) != OVERLAY_SIZE or not payload.endswith(OVERLAY_MAGIC)
@@ -214,7 +252,8 @@ def inspect_quest_overlay(exe, wa=None, *, expanded=False):
             return {'status': 'divergente'}
         data = payload[OVERLAY_HEADER.size + overlay.SIZE:-len(OVERLAY_MAGIC)]
         table = data[:table_size(data)]
-        return {'status': 'aplicado', 'setor_wa': sector, 'duelistas': len(STORY_DUELISTS),
+        return {'status': 'aplicado', 'setor_wa': sector, 'setor_cena_wa': scene_sector,
+                'duelistas': len(STORY_DUELISTS),
                 'momento': 'antes_do_duelo', 'retorno_card_shop': True,
                 'sha256_tabela': hashlib.sha256(table).hexdigest(), 'validado_epsxe': False}
     except (ModError, ValueError):

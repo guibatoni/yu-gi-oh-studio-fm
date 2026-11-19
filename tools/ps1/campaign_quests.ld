@@ -3,7 +3,7 @@ ENTRY(QuestBeforeDuel)
 SECTIONS
 {
     /* 16-byte header precedes the code on disc. */
-    . = 0x801DC010;
+    . = 0x801A9010;
     .quest : {
         *(.text .text.*)
         *(.rodata .rodata.*)

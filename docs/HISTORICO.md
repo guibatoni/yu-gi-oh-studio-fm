@@ -1,3 +1,10 @@
+## v1.9.12 — Correção do menu de quests no PS1
+
+- Corrige a transição do diálogo original para as opções da quest.
+- A confirmação que avança os requisitos abre o menu. Outra confirmação seleciona a opção.
+- A cena carrega os dados das quests antes do diálogo e inicializa a caixa corretamente na retomada pelo Card Shop.
+- **Verificar BIN/CUE** identifica a imagem da v1.9.11 que precisa ser regenerada.
+
 ## v1.9.11 — Quests antes do duelo e retorno à loja
 
 - Simon Muran livre. Os outros 37 duelistas cobram a doação antes da luta.

@@ -192,7 +192,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     win_reward_requested = fixed_win_reward(project)
     from .ps1_expansion import (EXPANDED_LEVELS, PS1_CARD_CAPACITY, compile_expansion, expand_archive,
                                 patch_expansion, inspect_expansion, retail_archive_view)
-    from .ps1_campaign_quests import (OVERLAY_SECTORS, build_quest_overlay, inspect_quest_overlay,
+    from .ps1_campaign_quests import (QUEST_SCENE_SECTORS, append_quest_scene, build_quest_overlay, inspect_quest_overlay,
                                      install_quest_handlers, project_quest_catalog, quest_settings,
                                      reserve_quest_handlers, validate_quest_source)
     from .ps1_supreme import patch_supreme, supreme_cards, validate_slot
@@ -549,14 +549,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         wa = patched_wa if patched_wa is not None else original_wa
         if len(wa) != len(original_wa) or len(wa) % PAYLOAD:
             raise ModError('Quests PS1 exigem o WA_MRG em setores de dados completos.')
-        quest_sector = len(wa) // PAYLOAD
+        quest_scene_sector = len(wa) // PAYLOAD
         levels = EXPANDED_LEVELS if expansion.enabled else LEVEL_ADDR
         quest_catalog = project_quest_catalog(project, wa, exe=patched_exe, supreme=bool(supreme_ids))
         quest_payload, quest_config, quest_table = build_quest_overlay(
             patched_exe, quest_catalog, quests, level_address=levels)
         # The existing transfer adapter shifts subsequent requests by 18
-        # thumbnails. Keep the overlay before the extra full-art blocks.
-        patched_wa = wa + quest_payload
+        # thumbnails. Keep the quest scene before the extra full-art blocks.
+        patched_wa = append_quest_scene(wa, quest_payload)
 
     expansion_report = expansion.report()
     if expansion.enabled:
@@ -569,7 +569,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                                     project, expansion, prefix=native_plan.password_prefix,
                                     art_reports=art_reports)
         patched_exe = patch_expansion(original_exe, patched_exe, project, expansion,
-                                      wa_sectors=len(original_wa) // PAYLOAD + (OVERLAY_SECTORS if quest_enabled else 0))
+                                      wa_sectors=len(original_wa) // PAYLOAD + (QUEST_SCENE_SECTORS if quest_enabled else 0))
         expansion_report.update(inspect_expansion(patched_exe))
         expansion_report['titulos_gravados'] = list(expansion.ids)
         written_titles.extend(expansion.ids)
@@ -585,7 +585,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             raise ModError('Expansão incompleta após instalar as tabelas e os adaptadores nativos.')
         chest_catalog_report = inspect_chest_catalog(patched_exe)
     if quest_enabled:
-        patched_exe = install_quest_handlers(patched_exe, quest_handlers, quest_sector)
+        patched_exe = install_quest_handlers(patched_exe, quest_handlers, quest_scene_sector)
 
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
     if not native_profile and patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):

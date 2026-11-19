@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 from pathlib import Path
+import re
 import struct
 import subprocess
 import tempfile
@@ -11,7 +12,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / 'tools' / 'ps1'
 OUTPUT = ROOT / 'fmstudio' / 'ps1_campaign_quest_overlay_blob.py'
-BASE = 0x801DC010
+BASE = 0x801A9010
 
 
 def quest_sections(elf):
@@ -35,12 +36,17 @@ def main():
     parser.add_argument('--nm', default='nm')
     args = parser.parse_args()
     with tempfile.TemporaryDirectory() as folder:
-        obj, adapter, executable = (Path(folder) / name for name in ('quests.o', 'loader.o', 'quests.elf'))
+        asm, obj, adapter, executable = (Path(folder) / name for name in
+                                          ('quests.s', 'quests.o', 'loader.o', 'quests.elf'))
         cc = [args.zig, 'cc', '-target', 'mipsel-freestanding', '-march=mips1',
               '-msoft-float', '-mno-abicalls', '-fno-pic', '-G0']
         subprocess.run([*cc, '-ffreestanding', '-fno-builtin', '-fno-stack-protector',
                         '-fno-unwind-tables', '-fno-jump-tables', '-Os',
-                        '-c', str(SOURCES / 'campaign_quests.c'), '-o', str(obj)], check=True)
+                        '-S', str(SOURCES / 'campaign_quests.c'), '-o', str(asm)], check=True)
+        # The retail text VM keeps its global-data base live across all calls.
+        if re.search(r'\$(?:gp|28)\b', asm.read_text(encoding='utf-8')):
+            raise ValueError('O código das quests deve preservar o registrador global do PS1 ($gp).')
+        subprocess.run([*cc, '-c', str(asm), '-o', str(obj)], check=True)
         subprocess.run([*cc, '-c', str(SOURCES / 'campaign_quest_loader.S'),
                         '-o', str(adapter)], check=True)
         subprocess.run([args.zig, 'ld.lld', '-m', 'elf32ltsmip', '-T', str(SOURCES / 'campaign_quests.ld'),
@@ -63,8 +69,7 @@ def main():
     header.extend(f'    {name!r}: 0x{names[name]:08X},' for name in
                   ('QuestBeforeDuel', 'QuestAnswer', 'QuestResumeShop', 'QuestCountMissing',
                    'QuestConfiguration'))
-    header.extend(('}', f'SECTOR_OFFSET = {names["QuestSectorImmediate"] - duel_at}',
-                   f'RELAY_OFFSET = {names["QuestShopRelay"] - shop_at}'))
+    header.append('}')
     for name, data in (('DUEL_LOADER', duel), ('ANSWER_LOADER', answer), ('SHOP_LOADER', shop),
                        ('PAYLOAD', payload.rstrip(b'\0'))):
         header += [f'{name} = bytes.fromhex("""']

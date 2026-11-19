@@ -15,7 +15,7 @@ typedef unsigned int u32;
 #define TRUNK ((volatile u8 *)0x801d0250)
 #define DECK ((volatile u16 *)0x801d0200)
 #define STATS ((volatile u32 *)0x801d4244)
-#define LEVELS ((volatile u8 *)(*(const u32 *)0x801dc004))
+#define LEVELS ((volatile u8 *)(*(const u32 *)0x801a9004))
 #define FLAGS ((volatile u8 *)0x801d0618)
 #define MODE (*(volatile u8 *)0x8009b26c)
 #define SCENE (*(volatile u8 *)0x8009b27a)
@@ -23,10 +23,16 @@ typedef unsigned int u32;
 #define SCRIPT_CURSOR (*(const u8 *volatile *)0x8009b290)
 #define SCRIPT_COMMAND (*(volatile u16 *)0x8009b27c)
 #define STORY_TEXT_BOX ((u8 *)0x800eb0f8)
-#define TEXT_YIELD (*(volatile u8 *)0x8009b350)
+#define TEXT_YIELD (*(volatile u32 *)0x8009b350)
+#define TEXT_CHOICE_LAYOUT (*(volatile u32 *)0x8009b340)
+#define PAD1_PRESSED (*(volatile u16 *)0x8009b398)
+#define PAD_CONFIRM 0xc0
 #define GAME_DUEL ((void (*)(u8 *))0x80038530)
 #define GAME_MAP ((void (*)(void))0x8002eb48)
 #define GAME_SHOW_DIALOG ((void (*)(void))0x8002e5ac)
+#define TEXT_BUILD_STEP ((void (*)(u8 *))0x800393b0)
+#define TEXT_CLOSE_CHOICE ((void (*)(u8 *))0x80038b08)
+#define TEXT_REFRESH_FRAME ((void (*)(u8 *))0x800391e4)
 #define PENDING_TAG 0x4d
 
 enum { EXACT_CARD, TYPE, ATTRIBUTE, GUARDIAN, RARITY };
@@ -64,6 +70,7 @@ struct PendingQuest {
 static struct {
     u8 *channel;
     const u8 *resume;
+    const u8 *options;
     const u8 *accept;
     const u8 *retreat;
     const struct Quest *quest;
@@ -113,7 +120,8 @@ static const struct Quest *quest_for(u8 opponent)
                                   + QuestConfiguration.offsets[opponent]);
 }
 
-static int eligible(unsigned card, const struct Criterion *criterion)
+/* Keep the caller's register pressure low enough to leave the retail $gp intact. */
+static __attribute__((noinline)) int eligible(unsigned card, const struct Criterion *criterion)
 {
     u32 value;
     unsigned target = criterion->target;
@@ -257,6 +265,28 @@ static void set_target(u8 *field, const u8 *target)
     field[1] = address >> 8;
 }
 
+static void start_quest_page(u8 *channel)
+{
+    /* The story can leave custom dimensions or a pending choice layout.
+       The native VM lays out all choices in one frame and cannot accept
+       a button to advance a page while that layout is in progress. */
+    u16 *width = (u16 *)(channel + 0x3e), *height = (u16 *)(channel + 0x42);
+    if (*width != 288 || *height != 48) {
+        *width = 288;
+        *height = 48;
+        TEXT_REFRESH_FRAME(channel);
+    }
+    channel[0x5a] = 8;
+    channel[0x5b] = 12;
+    channel[0x61] = 0;
+    /* Clear the previous input lock and fast/build/choice/done flags. */
+    *(u16 *)(channel + 0x34) &= ~0x3c04;
+    TEXT_CHOICE_LAYOUT = 0;
+    TEXT_CLOSE_CHOICE(channel);
+    channel[0x52] = 1;
+    *cursor(channel) = active.dialog;
+}
+
 static void show_quest(void)
 {
     const struct Quest *quest = active.quest;
@@ -273,11 +303,14 @@ static void show_quest(void)
         out = number(out, criterion->quantity);
         *out++ = req + 1 == quest->count || req == 1 ? 0xfa : 0xfe;
     }
+    *out++ = 0xf8;
+    *out++ = 0x12;
+    active.options = out;
     *out++ = 0xfb;
     *out++ = 2;
     out = text(out, missing ? "Rever requisitos" : "Doar e duelar", 24);
     *out++ = 0xfe;
-    out = text(out, "Voltar ao Card Shop", 24);
+    out = text(out, "Ir ao Card Shop", 24);
     *out++ = 0xfe;
     *out++ = 0xfb;
     *out++ = 0x80;
@@ -289,9 +322,7 @@ static void show_quest(void)
     set_target(targets + 2, out);
     active.retreat = out + 4;
     choice_command(out, RETREAT);
-    *cursor(active.channel) = active.dialog;
-    active.channel[0x51] = 2;  /* Clear the previous page in the normal VM. */
-    TEXT_YIELD = 1;
+    start_quest_page(active.channel);
 }
 
 void QuestBeforeDuel(u8 *channel)
@@ -345,6 +376,13 @@ void QuestAnswer(u8 *channel)
     if (active.channel != channel || (MODE & 31) != 2)
         return;
     operation = *cursor(channel);
+    if (operation == active.options) {
+        /* The VM can enter the menu in the same frame as the page advance.
+           Consume that confirm so selecting an option takes a second press. */
+        PAD1_PRESSED &= ~PAD_CONFIRM;
+        TEXT_YIELD = 1;
+        return;
+    }
     if (operation == active.retreat) {
         leave_for_shop();
         return;
@@ -379,6 +417,8 @@ void QuestResumeShop(void)
     SCRIPT_CURSOR = dialog_operand;
     SCRIPT_COMMAND = 2;
     GAME_SHOW_DIALOG();
+    /* The first build step sets the story text pointer and then yields. */
+    TEXT_BUILD_STEP(STORY_TEXT_BOX);
     SCRIPT_CURSOR = map_operand - 1;
     *cursor(STORY_TEXT_BOX) = entry;
     QuestBeforeDuel(STORY_TEXT_BOX);
