@@ -46,7 +46,14 @@ OBSERVED_CRASH_PCS = (0x801AAE78, 0x801AAE80)
 
 def active_diagnostic_mode() -> int:
     """Crash-catcher mode requested by the diagnostic launcher (0 = off)."""
-    return {'1': 1, '2': 2}.get(os.environ.get(DIAGNOSTIC_ENV, ''), 0)
+    mode = {'1': 1, '2': 2}.get(os.environ.get(DIAGNOSTIC_ENV, ''), 0)
+    if not mode:
+        try:  # Written only by the diagnostic CI package, never committed.
+            from ._diagnostic_mode import MODE
+        except ImportError:
+            MODE = 0
+        mode = MODE if MODE in (1, 2) else 0
+    return mode
 
 
 QUEST_HANDLERS = {'duel': overlay.DUEL_LOADER, 'answer': overlay.ANSWER_LOADER,
