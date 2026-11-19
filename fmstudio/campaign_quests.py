@@ -147,6 +147,55 @@ class QuestCatalog:
         return hashlib.sha256(json.dumps(source, separators=(',', ':')).encode()).hexdigest()
 
 
+PHRASE_LINE = 24
+PHRASE_LINES = 2
+
+
+def _wrap_phrase(text: str) -> list[str]:
+    lines = []
+    for paragraph in text.split('\n'):
+        line = ''
+        for word in paragraph.split():
+            if len(word) > PHRASE_LINE:
+                raise ModError(f'Palavra com mais de {PHRASE_LINE} letras na frase: {word}')
+            candidate = f'{line} {word}' if line else word
+            if len(candidate) <= PHRASE_LINE:
+                line = candidate
+            else:
+                lines.append(line)
+                line = word
+        if line:
+            lines.append(line)
+    return lines
+
+
+def normalize_phrases(raw) -> dict[str, str]:
+    """NPC lines shown before the donation request: ASCII, 2 lines of 24 glyphs.
+
+    Accents are removed because the PS1 font has no accented glyphs; the text is
+    wrapped by word and stored with '\n' between the lines."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ModError('As frases das quests devem ser agrupadas pelo ID do duelista.')
+    result = {}
+    for key, value in raw.items():
+        duel = str(_integer(key, 'Duelista da campanha', 1, 38))
+        if duel == str(SIMON_MURAN) or value is None:
+            continue
+        if not isinstance(value, str):
+            raise ModError(f'Duelista #{duel}: frase inválida.')
+        text = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
+        text = ''.join(ch for ch in text.replace('\r', '') if ch == '\n' or 32 <= ord(ch) < 127)
+        lines = _wrap_phrase(text)
+        if len(lines) > PHRASE_LINES:
+            raise ModError(f'Duelista #{duel}: a frase passa de {PHRASE_LINES} linhas de '
+                           f'{PHRASE_LINE} caracteres na caixa de diálogo do PS1.')
+        if lines:
+            result[duel] = '\n'.join(lines)
+    return result
+
+
 def normalize_overrides(raw):
     """Read manual requirements or retain the criteria from a previous export."""
     if isinstance(raw, dict) and raw.get('formato') in (FORMAT, LEGACY_FORMAT):
@@ -286,7 +335,7 @@ def verify_quests(config, catalog):
     return generate_quests(catalog, config['seed'], manual)
 
 
-def compile_table(config, catalog, glyphs, *, gap=None, limit=None):
+def compile_table(config, catalog, glyphs, *, gap=None, limit=None, phrases=None):
     """Little-endian table used by the campaign MIPS overlay.
 
     ``gap`` = (lo, hi) offsets reserved for another program (Drop x15 code and the
@@ -301,22 +350,30 @@ def compile_table(config, catalog, glyphs, *, gap=None, limit=None):
     table.extend(lookup.get(chr(code), unknown) for code in range(32, 127))
     table.extend(tuple(RARITIES).index(catalog.cards[cid]['raridade']) for cid in range(1, CARD_COUNT + 1))
     table.extend(bytes(TABLE_START - len(table)))
+    phrases = normalize_phrases(phrases)
     for quest in config['quests']:
         criteria = quest['criterios']
-        size = 2 + len(criteria) * RECORD.size
+        phrase = phrases.get(str(quest['oponente_id']), '').encode('ascii')
+        missing = sorted({chr(c) for c in phrase if chr(c) != '\n' and chr(c) not in lookup})
+        if missing:
+            raise ModError(f"Duelista #{quest['oponente_id']}: a fonte PS1 não tem "
+                           f"os caracteres {' '.join(missing)} da frase.")
+        size = 2 + len(criteria) * RECORD.size + len(phrase)
         if gap is not None and len(table) < gap[1] and len(table) + size > gap[0]:
             table.extend(bytes(gap[1] - len(table)))
         if limit is not None and len(table) + size > limit:
             raise ModError('As quests não cabem na área livre da cena do PS1. '
-                           'Reduza a quantidade de requisitos por duelista.')
+                           'Reduza os requisitos ou o tamanho das frases dos duelistas.')
         struct.pack_into('<H', table, 4 + 2 * quest['oponente_id'], len(table))
-        table.extend((len(criteria), 0))
+        # Byte 1 (formerly padding) = length of the NPC line stored after the criteria.
+        table.extend((len(criteria), len(phrase)))
         for row in criteria:
             label = unicodedata.normalize('NFKD', row['rotulo']).encode('ascii', 'ignore').strip()
             if row['tipo'] == 'carta' and (not label or len(label) > LABEL_WIDTH):
                 label = f"#{row['alvo']} ".encode('ascii') + label
             table += RECORD.pack(CRITERIA.index(row['tipo']), row['quantidade'], row['alvo'],
                                  row['prova']['carta_fonte'], label[:LABEL_WIDTH])
+        table += phrase
     return bytes(table)
 
 
@@ -335,10 +392,10 @@ def table_size(data, gap=None):
         if (struct.unpack_from('<H', data, 4 + 2 * duel)[0] != end or end + 2 > len(data)
                 or not 1 <= data[end] <= MAX_CRITERIA):
             raise ModError(f'Registro binário de quest inválido para duelista #{duel}.')
-        next_end = end + 2 + data[end] * RECORD.size
+        next_end = end + 2 + data[end] * RECORD.size + data[end + 1]
         if next_end > len(data) or (gap is not None and end < gap[0] < next_end):
             raise ModError('Tabela binária de quests truncada.')
-        for start in range(end + 2, next_end, RECORD.size):
+        for start in range(end + 2, end + 2 + data[end] * RECORD.size, RECORD.size):
             kind, amount, _, source, _ = RECORD.unpack_from(data, start)
             if kind >= len(CRITERIA) or not amount or not 1 <= source <= CARD_COUNT:
                 raise ModError(f'Requisito binário inválido para duelista #{duel}.')

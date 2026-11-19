@@ -7,7 +7,7 @@ from pathlib import Path
 
 from . import ps1_campaign_quest_overlay_blob as overlay
 from .campaign_quests import (STORY_DUELISTS, TABLE_START, QuestCatalog, compile_table,
-                              generate_quests, normalize_overrides, table_size)
+                              generate_quests, normalize_overrides, normalize_phrases, table_size)
 from .core import ModError, ps1_supports_god24
 from .deep_extract import EXE_HEADER, EXE_START, exe_pos, extract_texts, glyph_map
 from .tables import CARD_COUNT, LEVEL_ADDR, decode_cards, decode_pools, decode_starters
@@ -58,13 +58,17 @@ def quest_settings(project):
     if not isinstance(seed, str) or not 1 <= len(seed.strip()) <= 80:
         raise ModError('Informe uma seed de 1 a 80 caracteres.')
     return {'ativado': raw.get('ativado', False), 'seed': seed.strip(),
-            'requisitos': normalize_overrides(raw.get('requisitos', {}))}
+            'requisitos': normalize_overrides(raw.get('requisitos', {})),
+            'frases': normalize_phrases(raw.get('frases', {}))}
 
 
-def save_quest_settings(project, *, enabled: bool, seed: str, requirements: dict):
+def save_quest_settings(project, *, enabled: bool, seed: str, requirements: dict,
+                        phrases: dict | None = None):
     previous = project.metadata
+    if phrases is None:
+        phrases = (previous.get(SETTINGS_KEY) or {}).get('frases', {})
     project.metadata = {**previous, SETTINGS_KEY: {
-        'ativado': enabled, 'seed': seed, 'requisitos': requirements,
+        'ativado': enabled, 'seed': seed, 'requisitos': requirements, 'frases': phrases,
     }}
     try:
         settings = quest_settings(project)
@@ -193,7 +197,8 @@ def build_quest_overlay(exe: bytes, catalog: QuestCatalog, settings: dict, *, le
         raise ModError('Código residente do Drop x15 incompleto.')
     config = generate_quests(catalog, settings['seed'], settings['requisitos'])
     glyphs, _ = glyph_map(exe)
-    table = compile_table(config, catalog, glyphs, gap=gap, limit=limit)
+    table = compile_table(config, catalog, glyphs, gap=gap, limit=limit,
+                          phrases=settings.get('frases'))
     payload = bytearray(OVERLAY_HEADER.pack(OVERLAY_MAGIC, level_address) + overlay.PAYLOAD + table)
     if len(payload) > OVERLAY_SIZE - len(OVERLAY_MAGIC):
         raise ModError('A tabela de quests excede o espaço de carregamento do PS1.')

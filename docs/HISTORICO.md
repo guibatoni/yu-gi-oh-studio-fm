@@ -1,3 +1,13 @@
+## v1.9.17 (em desenvolvimento) — Frase do duelista nas quests
+
+- Em **Edição do Mod → Quests da campanha → Editar quest**, cada duelista pode
+  ter uma frase própria. Ela aparece numa página antes dos requisitos (até
+  2 linhas de 24 caracteres; acentos removidos, porque a fonte do PS1 não os tem).
+- A frase fica no byte antes reservado do registro da quest e no texto logo
+  após os requisitos. Tabelas antigas, sem frase, continuam válidas.
+- Frases ocupam espaço da cena do PS1. Se não couber, a exportação é recusada
+  com mensagem.
+
 ## v1.9.16 — Quests preservam o código do Drop x15 (QOV7)
 
 - Causa raiz do travamento em **Doar e duelar** (`801AAE78/801AAE80`),
