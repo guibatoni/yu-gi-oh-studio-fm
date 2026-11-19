@@ -19,7 +19,8 @@ class FrameColorEditor(ttk.Frame):
         self.swatches = {}
         ttk.Label(self, text='Cor da moldura das cartas por raridade (PS1)',
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(0, 6))
-        ttk.Label(self, text='Nesta versão a cor vale para as cartas na mão e no campo do duelo. '
+        ttk.Label(self, text='A cor vale para as cartas na mão e no campo do duelo e para a carta ampliada '
+                             '(baú/Build Deck, biblioteca e visualizador do duelo). '
                              'A arte, o ATK/DEF e o ícone de tipo não mudam. Mágicas, armadilhas e '
                              'equipamentos mantêm a moldura própria. Deixe a cor vazia para a moldura original.',
                   wraplength=760).pack(anchor='w')

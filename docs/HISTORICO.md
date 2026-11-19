@@ -1,4 +1,4 @@
-## v1.9.20 (em teste) — Molduras por raridade (mão e campo)
+## v1.9.20 (em teste) — Molduras por raridade (mão, campo e carta ampliada)
 
 - Nova aba **Edição do Mod → Molduras**: uma cor para cada classe (Comum,
   Incomum, Rara, Épica, Lendária e Deus). Use "sem cor" para manter a moldura
@@ -9,8 +9,14 @@
   grava a cor da classe no RGB do sprite (modulação da GPU) e segue para
   `DisplayObject_SubmitPacket`. A arte, o ATK/DEF e o ícone de tipo não mudam.
   Cartas escurecidas ou destacadas pelo jogo mantêm o efeito original.
-- Primeira etapa: mão e campo. A carta ampliada e a tela do baú vêm depois de
-  validar o visual no ePSXe.
+- Carta ampliada (baú/Build Deck, biblioteca, visualizador do duelo): a placa
+  é um objeto de sprite-sheet criado por `func_800291E0` e desenhado por
+  `DisplayObject_RenderSpriteSheet`, que copia o RGB do objeto em `0x8004177C`.
+  Essa cópia vira `jal` para uma segunda rotina: se o objeto tem o callback
+  `CardPreview_UpdateVariant`, não está de verso e tem a cor normal, ela acha o
+  objeto da arte (`func_80028B08`, `+0x54` = placa), lê o índice em `+0x67` e o
+  ID em `D_800EA0E8[índice] + 0x30`, e aplica a cor da classe.
+- A linha da lista do baú (nome/ATK/DEF) não tem moldura de carta e não muda.
 - Abas da Edição do Mod com nomes curtos (Deck oponente, Drops, Decks iniciais,
   Config. MOD, Quests, Mágicas/Traps, Molduras), para as sete caberem na janela.
   O Tkinter não quebra a linha das abas, e a última ficava escondida.
