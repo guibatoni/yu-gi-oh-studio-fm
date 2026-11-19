@@ -13,7 +13,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from .core import ModError, positive_int, ps1_supports_god24, simulation_nonnegative_int
 from .duel_engine import MAX_DECK, parse_card_ids
 from .expanded import card_matches, display_name, search_text
-from .gui import ACCENT, MUTED, ROW_ALT, card_row_tags, compact_number, sortable_columns
+from .gui import ACCENT, MUTED, ROW_ALT, WARNING, card_row_tags, compact_number, sortable_columns
 from .mod_data import (
     CONFIG_KEY, DROP_FROM_DECK, DECK_DROP_WEIGHTS, DROP_GROUPS, MONSTER_TYPES,
     RANK_GROUPS, STOCK_STARTER, base_tables, deal_deck, deck_drop_candidates,
@@ -105,6 +105,14 @@ class WeightTable(ttk.Frame):
         self.tree.bind('<Double-1>', self._edit_weight)
         self.tree.bind('<Delete>', lambda _event: self._remove())
         self.tree.bind('<Control-a>', self._select_visible)
+        self.tree.bind('<Button-3>', self._context_menu)
+        from .ui_theme import menu as themed_menu
+        self.menu = themed_menu(self)
+        self.menu.add_command(label='Aplicar o peso digitado às selecionadas', command=self._apply)
+        self.menu.add_command(label='Multiplicar pesos das selecionadas…', command=self._multiply)
+        self.menu.add_command(label='Remover selecionadas', accelerator='Delete', command=self._remove)
+        self.menu.add_separator()
+        self.menu.add_command(label='Selecionar visíveis', accelerator='Ctrl+A', command=self._select_visible)
         self.summary = ttk.Label(self, foreground=MUTED)
         self.summary.pack(anchor='w', pady=(3, 0))
         self.query.trace_add('write', lambda *_: self.render())
@@ -182,9 +190,12 @@ class WeightTable(ttk.Frame):
             self.weight.set(str(self.weights.get(cid, 0)))
         elif len(selection) > 1:
             self.selected.set('')
+        total = sum(self.weights.values())
+        chosen = sum(self.weights.get(int(cid), 0) for cid in selection if cid.isdigit())
         self.summary.configure(text=(
-            f'{len(self.weights)} cartas com peso · peso total {compact_number(sum(self.weights.values()))}'
-            + (f' · {len(selection)} selecionadas' if len(selection) > 1 else '')))
+            f'{len(self.weights)} cartas com peso · peso total {compact_number(total)}'
+            + (f' · {len(selection)} selecionadas = {_probability(chosen, total)} de chance somada'
+               if len(selection) > 1 else '')))
 
     def _select_visible(self, _event=None):
         visible = self.tree.get_children()
@@ -213,6 +224,29 @@ class WeightTable(ttk.Frame):
             if any(cid not in self.cards for cid in ids):
                 raise ModError('O lote contém uma carta fora do catálogo desta tabela.')
             self._update_weights(dict.fromkeys(ids, amount))
+        except (ModError, OSError, ValueError) as exc:
+            messagebox.showerror('Tabela de pesos', str(exc), parent=self)
+
+    def _context_menu(self, event):
+        item = self.tree.identify_row(event.y)
+        if item and item not in self.tree.selection():
+            self.tree.selection_set(item)
+        try:
+            self.menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.menu.grab_release()
+
+    def _multiply(self):
+        from tkinter import simpledialog
+        selection = [int(cid) for cid in self.tree.selection()]
+        if not selection:
+            return
+        factor = simpledialog.askfloat('Multiplicar pesos', f'Multiplicar o peso de {len(selection)} carta(s) por:',
+                                       parent=self, minvalue=0, maxvalue=1000, initialvalue=2)
+        if factor is None:
+            return
+        try:
+            self._update_weights({cid: int(round(self.weights.get(cid, 0) * factor)) for cid in selection})
         except (ModError, OSError, ValueError) as exc:
             messagebox.showerror('Tabela de pesos', str(exc), parent=self)
 
@@ -327,9 +361,12 @@ class DeckProfileEditor(ttk.Frame):
         self.feedback = tk.StringVar()
         self.loading = False
 
+        self.composition = tk.StringVar()
         header = ttk.Frame(self)
         header.pack(fill='x', pady=(0, 5))
-        ttk.Label(header, textvariable=self.total, foreground=ACCENT).pack(side='left')
+        self.total_label = ttk.Label(header, textvariable=self.total, foreground=ACCENT)
+        self.total_label.pack(side='left')
+        ttk.Label(header, textvariable=self.composition, foreground=MUTED).pack(side='left', padx=(12, 0))
         ttk.Label(self, textvariable=self.feedback, foreground=ACCENT, wraplength=500).pack(
             side='bottom', anchor='w', pady=(3, 0))
         self.tabs = ttk.Notebook(self)
@@ -490,12 +527,17 @@ class DeckProfileEditor(ttk.Frame):
             pools = self._pool_slots()
             space = MAX_DECK - len(fixed) - pools
             self.total.set(f'{len(fixed) + pools}/{MAX_DECK} cartas · {len(fixed)} fixas + {pools} de pools')
+            self.total_label.configure(foreground=ACCENT if len(fixed) + pools == MAX_DECK else WARNING)
+            from .deck_summary import composition, describe
+            self.composition.set(describe(composition(self.cards, fixed)) if fixed else '')
             self.add_count.configure(to=max(space, 1))
             if space == 1 and self.add_quantity.get() != '1':
                 self.add_quantity.set('1')
         except (ModError, ValueError):
             fixed = []
             self.total.set('Revise os IDs ou as compras dos pools')
+            self.total_label.configure(foreground=WARNING)
+            self.composition.set('')
         query = search_text(self.query.get())
         self._render_rows(self.deck, [
             (cid, (compact_number(cid), display_name(cid, self.cards),

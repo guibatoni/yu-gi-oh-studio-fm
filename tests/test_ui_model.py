@@ -128,5 +128,20 @@ class BatchTests(unittest.TestCase):
                 card_batch.normalize_changes(changes)
 
 
+class DeckSummaryTests(unittest.TestCase):
+    def test_composition(self):
+        from fmstudio.deck_summary import composition, describe
+        cards = {1: {'tipo_id': 0, 'ataque': 3000, 'defesa': 2500}, 2: {'tipo_id': 20},
+                 3: {'tipo_id': 21}, 4: {'tipo_id': 23}, 5: {'tipo_id': 24, 'ataque': 1000, 'defesa': 500}}
+        summary = composition(cards, [1, 1, 2, 3, 4, 5, 99])
+        self.assertEqual((summary['monstros'], summary['magias'], summary['armadilhas'],
+                          summary['equipamentos'], summary['desconhecidas']), (3, 1, 1, 1, 1))
+        self.assertEqual(summary['atk_medio'], 2333)
+        text = describe(summary)
+        self.assertIn('3 monstros', text)
+        self.assertIn('1 fora do catálogo', text)
+        self.assertEqual(describe(composition(cards, [])), '0 monstros')
+
+
 if __name__ == '__main__':
     unittest.main()
