@@ -1,3 +1,17 @@
+## v1.9.14 — Doação de quests e transição segura ao duelo
+
+- Corrigida a chamada síncrona do comando de duelo no callback
+  `QuestAnswer`: após a doação, o interpretador PS1 retoma
+  `F8 0D` no tick seguinte.
+- MIPS recompilado para ambos os caminhos de cena carregados
+  pelo perfil Drop x15, com bytes versionados e verificação Zig.
+- Testes Unicorn cobrem doação, consumo exato do baú,
+  integridade do deck, flag de conclusão e prevenção de
+  consumo repetido após reiniciar o fluxo de duelo.
+- Proibição de atualização silenciosa do blob sem recompilar
+  o C. Documentado o endereço crítico `0x801AAE80`.
+- Teste final com BIN/CUE real e ePSXe ainda pendente.
+
 ## v1.9.13 — Correção das opções da quest no ePSXe
 
 - Grava os comandos das opções byte a byte para evitar a corrupção observada no menu da Teana.
