@@ -62,5 +62,21 @@ class MagicValueTests(unittest.TestCase):
             self.assertEqual(loaded['destruicao'], {664: {'tipo': 0}})
 
 
+class FieldTrapDefaultsTests(unittest.TestCase):
+    def test_terrain_defaults_match_the_stock_table_reader(self):
+        import struct
+        from fmstudio.ps1_native import TERRAIN_ADDRESS, read_terrain_boosts
+        exe = bytearray(0x1e0800)
+        at = TERRAIN_ADDRESS - EXE_DELTA
+        for (terrain, type_id), points in mv.TERRAIN_DEFAULTS.items():
+            struct.pack_into('<b', exe, at + type_id * 6 + terrain - 1, points // 10)
+        table = read_terrain_boosts(bytes(exe))
+        self.assertEqual({k: v for k, v in table.items() if v}, mv.TERRAIN_DEFAULTS)
+        self.assertEqual(len(mv.TERRAIN_NAMES), 6)
+
+    def test_trap_defaults(self):
+        self.assertEqual(mv.TRAP_DEFAULTS, {681: 500, 682: 1000, 683: 1500, 684: 2000, 685: 3000, 686: 25500})
+
+
 if __name__ == '__main__':
     unittest.main()

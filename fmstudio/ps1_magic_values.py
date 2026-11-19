@@ -158,3 +158,16 @@ DROP15_DEFAULTS = {
     'destruicao': {653: {'tipo': 3}, 656: {'tipo': 2}, 660: {'tipo': 14}, 661: {'atk_min': 1500},
                    662: {'tipo': 9}, 663: {'tipo': 18}, 664: {'tipo': 12}},
 }
+
+
+# Fields and attack traps (edited through ps1_native, keys ps1_terrain_boosts / ps1_trap_thresholds).
+from .ps1_native import TRAP_IDS, TRAP_RETAIL  # noqa: E402
+
+TERRAIN_NAMES = ('Forest', 'Wasteland', 'Mountain', 'Sogen', 'Umi', 'Yami')
+TERRAIN_TYPES = 20
+TRAP_DEFAULTS = {trap: TRAP_RETAIL[i] * 100 for i, trap in enumerate(TRAP_IDS)}
+# Drop x15 (= retail) field bonuses read from ePSXe RAM: (terrain 1-6, type) -> points.
+TERRAIN_DEFAULTS = {(3, 0): 500, (6, 1): 500, (2, 2): 500, (4, 3): 500, (1, 4): 500, (4, 4): 500,
+                    (1, 5): 500, (3, 6): 500, (6, 7): 500, (6, 8): -500, (1, 9): 500, (2, 10): 500,
+                    (5, 12): 500, (5, 13): 500, (5, 14): -500, (3, 15): 500, (5, 15): 500, (5, 16): 500,
+                    (5, 17): -500, (2, 18): 500, (1, 19): 500}

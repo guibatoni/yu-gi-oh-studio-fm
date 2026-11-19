@@ -12,6 +12,14 @@
     (`0x80090A4C`); os IDs das regras são conferidos antes da escrita.
 - Só os bytes de valor mudam. A releitura do SLUS final precisa coincidir com o
   projeto.
+- Sub-abas **Campos (terreno)** e **Armadilhas** na mesma tela:
+  - Campos: tabela de 20 tipos × 6 terrenos (Forest, Wasteland, Mountain, Sogen,
+    Umi, Yami), de −1200 a +1200 em múltiplos de 10. As células alteradas ficam
+    destacadas.
+  - Armadilhas de ataque #681–#686: ATK máximo do atacante destruído, em
+    múltiplos de 100 e em ordem crescente (o jogo escolhe a armadilha por faixa).
+  - Usa as mesmas chaves do projeto (`ps1_terrain_boosts`, `ps1_trap_thresholds`)
+    e a mesma gravação de antes. Projetos antigos continuam compatíveis.
 
 ## v1.9.18 — Novo pedido das quests
 
