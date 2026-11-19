@@ -7,8 +7,8 @@ import struct
 from pathlib import Path
 
 from . import ps1_campaign_quest_overlay_blob as overlay
-from .campaign_quests import (DIAG_CATCHER_OFFSET, DIAG_GAP, DIAG_RECORDS_START, STORY_DUELISTS,
-                              TABLE_START, QuestCatalog, compile_table, generate_quests,
+from .campaign_quests import (DIAG_CATCHER_OFFSET, STORY_DUELISTS, TABLE_START, QuestCatalog,
+                              compile_table, diagnostic_mode, generate_quests,
                               normalize_overrides, table_size)
 from .core import ModError, ps1_supports_god24
 from .deep_extract import exe_pos, extract_texts, glyph_map
@@ -142,7 +142,8 @@ def build_quest_overlay(exe: bytes, catalog: QuestCatalog, settings: dict, *, le
     config = generate_quests(catalog, settings['seed'], settings['requisitos'])
     glyphs, _ = glyph_map(exe)
     if diagnostic is None:
-        diagnostic = os.environ.get(DIAGNOSTIC_ENV) == '1'
+        # '1': trap at $ra (ePSXe shows it). '2': register dump + freeze for a save state.
+        diagnostic = {'1': 1, '2': 2}.get(os.environ.get(DIAGNOSTIC_ENV, ''), 0)
     if diagnostic:
         base = overlay.ENTRY_POINTS['QuestConfiguration']
         if not (base + TABLE_START < min(OBSERVED_CRASH_PCS)
@@ -266,9 +267,8 @@ def inspect_quest_overlay(exe, wa=None, *, expanded=False):
             return {'status': 'divergente'}
         data = payload[OVERLAY_HEADER.size + overlay.SIZE:-len(OVERLAY_MAGIC)]
         table = data[:table_size(data)]
-        diagnostic = data[TABLE_START:DIAG_RECORDS_START] == DIAG_GAP
         return {'status': 'aplicado', 'setor_wa': sector, 'setor_cena_wa': scene_sector,
-                'diagnostico_ra': diagnostic,
+                'diagnostico_ra': diagnostic_mode(data),
                 'duelistas': len(STORY_DUELISTS),
                 'momento': 'antes_do_duelo', 'retorno_card_shop': True,
                 'sha256_tabela': hashlib.sha256(table).hexdigest(), 'validado_epsxe': False}

@@ -56,6 +56,40 @@ DIAG_CATCHER = struct.pack('<9I',
 DIAG_GAP = (bytes(DIAG_CATCHER_OFFSET - TABLE_START) + DIAG_CATCHER
             + bytes(DIAG_RECORDS_START - DIAG_CATCHER_OFFSET - len(DIAG_CATCHER)))
 
+# Mode 2: same sled, but the catcher saves r2..r31 at 0x801AAD00 + 4*r,
+# then EPC/Cause/SR/BadVAddr/HI/LO at +0x80..+0x94, disables interrupts,
+# writes the magic 0x51444247 at 0x801AAD00 and spins. The game freezes on
+# the black screen instead of closing ePSXe, so an ePSXe save state (F1)
+# keeps every register, the stack and the text-box state for analysis.
+# Source: docs/DIAGNOSTICO_QUEST_RA.md (assembled with clang, -march=mips1).
+DIAG2_DUMP = 0x801AAD00
+DIAG2_MAGIC = 0x51444247
+DIAG2_CATCHER = struct.pack('<59I',
+    0x3C01801B, 0xAC22AD08, 0xAC23AD0C, 0xAC24AD10, 0xAC25AD14, 0xAC26AD18,
+    0xAC27AD1C, 0xAC28AD20, 0xAC29AD24, 0xAC2AAD28, 0xAC2BAD2C, 0xAC2CAD30,
+    0xAC2DAD34, 0xAC2EAD38, 0xAC2FAD3C, 0xAC30AD40, 0xAC31AD44, 0xAC32AD48,
+    0xAC33AD4C, 0xAC34AD50, 0xAC35AD54, 0xAC36AD58, 0xAC37AD5C, 0xAC38AD60,
+    0xAC39AD64, 0xAC3AAD68, 0xAC3BAD6C, 0xAC3CAD70, 0xAC3DAD74, 0xAC3EAD78,
+    0xAC3FAD7C, 0x40187000, 0x00000000, 0xAC38AD80, 0x40186800, 0x00000000,
+    0xAC38AD84, 0x40186000, 0x00000000, 0xAC38AD88, 0x40184000, 0x00000000,
+    0xAC38AD8C, 0x0000C010, 0xAC38AD90, 0x0000C012, 0xAC38AD94, 0x40186000,
+    0x00000000, 0x2419FFFA, 0x0319C024, 0x40986000, 0x00000000, 0x00000000,
+    0x3C185144, 0x37184247, 0xAC38AD00, 0x1000FFFF, 0x00000000,
+)
+DIAG2_RECORDS_START = (DIAG_CATCHER_OFFSET + len(DIAG2_CATCHER) + 15) & ~15
+DIAG2_GAP = (bytes(DIAG_CATCHER_OFFSET - TABLE_START) + DIAG2_CATCHER
+             + bytes(DIAG2_RECORDS_START - DIAG_CATCHER_OFFSET - len(DIAG2_CATCHER)))
+DIAG_LAYOUTS = {1: (DIAG_RECORDS_START, DIAG_GAP), 2: (DIAG2_RECORDS_START, DIAG2_GAP)}
+
+
+def diagnostic_mode(data):
+    """0 for the normal layout, otherwise the crash-catcher mode of the table."""
+    first = struct.unpack_from('<H', data, 4 + 2 * STORY_DUELISTS[0])[0]
+    for mode, (start, gap) in DIAG_LAYOUTS.items():
+        if first == start and data[TABLE_START:start] == gap:
+            return mode
+    return 0
+
 
 def guaranteed_predecessors(opponent: int) -> tuple[int, ...]:
     """Simon is available in Free Duel. Other sources require a prior story win."""
@@ -323,7 +357,7 @@ def compile_table(config, catalog, glyphs, *, diagnostic=False):
     table.extend(tuple(RARITIES).index(catalog.cards[cid]['raridade']) for cid in range(1, CARD_COUNT + 1))
     table.extend(bytes(TABLE_START - len(table)))
     if diagnostic:
-        table.extend(DIAG_GAP)
+        table.extend(DIAG_LAYOUTS[int(diagnostic)][1])
     for quest in config['quests']:
         struct.pack_into('<H', table, 4 + 2 * quest['oponente_id'], len(table))
         criteria = quest['criterios']
@@ -343,9 +377,9 @@ def table_size(data):
             or struct.unpack_from('<H', data, 4 + 2 * SIMON_MURAN)[0]):
         raise ModError('Cabeçalho da tabela de quests divergente.')
     end = TABLE_START
-    if (struct.unpack_from('<H', data, 4 + 2 * STORY_DUELISTS[0])[0] == DIAG_RECORDS_START
-            and data[TABLE_START:DIAG_RECORDS_START] == DIAG_GAP):
-        end = DIAG_RECORDS_START
+    mode = diagnostic_mode(data)
+    if mode:
+        end = DIAG_LAYOUTS[mode][0]
     for duel in STORY_DUELISTS:
         if (struct.unpack_from('<H', data, 4 + 2 * duel)[0] != end or end + 2 > len(data)
                 or not 1 <= data[end] <= MAX_CRITERIA):

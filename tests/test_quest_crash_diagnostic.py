@@ -4,9 +4,10 @@ import struct
 import unittest
 from unittest.mock import patch
 
-from fmstudio.campaign_quests import (DIAG_CATCHER, DIAG_CATCHER_OFFSET, DIAG_GAP,
-                                      DIAG_RECORDS_START, STORY_DUELISTS, TABLE_START,
-                                      compile_table, generate_quests, table_size)
+from fmstudio.campaign_quests import (DIAG2_CATCHER, DIAG2_DUMP, DIAG2_GAP, DIAG2_MAGIC,
+                                      DIAG2_RECORDS_START, DIAG_CATCHER, DIAG_CATCHER_OFFSET,
+                                      DIAG_GAP, DIAG_RECORDS_START, STORY_DUELISTS, TABLE_START,
+                                      compile_table, diagnostic_mode, generate_quests, table_size)
 from fmstudio.core import ModError
 from fmstudio.ps1_campaign_quests import (DIAGNOSTIC_ENV, OBSERVED_CRASH_PCS, OVERLAY_HEADER,
                                           OVERLAY_SIZE, build_quest_overlay)
@@ -78,6 +79,41 @@ class QuestCrashDiagnosticTests(unittest.TestCase):
         broken[DIAG_CATCHER_OFFSET] ^= 1
         with self.assertRaises(ModError):
             table_size(bytes(broken))
+
+
+class QuestCrashDumpTests(unittest.TestCase):
+    def test_mode_two_layout(self):
+        with patch.dict(os.environ, {DIAGNOSTIC_ENV: '2'}):
+            payload, _, table = build(None)
+        base = blob.ENTRY_POINTS['QuestConfiguration']
+        self.assertEqual(diagnostic_mode(table), 2)
+        self.assertEqual(table_size(table), len(table))
+        self.assertEqual(table[TABLE_START:DIAG2_RECORDS_START], DIAG2_GAP)
+        catcher = base + DIAG_CATCHER_OFFSET
+        self.assertEqual(payload[OVERLAY_HEADER.size + catcher - blob.BASE:][:len(DIAG2_CATCHER)],
+                         DIAG2_CATCHER)
+        # The dump area and the observed PCs lie in the NOP sled, below the catcher.
+        self.assertLess(base + TABLE_START, DIAG2_DUMP)
+        self.assertLess(DIAG2_DUMP + 0x98, min(OBSERVED_CRASH_PCS))
+        for address in range(DIAG2_DUMP, catcher, 4):
+            self.assertEqual(word(payload, address), 0, hex(address))
+
+    def test_dump_catcher_saves_before_clobbering_and_spins(self):
+        words = struct.unpack(f'<{len(DIAG2_CATCHER) // 4}I', DIAG2_CATCHER)
+        self.assertEqual(words[0], 0x3C01801B)                 # lui at, 0x801B
+        offset = DIAG2_DUMP - 0x801B0000
+        stores = {(w >> 16) & 31: (w & 0xFFFF) for w in words[1:31]}
+        self.assertEqual(sorted(stores), list(range(2, 32)))  # r2..r31, before t8/t9 reuse
+        for reg, imm in stores.items():
+            self.assertEqual(imm, (offset + 4 * reg) & 0xFFFF)
+        self.assertTrue(all(w >> 26 == 0x2B and (w >> 21) & 31 == 1 for w in words[1:31]))
+        self.assertIn(0x40187000, words)                       # mfc0 t8, EPC
+        self.assertEqual(words[-2:], (0x1000FFFF, 0))          # b . ; nop
+        self.assertEqual((words[-5] & 0xFFFF) << 16 | (words[-4] & 0xFFFF), DIAG2_MAGIC)
+
+    def test_default_and_mode_one_unaffected(self):
+        self.assertEqual(diagnostic_mode(build(False)[2]), 0)
+        self.assertEqual(diagnostic_mode(build(1)[2]), 1)
 
 
 if __name__ == '__main__':

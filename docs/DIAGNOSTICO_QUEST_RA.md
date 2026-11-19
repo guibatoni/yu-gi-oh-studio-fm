@@ -69,3 +69,45 @@ pior caso (37 duelistas × 4 requisitos) dentro dos 6 setores; espaço adulterad
 rejeitado por `table_size`.
 
 Não executado em ePSXe por este ambiente.
+
+## Resultado do modo 1 (19/11/2026, ePSXe, BIN gerado pela pré-release diag-quest-ra-2)
+
+`Opcode 1b UNK (PC 001cf680)`: o pegador foi alcançado e `$ra = 0x801CF680`.
+
+- `0x801CF680` é a instrução seguinte ao `jalr` em `0x801CF678`, dentro de
+  `InsertTierName` (`tools/ps1/runtime.c`, seção `.runtime_mod`). Essa função é
+  instalada pelo próprio Studio na entrada 0 da tabela de comandos de texto
+  (`0x80090EAC`, comando `F8 00`: inserir nome/tipo/estrela de carta) e chama a
+  rotina nativa `func_80037DA4`.
+- Conclusão: o salto para a área das quests acontece **durante** a chamada de
+  `func_80037DA4` feita por `InsertTierName`, antes que `$ra` seja alterado por
+  outro `jal`. A hipótese de "código do jogo original saltando sozinho" fica
+  descartada: o contexto é o comando de texto que exibe nomes de cartas, logo
+  após a doação (provavelmente a lista do baú/deck que não chega a aparecer).
+- Por si só, `func_80037DA4` (C puro, com os patches God24) não tem salto
+  indireto que leve a `0x801AAE7x` sem passar por `jal`. Um retorno de
+  exceção/interrupção para um EPC corrompido manteria `$ra` intacto, por isso o
+  modo 2 grava EPC/Cause.
+
+## Modo 2 — despejo de registradores e save state
+
+`DIAGNOSTICO_QUEST_DUMP.bat` define `FMSTUDIO_DIAGNOSTICO_QUEST_RA=2`. O mesmo
+espaço de `nop` termina num pegador de 59 instruções que:
+
+1. Grava `r2..r31` em `0x801AAD00 + 4*r` (o `at` é usado como base).
+2. Grava EPC, Cause, SR, BadVAddr, HI e LO em `0x801AAD80..0x801AAD94`.
+3. Desliga as interrupções (SR &= ~5), grava o marcador `0x51444247` em
+   `0x801AAD00` e fica em loop.
+
+O jogo congela na tela preta sem a janela de erro. Salve um save state no
+ePSXe (F1) e envie o arquivo da pasta `sstates`. Para ler:
+
+```
+python tools/ler_dump_quest.py <arquivo do save state>
+```
+
+O leitor descompacta o save state, localiza a RAM pelo marcador e mostra
+registradores, `Cause.ExcCode` e a pilha.
+
+Limite: com 37 duelistas × 4 requisitos, a tabela do modo 2 excede o espaço
+da cena; o Studio recusa a exportação com mensagem. Configurações comuns cabem.
