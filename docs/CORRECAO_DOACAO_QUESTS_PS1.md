@@ -55,6 +55,13 @@ por vitória é do motor original e ocorre após o duelo. Também
 não há gravador próprio de Memory Card: a persistência de
 baú/flags continua utilizando os salvamentos normais do jogo.
 
+O marcador do overlay foi elevado de `QOV3` para `QOV4`.
+O carregador residente exige a versão atual para não entrar no código
+antigo que possa permanecer em um save state ou no cache da cena.
+Esta verificação NÃO torna save states de versões antigas compatíveis:
+é obrigatório iniciar o jogo por boot limpo e carregar somente o
+Memory Card previamente copiado.
+
 ## Alterações versionadas
 
 - `tools/ps1/campaign_quests.c`: remove entrada direta em GAME_DUEL
