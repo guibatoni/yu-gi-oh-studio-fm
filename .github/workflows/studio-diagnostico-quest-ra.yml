@@ -15,7 +15,7 @@ on:
       - 'tests/test_campaign_quests.py'
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   windows-quest-ra-diagnostic:
     runs-on: windows-latest
@@ -55,3 +55,11 @@ jobs:
             Studio-FM-Diagnostico-Quest-RA.zip
             Studio-FM-Diagnostico-Quest-RA.zip.sha256
           retention-days: 14
+      - name: Publicar pre-release de teste (ignorada pelo atualizador)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "diag-quest-ra-${{ github.run_number }}"
+          $notes = "Build de DIAGNOSTICO, nao e correcao. Abra pelo DIAGNOSTICO_QUEST_RA.bat, gere um BIN/CUE novo e informe o PC do erro do ePSXe ao escolher Doar e duelar. Pre-release: o atualizador do Studio nao a instala. Nao distribuir o BIN gerado."
+          gh release create $tag Studio-FM-Diagnostico-Quest-RA.zip Studio-FM-Diagnostico-Quest-RA.zip.sha256 --prerelease --target $env:GITHUB_SHA --title "Studio FM - Diagnostico quest RA (teste)" --notes $notes
