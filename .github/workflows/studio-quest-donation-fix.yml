@@ -1,0 +1,44 @@
+name: Verificar doação de quests PS1 e recompile MIPS
+on:
+  pull_request:
+    paths:
+      - 'tools/ps1/campaign_quests.c'
+      - 'tools/ps1/campaign_quest_loader.S'
+      - 'tools/ps1/campaign_quests.ld'
+      - 'tools/compile_ps1_campaign_quests.py'
+      - 'fmstudio/ps1_campaign_quest_overlay_blob.py'
+      - 'fmstudio/ps1_campaign_quests.py'
+      - 'tests/test_campaign_quests.py'
+      - '.github/workflows/studio-quest-donation-fix.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ps1-quest-donation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar Zig 0.13, Unicorn e dependencias
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb python3-tk
+          python -m pip install ziglang==0.13.0 unicorn==2.1.4 pillow
+      - name: Verificar sintaxe do blob versionado antes de recompilar
+        run: python -m py_compile fmstudio/ps1_campaign_quest_overlay_blob.py
+      - name: Compilar overlay MIPS real (mips1)
+        shell: bash
+        run: |
+          ZIG="$(python -c 'import ziglang,pathlib; print(pathlib.Path(ziglang.__file__).parent / "zig")')"
+          "$ZIG" version
+          python tools/compile_ps1_campaign_quests.py --zig "$ZIG" --nm nm
+      - name: Testes de doacao, fluxo de VM, salvamento e opcodes
+        run: python -m unittest discover -s tests -p test_campaign_quests.py -v
+      - name: Rodar regressao completa do Studio
+        run: xvfb-run -a python -m unittest discover -s tests -v
+      - name: Verificar fonte do atualizador
+        run: python tools/package_source.py --out FM-Mod-Studio-Source.zip
+      - name: Bloquear binario MIPS divergente do codigo C
+        run: git diff --exit-code -- fmstudio/ps1_campaign_quest_overlay_blob.py

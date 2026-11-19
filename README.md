@@ -1,3 +1,19 @@
+## Correção de quests PS1 — transição após doação (v1.9.14)
+
+Foi corrigido o callback **Doar e duelar** que, na edição
+v1.9.13, podia executar dados da tabela de quests como instruções
+MIPS no ePSXe (`unknown opcode 74410036 at 801AAE80`).
+A doação agora atualiza inventário e flag, libera o callback e
+devolve ao interpretador original o opcode `F8 0D` antes da
+mudança de cena. O overlay de MIPS foi recompilado com Zig 0.13,
+e os testes Unicorn validam o fluxo. É necessário **gerar novo
+BIN/CUE a partir do Original Drop x15**, preservando backup do
+Memory Card; **o teste visual completo no ePSXe ainda é necessário**.
+
+[Leia o diagnóstico, as alterações e os casos de teste](docs/CORRECAO_DOACAO_QUESTS_PS1.md).
+
+---
+
 ## Studio FM v1.9.13 — Opções da quest no ePSXe
 
 Corrige o código inválido ao escolher uma opção da quest no ePSXe.

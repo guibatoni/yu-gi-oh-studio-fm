@@ -18,12 +18,13 @@ from fmstudio.core import ModError, Project
 from fmstudio.deep_extract import exe_pos
 from fmstudio.ps1_campaign_quests import (
     CAMPAIGN_SCENE_SECTOR, CAMPAIGN_SCENE_SECTORS, COMMAND_TABLE, HOOKS, OVERLAY_SIZE,
-    OVERLAY_START, SCENE_PREFIX_SECTORS, SECTOR_BYTES, _scene_patches, append_quest_scene,
+    OVERLAY_START, OVERLAY_MAGIC, SCENE_PREFIX_SECTORS, SECTOR_BYTES, _scene_patches, append_quest_scene,
     build_quest_overlay, inspect_quest_overlay, install_quest_handlers, quest_settings,
     reserve_quest_handlers, save_quest_settings,
 )
 from fmstudio.ps1_expansion import EXPANDED_LEVELS, EXTRA_SLOTS
 from fmstudio.tables import PS1_SUPREME, STATS_ADDR
+from fmstudio import ps1_campaign_quest_overlay_blob as quest_blob
 
 GLYPHS = {i: chr(i) for i in range(32, 127)}
 QUEST_SECTOR = CAMPAIGN_SCENE_SECTOR + CAMPAIGN_SCENE_SECTORS
@@ -163,6 +164,10 @@ class CampaignQuestsTests(unittest.TestCase):
             end = report['setor_wa'] * SECTOR_BYTES + OVERLAY_SIZE
             wrong = wa[:end - 1] + b'\0' + wa[end:]
             self.assertEqual(inspect_quest_overlay(patched, wrong, expanded=True)['status'], 'divergente')
+            self.assertEqual(OVERLAY_MAGIC, b'QOV4')
+            old_generation = wa[:end - 4] + b'QOV3' + wa[end:]
+            self.assertEqual(inspect_quest_overlay(
+                patched, old_generation, expanded=True)['status'], 'divergente')
 
     def test_scene_fits_four_requirements_for_every_npc(self):
         requirements = [*MANUAL['2'], {'tipo': 'carta', 'alvo': 1, 'quantidade': 1}]
@@ -178,9 +183,21 @@ class CampaignQuestsTests(unittest.TestCase):
 
 @unittest.skipIf(Uc is None, 'MIPS verification needs Unicorn')
 class CampaignMipsTests(unittest.TestCase):
+    def test_donation_return_never_executes_quest_table_as_instructions(self):
+        from fmstudio import ps1_campaign_quest_overlay_blob as blob
+        # The user's ePSXe PC falls inside quest-criteria data. In the test
+        # below we enforce the architectural contract that the answer VM
+        # returns *before* the native duel (scene reloader) is called.
+        crashing_pc = 0x801AAE80
+        self.assertLess(blob.ENTRY_POINTS['QuestConfiguration'], crashing_pc)
+        self.assertLess(crashing_pc, OVERLAY_START + OVERLAY_SIZE)
+        self.assertLess(blob.ENTRY_POINTS['QuestAnswer'], blob.ENTRY_POINTS['QuestConfiguration'])
+
     def test_enforced_gate_simon_and_shop_resume(self):
-        for opponent, mode, action in ((1, 2, 'native'), (2, 6, 'native'), (2, 2, 'pay'),
-                                       (2, 2, 'early'), (10, 2, 'tournament'), (38, 2, 'hiding')):
+        for opponent, mode, action in ((1, 2, 'native'), (2, 6, 'native'),
+                                       (2, 2, 'bad-marker'), (2, 2, 'out-of-window'),
+                                       (2, 2, 'pay'), (2, 2, 'early'),
+                                       (10, 2, 'tournament'), (38, 2, 'hiding')):
             with self.subTest(opponent=opponent, action=action):
                 self.check_route(opponent, mode, action)
 
@@ -192,7 +209,8 @@ class CampaignMipsTests(unittest.TestCase):
         cpu = Uc(UC_ARCH_MIPS, UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN)
         cpu.mem_map(0, 0x200000)
         channel, shop_channel, stop = 0x80111000, 0x800EB0F8, 0x80010000
-        entry, trunk, deck, flags = 0x801B191F, 0x801D0250, 0x801D0200, 0x801D0618
+        entry = 0x801B1000 if action == 'out-of-window' else 0x801B191F
+        trunk, deck, flags = 0x801D0250, 0x801D0200, 0x801D0618
 
         def write(address, data):
             cpu.mem_write(address & 0x1fffffff, data)
@@ -230,8 +248,11 @@ class CampaignMipsTests(unittest.TestCase):
             write(address, struct.pack('<II', 0x03E00008, 0))
         write(OVERLAY_START, payload)
         events = []
+        entered_overlay = []
 
         def device(_, address, size, data):
+            if address == quest_blob.ENTRY_POINTS['QuestBeforeDuel']:
+                entered_overlay.append(address)
             if address in (0x800137E4, 0x80014E1C, 0xA0):
                 self.fail('O intérprete de diálogo não deve carregar a cena nem limpar o cache.')
             if address == 0x800393B0:
@@ -245,7 +266,8 @@ class CampaignMipsTests(unittest.TestCase):
                 write(0x8009B26C, b'\x03')
 
         cpu.hook_add(UC_HOOK_CODE, device)
-        write(entry - 2, bytes((0xF8, 0x0D, opponent, 96, 97, 0, 0, 0x72)))
+        write(entry - 2, bytes((0xF8, 0x0C if action == 'bad-marker' else 0x0D,
+                               opponent, 96, 97, 0, 0, 0x72)))
         write(0x8009B26C, bytes([mode]))
         for cid, species, guard in ((1, 8, 1), (2, 8, PS1_SUPREME), (3, 0, PS1_SUPREME)):
             word(STATS_ADDR + 4 * (cid - 1), (species << 26) | (guard << 22))
@@ -266,8 +288,10 @@ class CampaignMipsTests(unittest.TestCase):
         write(channel + 0x61, b'\x05')
         word(0x8009B340, 0x800393B0)
         call('duel', channel)
-        if action == 'native':
+        if action in ('native', 'bad-marker', 'out-of-window'):
             self.assertEqual(events, [('native', entry)])
+            self.assertEqual(entered_overlay, [],
+                             'Entradas inválidas e duelos sem quest devem ir direto ao residente.')
             return
         self.assertEqual(events, [])
         self.assertEqual(word(0x8009B340), 0)
@@ -312,15 +336,33 @@ class CampaignMipsTests(unittest.TestCase):
         write(trunk, b'\x03\x02\x02')
         choose(channel, 0)
         self.assertEqual(read(word(channel), 256).count(b'1/1'), 3)
+        # Donating inside the F8 12 handler must only update chest+flag.
+        # Starting the duel *inside* the answer callback can overwrite the
+        # quest overlay (0x801A9000..0x801AC000) before its stack unwinds.
+        before_events = list(events)
         choose(channel, 0)
-        self.assertEqual(events[-1], ('native', entry))
+        self.assertEqual(events, before_events)
+        self.assertEqual(word(channel), entry - 2)  # Retail F8 0D opcode.
+        self.assertEqual(read(entry - 2, 2), b'\xf8\x0d')
+        self.assertEqual(word(0x8009B350), 1)       # Yield to next VM step.
+        self.assertEqual(read(0x8009B398, 2), b'\x01\0')  # No held confirm.
         self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
         self.assertEqual(read(deck, 80), initial_deck)
         self.assertEqual(read(trunk+722, 1), b'\x04')
         self.assertEqual(read(flag, 1), bytes([mask]))
         self.assertEqual(read(0x801D070B, 1), b'\0')
-        write(0x8009B26C, b'\x42')
+        # The next VM tick decodes F8 0D. The resident loader must jump
+        # directly to the original native duel handler, not into overlay C.
+        overlay_entries = len(entered_overlay)
         word(channel, entry)
         call('duel', channel)
+        self.assertEqual(len(entered_overlay), overlay_entries)
+        self.assertEqual(events[-1], ('native', entry))
+        self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
+        # Re-entering after a saved completion must not donate a second time.
+        write(0x8009B26C, b'\x02')
+        word(channel, entry)
+        call('duel', channel)
+        self.assertEqual(len(entered_overlay), overlay_entries)
         self.assertEqual(events[-1], ('native', entry))
         self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
