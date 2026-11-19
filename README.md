@@ -1,3 +1,18 @@
+## Studio FM v1.9.19 — Mágicas e armadilhas
+
+Nova aba **Edição do Mod → Mágicas e armadilhas**, com os valores originais do
+Drop x15 ao lado de cada campo:
+
+- **Valores das mágicas:** cura (Mooyan Curry … Dian Keto), dano (Sparks …
+  Tremendous Fire) e destruição por tipo (Warrior Elimination, Crush Card, …):
+  qualquer tipo de monstro ou um ATK mínimo.
+- **Campos (terreno):** tabela de 20 tipos × 6 campos com o bônus de ATK/DEF.
+- **Armadilhas:** limite de ATK de cada armadilha de ataque (#681–#686).
+
+Gere um **BIN/CUE novo** para aplicar.
+
+---
+
 ## Studio FM v1.9.18 — Novo pedido das quests
 
 Todas as quests passam a mostrar **"Antes de duelar vamos precisar de:"** e uma

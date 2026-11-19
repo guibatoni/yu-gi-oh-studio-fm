@@ -818,14 +818,17 @@ class ModEditor(ttk.Frame):
         self.tabs = ttk.Notebook(self)
         self.tabs.pack(fill='both', expand=True)
         self.tabs.enable_traversal()
-        drop_pane, deck_pane, start_pane, lp_pane, quest_pane = [ttk.Frame(self.tabs, padding=9) for _ in range(5)]
+        drop_pane, deck_pane, start_pane, lp_pane, quest_pane, magic_pane = [
+            ttk.Frame(self.tabs, padding=9) for _ in range(6)]
         self.deck_pane = deck_pane
-        for pane, name in zip((deck_pane, drop_pane, start_pane, lp_pane, quest_pane),
+        for pane, name in zip((deck_pane, drop_pane, start_pane, lp_pane, quest_pane, magic_pane),
                               ('Deck do oponente', 'Drops do oponente', 'Decks iniciais', 'Config. MOD',
-                               'Quests da campanha')):
+                               'Quests da campanha', 'Mágicas e armadilhas')):
             self.tabs.add(pane, text=name)
         from .quest_gui import CampaignQuestEditor
         self.quest_editor = CampaignQuestEditor(quest_pane, studio)
+        from .magic_gui import MagicTrapEditor
+        self.magic_editor = MagicTrapEditor(magic_pane, studio)
         self.drop_toggle = ttk.Checkbutton(drop_pane, text='Drops ponderados do próprio deck',
                                            variable=self.use_deck_drops, command=self._toggle_deck_drops)
         self.drop_toggle.pack(anchor='w', pady=(0, 6))
@@ -941,6 +944,7 @@ class ModEditor(ttk.Frame):
             self._remember_opponent()
         self.project = self.studio.project
         self.quest_editor.set_project(self.project)
+        self.magic_editor.set_project(self.project)
         self._update_available()
         if self.project:
             self.cards = {cid: self.project.get(cid) for cid in self.project.cards}
