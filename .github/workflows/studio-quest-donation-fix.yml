@@ -40,19 +40,5 @@ jobs:
         run: xvfb-run -a python -m unittest discover -s tests -v
       - name: Verificar fonte do atualizador
         run: python tools/package_source.py --out FM-Mod-Studio-Source.zip
-      - name: Exportar blob recompilado para revisao (etapa de geracao)
-        if: always()
-        shell: bash
-        run: |
-          python - <<'PY'
-          import base64
-          from pathlib import Path
-          file = Path('fmstudio/ps1_campaign_quest_overlay_blob.py')
-          data = file.read_bytes()
-          assert data.startswith(b'"""Gerado por tools/compile_ps1_campaign_quests.py.')
-          content = base64.b64encode(data).decode('ascii')
-          print('STUDIO_QUEST_QOV5_BLOB_BEGIN')
-          for start in range(0, len(content), 120):
-              print(content[start:start+120])
-          print('STUDIO_QUEST_QOV5_BLOB_END')
-          PY
+      - name: Verificar blob MIPS byte a byte com o fonte C + ASM
+        run: git diff --exit-code -- fmstudio/ps1_campaign_quest_overlay_blob.py
