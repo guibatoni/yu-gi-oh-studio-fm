@@ -1,3 +1,17 @@
+## Studio FM v1.9.15 — Quests: Doar e duelar abre baú/deck PS1
+
+Corrigido o fluxo após a doação: o callback da quest não reinicia mais
+o bytecode F8 0D da caixa de diálogo. O carregador **residente** assume
+a transição depois que a rotina de doação retorna e chama o handler
+nativo do PS1, que arma o modo 3 e apresenta o baú/deck antes do
+combate. O motor MIPS QOV5 inclui teste contra execução em memória
+de cena sobrescrita. É necessário **gerar um BIN/CUE novo** e
+validar a transição num boot limpo do ePSXe.
+
+[Diagnóstico e testes](docs/CORRECAO_QUESTS_DOAR_E_DUELAR_QOV5.md).
+
+---
+
 ## Correção de quests PS1 — transição após doação (v1.9.14)
 
 Foi corrigido o callback **Doar e duelar** que, na edição

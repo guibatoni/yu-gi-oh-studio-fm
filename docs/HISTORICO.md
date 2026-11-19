@@ -1,3 +1,19 @@
+## v1.9.15 — Handoff residente das quests para baú/deck
+
+- Tratado o segundo crash de ePSXe: `unknown opcode 63697473 at
+  801AAE78`, durante **Doar e duelar**.
+- Nova versão do overlay MIPS **QOV5**.
+- `QuestAnswer` faz a doação apenas uma vez, marca a quest,
+  posiciona o cursor nos seis operandos originais do duelo e
+  retorna ao adaptador residente.
+- O residente valida banco, cursor, modo e oponente e salta ao
+  `Text_StartCampaignDuel` original (`0x80038530`).
+  O modo 3 inicia o baú/deck antes do combate.
+- A suíte Unicorn simula a invalidação do overlay durante a troca
+  de modo, exige retorno seguro e valida a não repetição de doação.
+- Recompilação Zig 0.13 e comparação do blob MIPS byte a byte.
+  Teste real em ePSXe permanece necessário.
+
 ## v1.9.14 — Doação de quests e transição segura ao duelo
 
 - Corrigida a chamada síncrona do comando de duelo no callback

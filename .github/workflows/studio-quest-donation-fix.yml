@@ -40,5 +40,5 @@ jobs:
         run: xvfb-run -a python -m unittest discover -s tests -v
       - name: Verificar fonte do atualizador
         run: python tools/package_source.py --out FM-Mod-Studio-Source.zip
-      - name: Bloquear binario MIPS divergente do codigo C
+      - name: Verificar blob MIPS byte a byte com o fonte C + ASM
         run: git diff --exit-code -- fmstudio/ps1_campaign_quest_overlay_blob.py
