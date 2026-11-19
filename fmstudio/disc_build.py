@@ -195,6 +195,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     from .ps1_equip_bonus import (apply as apply_equip_bonus, block_size as equip_bonus_size,
                                   equip_bonuses, reserve_block, status as equip_bonus_status)
     equip_bonus_requested = equip_bonuses(project)
+    from .ps1_magic_values import (apply as apply_magic_values, is_empty as magic_values_empty,
+                                   magic_values, matches as magic_values_match)
+    magic_values_requested = magic_values(project)
     from .ps1_expansion import (EXPANDED_LEVELS, PS1_CARD_CAPACITY, compile_expansion, expand_archive,
                                 patch_expansion, inspect_expansion, retail_archive_view)
     from .ps1_campaign_quests import (QUEST_SCENE_SECTORS, append_quest_scene, build_quest_overlay, inspect_quest_overlay,
@@ -233,6 +236,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             expansion = compile_expansion(project, profile=native_profile)
             capacity = PS1_CARD_CAPACITY if expansion.enabled else CARD_COUNT
             if (prices_requested or win_reward_requested is not None or equip_bonus_requested
+                    or not magic_values_empty(magic_values_requested)
                     or cards_per_win_requested is not None) and not native_profile:
                 raise ModError(
                     'Economia PS1 personalizada exige o SLUS Drop x15 original vinculado.')
@@ -555,6 +559,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_exe, patched_wa = patch_supreme(
             original_exe, patched_exe, patched_wa if patched_wa is not None else original_wa)
 
+    magic_values_report = {'status': 'original'} if native_profile else {'status': 'perfil_incompativel'}
+    if native_profile and not magic_values_empty(magic_values_requested):
+        patched_exe, magic_values_report = apply_magic_values(patched_exe, magic_values_requested)
+
     cards_per_win_report = {'status': 'original_do_mod', 'cartas': 5} if native_profile else {
         'status': 'perfil_incompativel'}
     if native_profile and cards_per_win_requested is not None:
@@ -758,6 +766,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'estrelas_por_vitoria_ps1':reward_report,
                 'cartas_por_vitoria_ps1':cards_per_win_report,
                 'bonus_equipamentos_ps1':equip_bonus_report,
+                'valores_magicas_ps1':magic_values_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
@@ -806,6 +815,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             if native_profile and checked['catalogo_bau_ps1']['status'] != (
                     'aplicado' if show_all_chest else 'ausente'):
                 raise ModError('A opção de visualização do baú não coincide com o BIN gerado. '
+                               'A cópia anterior foi preservada.')
+            if (native_profile and not magic_values_empty(magic_values_requested)
+                    and not magic_values_match(reread_exe, magic_values_requested)):
+                raise ModError('Valores das mágicas divergentes no SLUS final. '
                                'A cópia anterior foi preservada.')
             if native_profile and equip_bonus_requested and equip_bonus_status(reread_exe).get('bonus') != {
                     str(k): v for k, v in sorted(equip_bonus_requested.items())}:

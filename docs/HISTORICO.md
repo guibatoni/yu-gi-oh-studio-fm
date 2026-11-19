@@ -1,3 +1,18 @@
+## v1.9.19 (em teste) — Mágicas: cura, dano e destruição por tipo
+
+- Nova aba **Edição do Mod → Mágicas e armadilhas**, com os valores originais do
+  Drop x15 ao lado de cada campo:
+  - **Cura** (#338–#342; Drop x15: 200, 500, 1000, 2000, 5000), em múltiplos de
+    100 até 25500. Tabela `gDuel_abLifePointRecoveryUnits` (`0x8009AF30`).
+  - **Dano ao oponente** (#343–#347; 50, 100, 200, 500, 1000), em múltiplos de 10
+    até 2550. Tabela `gDuel_abDirectDamageUnits` (`0x8009AF38`).
+  - **Destruição por tipo** (Warrior Elimination, Eternal Rest, Stain Storm, Crush
+    Card, Eradicating Aerosol, Breath of Light, Eternal Draught): qualquer tipo de
+    monstro ou um ATK mínimo (210–2550). Tabela `gDuel_abMonsterRemovalRules`
+    (`0x80090A4C`); os IDs das regras são conferidos antes da escrita.
+- Só os bytes de valor mudam. A releitura do SLUS final precisa coincidir com o
+  projeto.
+
 ## v1.9.18 — Novo pedido das quests
 
 - Página fixa para todos: **"Antes de duelar vamos / precisar de:"** (depois da

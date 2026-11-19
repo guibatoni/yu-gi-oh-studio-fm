@@ -34,7 +34,7 @@ PROGRAM_NAME = 'FM-Mod-Studio.exe'
 UPDATER_NAME = 'FM-Mod-Studio-Updater.exe'
 WINDOWS_FILES = frozenset({PROGRAM_NAME, UPDATER_NAME, 'INICIAR.bat', 'LEIA-ME.txt'})
 SOURCE_FILES = frozenset({
-    'fmstudio/campaign_quests.py', 'fmstudio/ps1_campaign_quests.py', 'fmstudio/ps1_drop_count.py', 'fmstudio/ps1_equip_bonus.py',
+    'fmstudio/campaign_quests.py', 'fmstudio/ps1_campaign_quests.py', 'fmstudio/ps1_drop_count.py', 'fmstudio/ps1_equip_bonus.py', 'fmstudio/ps1_magic_values.py', 'fmstudio/magic_gui.py',
     'fmstudio/ps1_campaign_quest_overlay_blob.py', 'fmstudio/quest_gui.py',
     'docs/QUESTS_CAMPANHA_PS1.md',
     'app.py', 'FM_Mod_Studio.pyw', 'updater_main.py',
@@ -64,7 +64,7 @@ SOURCE_FILES = frozenset({
     'docs/MIGRACAO_REPOSITORIO.md', 'docs/COMPAT_PS1.md', 'docs/EXPANSAO_722_GOD_TEXTO.md', 'docs/CLASSES_E_CORES.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md', 'docs/OTIMIZACAO_PS1_PILLOW.md', 'docs/ECONOMIA_PS1.md', 'docs/EDITOR_MULTIPLO_PS1.md',
 })
 SOURCE_REQUIRED = frozenset({
-    'fmstudio/campaign_quests.py', 'fmstudio/ps1_campaign_quests.py', 'fmstudio/ps1_drop_count.py', 'fmstudio/ps1_equip_bonus.py',
+    'fmstudio/campaign_quests.py', 'fmstudio/ps1_campaign_quests.py', 'fmstudio/ps1_drop_count.py', 'fmstudio/ps1_equip_bonus.py', 'fmstudio/ps1_magic_values.py', 'fmstudio/magic_gui.py',
     'fmstudio/ps1_campaign_quest_overlay_blob.py', 'fmstudio/quest_gui.py',
     'fmstudio/png_pixels.py', 'fmstudio/ps1_image_optimizer.py', 'fmstudio/ps1_image_preview.py', 'fmstudio/ps1_card_title.py',
     'fmstudio/disc_append.py', 'fmstudio/ps1_expansion.py', 'fmstudio/ps1_expansion_profile.py',
