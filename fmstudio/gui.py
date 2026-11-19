@@ -740,7 +740,7 @@ class FieldDialog(tk.Toplevel):
 class Studio(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f'Yu-Gi-Oh Studio Card FM | v{__version__}')
+        self.title(self._window_title())
         self.prefs = ui_prefs.load()
         geometry = self.prefs['geometria']
         self.geometry(geometry if ui_prefs.valid_geometry(geometry) else '1390x825')
@@ -949,6 +949,12 @@ class Studio(tk.Tk):
         return ui_theme.menu(parent)
 
     # ── navegação ────────────────────────────────────────────────────────
+    def _window_title(self):
+        from .build_info import BUILD
+        title = f'Yu-Gi-Oh Studio Card FM | v{__version__}' + (f' ({BUILD})' if BUILD else '')
+        project = getattr(self, 'project', None)
+        return title + (f' — {project.metadata.get("nome", "")}' if project else '')
+
     def _bind_shortcuts(self):
         def global_key(sequence, action):
             def handler(event):
@@ -1973,8 +1979,7 @@ class Studio(tk.Tk):
         count = self.drafts.count if self.drafts else 0
         if hasattr(self, 'statusbar'):
             self.statusbar.set_saved(count, has_project=bool(self.project))
-            self.title(f'{"● " if count else ""}Yu-Gi-Oh Studio Card FM | v{__version__}'
-                       + (f' — {self.project.metadata.get("nome", "")}' if self.project else ''))
+            self.title(('● ' if count else '') + self._window_title())
         if hasattr(self, 'pending_label'):
             self.pending_label.configure(text=(f'● {count} carta(s) pendente(s) • clique Salvar projeto'
                 if count else '✓ Todas as edições salvas'),fg=('#edc47e' if count else ACCENT))

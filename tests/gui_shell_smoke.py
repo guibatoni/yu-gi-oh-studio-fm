@@ -108,6 +108,12 @@ with tempfile.TemporaryDirectory() as temp:
     assert added[0]['origem_contagem'] == 'campo', added[0]
     assert not effect.winfo_exists()
 
+    batch = EffectDialog(root, lambda entries: None, batch=True)
+    batch._choice('acao', 'bonus_por_tipo')
+    batch.update()
+    assert batch.specific_button.winfo_ismapped(), 'botão de carta específica oculto no modo vários efeitos'
+    batch.destroy()
+
     # Operação longa: a janela continua viva e a exceção volta para a interface.
     assert root.run_blocking('Teste…', lambda a, b=0: a + b, 2, b=3) == 5
     try:

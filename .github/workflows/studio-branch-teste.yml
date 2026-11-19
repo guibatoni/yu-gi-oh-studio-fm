@@ -149,6 +149,9 @@ jobs:
           git add -A
           git commit --quiet -m "capturas Windows run ${{ github.run_number }}"
           for attempt in 1 2 3; do git push --quiet origin ui-capturas && break; git pull --quiet --rebase origin ui-capturas; done
+      - name: Marcar o build de teste
+        shell: bash
+        run: echo "BUILD = 'teste-dev-${{ github.run_number }}'" > fmstudio/build_info.py
       - name: Compilar Studio de teste
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --add-data "assets/icons;assets/icons" --collect-all PIL --name FM-Studio-TESTE app.py
       - name: Empacotar
