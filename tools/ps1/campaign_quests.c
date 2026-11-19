@@ -34,7 +34,7 @@ typedef unsigned int u32;
 #define TEXT_CLOSE_CHOICE ((void (*)(u8 *))0x80038b08)
 #define TEXT_REFRESH_FRAME ((void (*)(u8 *))0x800391e4)
 #define PENDING_TAG 0x4d
-#define NATIVE_DUEL_HANDOFF 0x44  /* Consumed synchronously by the resident answer adapter. */
+#define NATIVE_DUEL_HANDOFF 0x44  /* Consumed by resident adapter, defers native F8 0D. */
 
 enum { EXACT_CARD, TYPE, ATTRIBUTE, GUARDIAN, RARITY };
 enum { REVIEW, DONATE, RETREAT };
@@ -397,17 +397,16 @@ void QuestAnswer(u8 *channel)
         return;
     }
     /*
-     * The original F8 0D routine sets mode 3 and fills the duel parameters.
-     * Its native mode runner then opens the Build Deck / trunk screen before
-     * entering combat (Main_RunDuel state 0). Do NOT replay F8 0D in the
-     * text VM and do NOT call the native routine while still executing in
-     * the reloadable 0x801A9000..0x801AC000 arena.
+     * QOV6: complete donation without entering the native duel transition.
+     * Point at the untouched retail duel operands and signal the permanent
+     * QuestAnswerLoader. After this C frame has returned, the adapter
+     * validates the handoff and rewinds two bytes to F8 0D. TEXT_YIELD=1
+     * forces the original text VM to dispatch it on the NEXT tick.
      *
-     * Instead, atomically finish the donation, point the stream directly
-     * at the unchanged native duel record's six operands, and signal the
-     * resident QuestAnswerLoader. It calls Text_StartCampaignDuel only
-     * AFTER this C function has returned, so all return addresses remain
-     * in permanent SLUS code while the front end changes modes.
+     * All scene transitions consequently originate in retail code, not in
+     * the F8 12 choice callback. In particular no QOV6 C frames or their
+     * return addresses remain active as the 0x801A9000..0x801AC000 arena
+     * can be reused on the way to the native Build Deck / chest screen.
      */
     const u8 *resume = active.resume;
     unsigned opponent = active.opponent;
@@ -418,7 +417,7 @@ void QuestAnswer(u8 *channel)
     active.quest = 0;
     PAD1_PRESSED &= ~PAD_CONFIRM;
     TEXT_CHOICE_LAYOUT = 0;
-    *cursor(channel) = resume; /* F8 0D already consumed: native operand byte. */
+    *cursor(channel) = resume; /* Resident adapter rewinds to retail F8 0D. */
     TEXT_YIELD = 1;
     PENDING->offset = (unsigned)resume;
     PENDING->opponent = opponent;

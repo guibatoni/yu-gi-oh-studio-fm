@@ -164,8 +164,8 @@ class CampaignQuestsTests(unittest.TestCase):
             end = report['setor_wa'] * SECTOR_BYTES + OVERLAY_SIZE
             wrong = wa[:end - 1] + b'\0' + wa[end:]
             self.assertEqual(inspect_quest_overlay(patched, wrong, expanded=True)['status'], 'divergente')
-            self.assertEqual(OVERLAY_MAGIC, b'QOV5')
-            old_generation = wa[:end - 4] + b'QOV4' + wa[end:]
+            self.assertEqual(OVERLAY_MAGIC, b'QOV6')
+            old_generation = wa[:end - 4] + b'QOV5' + wa[end:]
             self.assertEqual(inspect_quest_overlay(
                 patched, old_generation, expanded=True)['status'], 'divergente')
 
@@ -181,6 +181,55 @@ class CampaignQuestsTests(unittest.TestCase):
         self.assertEqual(table_size(table), len(table))
 
 
+
+class CampaignMips1TimingTests(unittest.TestCase):
+    """The real PS1 has a load delay; Unicorn's MIPS32 mode can hide it."""
+
+    @staticmethod
+    def _inputs(instruction):
+        opcode = instruction >> 26
+        rs = (instruction >> 21) & 31
+        rt = (instruction >> 16) & 31
+        if opcode == 0:
+            funct = instruction & 63
+            if funct in (0, 2, 3):
+                return {rt}
+            if funct in (4, 6, 7):
+                return {rs, rt}
+            if funct in (8, 9):
+                return {rs}
+            return {rs, rt}
+        if opcode in (2, 3, 15):
+            return set()
+        if opcode in (4, 5):
+            return {rs, rt}
+        if opcode in (40, 41, 43):
+            return {rs, rt}
+        return {rs}
+
+    def test_resident_loaders_never_consume_newly_loaded_register(self):
+        for name in ('DUEL_LOADER', 'ANSWER_LOADER', 'SHOP_LOADER'):
+            with self.subTest(loader=name):
+                payload = getattr(quest_blob, name)
+                words = struct.unpack('<' + 'I' * (len(payload) // 4), payload)
+                for index, instruction in enumerate(words[:-1]):
+                    opcode = instruction >> 26
+                    if opcode not in (32, 33, 35, 36, 37):
+                        continue
+                    loaded = (instruction >> 16) & 31
+                    if loaded:
+                        self.assertNotIn(
+                            loaded, self._inputs(words[index + 1]),
+                            f'{name}+0x{index * 4:X} reads ${loaded} on the load delay slot',
+                        )
+
+    def test_donation_adapter_cannot_jump_to_native_duel_inline(self):
+        native_j = struct.pack('<I', 0x0800E14C)  # j 0x80038530
+        self.assertNotIn(native_j, quest_blob.ANSWER_LOADER)
+        self.assertIn(native_j, quest_blob.DUEL_LOADER)
+        self.assertEqual(OVERLAY_MAGIC, b'QOV6')
+
+
 @unittest.skipIf(Uc is None, 'MIPS verification needs Unicorn')
 class CampaignMipsTests(unittest.TestCase):
     def test_donation_return_never_executes_quest_table_as_instructions(self):
@@ -188,7 +237,7 @@ class CampaignMipsTests(unittest.TestCase):
         # The user's ePSXe PC falls inside quest-criteria data. In the test
         # below we enforce the architectural contract that the answer VM
         # returns *before* the native duel (scene reloader) is called.
-        crashing_pc = 0x801AAE80
+        crashing_pc = 0x801AAE78
         self.assertLess(blob.ENTRY_POINTS['QuestConfiguration'], crashing_pc)
         self.assertLess(crashing_pc, OVERLAY_START + OVERLAY_SIZE)
         self.assertLess(blob.ENTRY_POINTS['QuestAnswer'], blob.ENTRY_POINTS['QuestConfiguration'])
@@ -355,23 +404,30 @@ class CampaignMipsTests(unittest.TestCase):
         write(trunk, b'\x03\x02\x02')
         choose(channel, 0)
         self.assertEqual(read(word(channel), 256).count(b'1/1'), 3)
-        # A SINGLE confirm must donate and hand control to the resident
-        # adapter, which uses the original six-byte duel descriptor. No
-        # rewriting the VM cursor to F8 0D, no second VM tick needed.
+        # The donation must return to the resident F8 12 adapter BEFORE
+        # starting a native duel. The REAL text VM owns the next F8 0D tick.
         before_events = list(events)
         choose(channel, 0)
-        self.assertEqual(events, before_events + [('native', entry)])
-        self.assertEqual(word(channel), entry + 6)
+        self.assertEqual(events, before_events)
+        self.assertEqual(word(channel), entry - 2)
         self.assertEqual(read(entry - 2, 2), b'\xf8\x0d')
-        self.assertEqual(read(0x8009B26C,1), b'\x03')
+        self.assertEqual(read(0x8009B26C, 1)[0] & 31, 2)
         self.assertEqual(word(0x8009B350), 1)
         self.assertEqual(read(0x8009B398, 2), b'\x01\0')
         self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
         self.assertEqual(read(deck, 80), initial_deck)
-        self.assertEqual(read(trunk+722, 1), b'\x04')
+        self.assertEqual(read(trunk + 722, 1), b'\x04')
         self.assertEqual(read(flag, 1), bytes([mask]))
-        self.assertEqual(read(0x801D070B, 1), b'\0') # handoff flag consumed
-        self.assertEqual(read(OVERLAY_START + 4, 4), b'\0'*4)
+        self.assertEqual(read(0x801D070B, 1), b'\0')  # handoff consumed
+        self.assertEqual(read(OVERLAY_START + 4, 4), payload[4:8])
+        # The retail VM consumes F8 0D on the NEXT tick; its resident hook
+        # sees the already-paid quest and uses the untouched six operands.
+        word(channel, entry)
+        call('duel', channel)
+        self.assertEqual(events, before_events + [('native', entry)])
+        self.assertEqual(word(channel), entry + 6)
+        self.assertEqual(read(0x8009B26C, 1), b'\x03')
+        self.assertEqual(read(OVERLAY_START + 4, 4), b'\0' * 4)
         # Mode 3's next frame must enter Build Deck without donating twice.
         overlay_entries = len(entered_overlay)
         write(0x8009B26C, b'\x02')

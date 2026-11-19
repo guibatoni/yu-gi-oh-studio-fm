@@ -7,8 +7,8 @@
     ori $t0, $t0, 0x9000
     lw $t1, 0($t0)
     lw $t2, 0x2FFC($t0)
-    lui $t3, 0x3556
-    ori $t3, $t3, 0x4F51     /* QOV5: resident-controlled native duel handoff. */
+    lui $t3, 0x3656
+    ori $t3, $t3, 0x4F51     /* QOV6: defer native duel to the retail VM on its next tick. */
     bne $t1, $t3, \fallback
     nop
     bne $t2, $t3, \fallback
@@ -52,9 +52,8 @@ QuestDuelLoader:
     lbu $t3, -1($t1)
     addiu $t2, $zero, 0x0D
     bne $t3, $t2, .Loriginal
-    nop
-
-    lbu $t4, 0($t1)         /* Keep opponent ID across check_overlay. */
+    lbu $t4, 0($t1)         /* Delay slot: valid bank address; remember opponent. */
+    nop                    /* Real PS1 MIPS I load delay before reading $t4. */
     addiu $t1, $t4, -2     /* Simon and non-campaign IDs use native. */
     sltiu $t1, $t1, 37
     beq $t1, $zero, .Loriginal
@@ -101,10 +100,9 @@ QuestAnswerLoader:
     check_overlay .Lordinary
     /*
      * QuestAnswer runs from the reloadable scene arena. Call it instead
-     * of tail-jumping to it: once it returns, the resident SLUS adapter
-     * is the only frame still active while the native handler arms the
-     * build-deck screen (game mode 3). This removes the dangling return
-     * address to the quest criteria text that crashed ePSXe.
+     * of tail-jumping. After it returns, perform cursor validation and
+     * defer the original F8 0D to the next VM tick. Neither the callback
+     * nor its adapter may load the next game mode synchronously.
      */
     addiu $sp, $sp, -24
     sw $ra, 20($sp)
@@ -132,33 +130,38 @@ QuestAnswerLoader:
     sb $zero, 0x070B($t0)
     lui $t1, 0x800A
     lbu $t2, -0x4D94($t1)
+    addiu $t3, $zero, 2  /* Load-delay filler before consuming $t2. */
     andi $t2, $t2, 31
-    addiu $t3, $zero, 2
     bne $t2, $t3, .Lanswer_return
     nop
 
-    /* The stream must be the unmodified six-byte F8 0D operand. */
+    /* Keep the slot address: the validated original F8 0D opcode must
+       be replayed on the NEXT retail VM tick. Native mode changes must not
+       occur within the F8 12 choice callback or while quest C is active. */
     lbu $t2, 0x58($a0)
+    ori $t4, $zero, 0x801B  /* Filler before using text stream depth. */
     sll $t2, $t2, 2
-    addu $t2, $a0, $t2
-    lw $t2, 0($t2)
+    addu $t5, $a0, $t2
+    lw $t2, 0($t5)
+    lhu $t6, 0x0708($t0)   /* Filler before using loaded text cursor. */
     srl $t3, $t2, 16
-    ori $t4, $zero, 0x801B
     bne $t3, $t4, .Lanswer_return
     nop
-    lhu $t3, 0x0708($t0)
     andi $t4, $t2, 0xFFFF
-    bne $t3, $t4, .Lanswer_return
+    bne $t6, $t4, .Lanswer_return
     nop
     lbu $t3, 0x070A($t0)
     lbu $t4, 0($t2)
+    addiu $t2, $t2, -2     /* Filler before comparing loaded opponent ID. */
     bne $t3, $t4, .Lanswer_return
     nop
 
-    /* Tail-jump with the native VM's original return address. */
-    lw $ra, 20($sp)
-    addiu $sp, $sp, 24
-    j 0x80038530
+    /* Cursor is on the six retail operands. Rewind by exactly two bytes
+       to F8 0D; TEXT_YIELD=1 was set by QuestAnswer. Return through this
+       resident adapter, leaving the interpreter to dispatch F8 0D itself
+       on the next tick, with the donation flag already committed. */
+    sw $t2, 0($t5)
+    beq $zero, $zero, .Lanswer_return
     nop
 .Lanswer_return:
     lw $ra, 20($sp)
