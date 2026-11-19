@@ -65,6 +65,29 @@ jobs:
         with:
           name: capturas-linux
           path: capturas-linux
+      - name: Publicar capturas (Linux) na branch ui-capturas
+        if: always()
+        shell: bash
+        run: |
+          set -e
+          [ -d capturas-linux ] || exit 0
+          dest="$RUNNER_TEMP/capturas-repo"
+          rm -rf "$dest"
+          git clone --quiet --no-checkout "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "$dest"
+          cd "$dest"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin ui-capturas >/dev/null; then
+            git checkout --quiet ui-capturas
+          else
+            git checkout --quiet --orphan ui-capturas
+            git rm -rfq . || true
+          fi
+          mkdir -p "run-${{ github.run_number }}"
+          cp -r "$GITHUB_WORKSPACE/capturas-linux" "run-${{ github.run_number }}/"
+          git add -A
+          git commit --quiet -m "capturas Linux run ${{ github.run_number }}"
+          for attempt in 1 2 3; do git push --quiet origin ui-capturas && break; git pull --quiet --rebase origin ui-capturas; done
       - name: Gravar blob reproduzivel na branch
         id: commit
         shell: bash
@@ -103,6 +126,29 @@ jobs:
         with:
           name: capturas-windows
           path: capturas-windows
+      - name: Publicar capturas (Windows) na branch ui-capturas
+        if: always()
+        shell: bash
+        run: |
+          set -e
+          [ -d capturas-windows ] || exit 0
+          dest="$RUNNER_TEMP/capturas-repo"
+          rm -rf "$dest"
+          git clone --quiet --no-checkout "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "$dest"
+          cd "$dest"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin ui-capturas >/dev/null; then
+            git checkout --quiet ui-capturas
+          else
+            git checkout --quiet --orphan ui-capturas
+            git rm -rfq . || true
+          fi
+          mkdir -p "run-${{ github.run_number }}"
+          cp -r "$GITHUB_WORKSPACE/capturas-windows" "run-${{ github.run_number }}/"
+          git add -A
+          git commit --quiet -m "capturas Windows run ${{ github.run_number }}"
+          for attempt in 1 2 3; do git push --quiet origin ui-capturas && break; git pull --quiet --rebase origin ui-capturas; done
       - name: Compilar Studio de teste
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --add-data "assets/icons;assets/icons" --collect-all PIL --name FM-Studio-TESTE app.py
       - name: Empacotar
