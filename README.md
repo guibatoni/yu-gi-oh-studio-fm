@@ -1,3 +1,22 @@
+## Studio FM v1.9.16 — Quests: "Doar e duelar" sem travar no Drop x15
+
+Corrigida a causa real do erro `unknown opcode ... at 801AAE78` ao escolher
+**Doar e duelar**. O Drop x15 guarda código próprio na mesma área de memória
+que as quests usavam (`0x801AAC00..0x801AAEE0`: sorteio de drops, recompensas
+de fim de duelo e escrita do nome das cartas). As quests apagavam esse código, e
+a tela do baú/deck travava. Agora o código do mod é preservado byte a byte, e o
+overlay das quests (**QOV7**) é organizado ao redor dele.
+
+- A verificação conta só as cartas do **baú**: as do deck já ficam fora dessa
+  contagem no FM. A doação continua sem tocar no deck.
+- Limite: até **3 requisitos** por duelista. Acima disso o Studio recusa a
+  exportação com mensagem, em vez de gerar um jogo que trava.
+- É necessário **gerar um BIN/CUE novo** a partir do Original Drop x15.
+
+[Causa raiz e detalhes](docs/CORRECAO_QUESTS_QOV7_DROP_X15.md).
+
+---
+
 ## Studio FM v1.9.15 — Quests: Doar e duelar abre baú/deck PS1
 
 Corrigido o fluxo após a doação: o callback da quest não reinicia mais

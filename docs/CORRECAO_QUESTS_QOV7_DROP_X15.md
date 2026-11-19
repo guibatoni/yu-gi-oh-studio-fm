@@ -72,7 +72,7 @@ cena do PS1", em vez de gerar um jogo que trava.
   divergente, detecção de desvio estranho, desvios reais do Drop x15 aceitos,
   limite de requisitos.
 - Os testes MIPS/Unicorn existentes rodam no CI com o blob recompilado pelo Zig 0.13
-  (`.github/workflows/studio-qov7-preserva-drop15.yml`).
+  (workflow de teste da branch, removido no lançamento; a verificação byte a byte fica em `studio-quest-donation-fix.yml`).
 
 ## Teste no ePSXe (pendente)
 
@@ -92,10 +92,12 @@ quantidades separadas. `QuestCountMissing` subtraía as cópias do deck da
 contagem do baú, como se ela as incluísse, e por isso exigia cópias a mais.
 Agora usa só o baú. O deck continua intocado, porque a doação só debita do baú.
 
-## Pendente: retirada não observada no ePSXe
+## Validação no ePSXe (19/11/2026, pacote teste-qov7-1)
 
-Teste do usuário com QOV7 (19/11/2026): sem travamento. A quest mostrava
-"Jinzo 1/1" e "Doar e duelar" levou ao baú e ao duelo, mas as cartas não
-pareceram sair do baú. Aguardando save states (página da quest antes da
-escolha / baú depois) para comparar `0x801D0250`, a flag `0x750 + id` e o
-estado `active`/`inventory` em `0x801AAEE0..0x801AB650`.
+- Sem travamento. "Doar e duelar" abre o baú/deck e inicia o duelo.
+- Jinzo #7: o baú tinha 2 e ficou com 1 depois da doação.
+- "Atrib. Earth 11/11": o baú tinha 18 cartas de atributo Terra (lidas do save
+  state). Foram retiradas 11, por ordem de número da carta. O deck não mudou.
+- "Ir ao Card Shop" funciona.
+- Pendentes: fim de duelo com drops, salvar/recarregar, Simon Muran, torneio e
+  Egito. Também falta testar a contagem só do baú (pacote teste-qov7-2).
