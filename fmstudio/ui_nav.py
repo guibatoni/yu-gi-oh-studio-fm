@@ -85,6 +85,8 @@ ACTIONS: tuple[Action, ...] = (
     Action('Vincular SLUS', 'attach_slus', '', ('slus', 'executável')),
     Action('Gerar jogo BIN/CUE', 'build_disc', 'Ctrl+B', ('gerar', 'iso', 'compilar', 'build')),
     Action('Exportar alterações', 'export', '', ('exportar', 'csv')),
+    Action('Traduzir descrições das cartas', 'open_translation', 'Ctrl+T',
+           ('traduzir', 'tradução', 'idioma', 'inglês', 'english', 'japonês', 'alemão', 'italiano')),
     Action('Verificar projeto', 'verify', '', ('validar', 'erros', 'verificar')),
     Action('Conferir BIN/CUE gerado', 'verify_disc', '', ('verificar', 'disco', 'conferir')),
     Action('Nova carta', 'add_new_card', '', ('criar carta', 'adicionar')),
@@ -117,11 +119,14 @@ def _score(query: str, label: str, keywords: tuple[str, ...]) -> int:
     return -1
 
 
-def search(query: str) -> list[tuple[str, object]]:
-    """[('secao', Section) | ('acao', Action)] na ordem de relevância."""
+def search(query: str, translate=None) -> list[tuple[str, object]]:
+    """[('secao', Section) | ('acao', Action)] na ordem de relevância.
+
+    Com ``translate``, o nome traduzido também vale na busca (e o português continua valendo)."""
     query = fold(query)
-    entries = [('secao', s, s.label, s.keywords + (s.hint,)) for s in SECTIONS]
-    entries += [('acao', a, a.label, a.keywords) for a in ACTIONS]
+    tr = translate or (lambda text: text)
+    entries = [('secao', s, tr(s.label), s.keywords + (s.hint, s.label, tr(s.hint))) for s in SECTIONS]
+    entries += [('acao', a, tr(a.label), a.keywords + (a.label,)) for a in ACTIONS]
     if not query:
         return [(kind, item) for kind, item, _, _ in entries]
     ranked = []

@@ -23,7 +23,10 @@ MAX_TEXT_BYTES = 2048  # Includes the terminator read by the BIN verifier.
 COLOR_CONTROL = b'\xf8\x0a'
 ICON_CONTROL = b'\xf8\x0b'
 PUNCTUATION = str.maketrans({'–': '-', '—': '-', '−': '-', '’': "'", '‘': "'",
-                            '“': '"', '”': '"', '…': '...', '×': 'x', '\xa0': ' '})
+                            '“': '"', '”': '"', '…': '...', '×': 'x', '\xa0': ' ',
+                            # alemão/italiano traduzidos: letras sem glifo na fonte americana
+                            'ß': 'ss', 'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue',
+                            '«': '"', '»': '"', '„': '"'})
 TEXT_ICON_LABELS = {}  # Os dois glifos LP possuem agora slots MIPS 0x49 e 0x4A.
 
 

@@ -21,6 +21,8 @@ DEFAULTS = {
     'secao': 'inicio',
     'recentes': [],
     'filtros_cartas': {},
+    'idioma': 'pt',
+    'traducao': {},
 }
 
 

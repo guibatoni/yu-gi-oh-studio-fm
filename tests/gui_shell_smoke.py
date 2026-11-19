@@ -142,6 +142,39 @@ with tempfile.TemporaryDirectory() as temp:
     assert big.winfo_height() <= root.winfo_screenheight(), big.winfo_height()
     big.destroy()
 
+    # Idioma da interface: troca na hora e volta ao português.
+    root.show_section('cartas'); root.update()
+    root.apply_language('en'); root.update()
+    assert root.save_button.cget('text') == 'Save', root.save_button.cget('text')
+    assert root.section_title.cget('text') == 'Card editor', root.section_title.cget('text')
+    assert root.nav.rows['molduras'][2].cget('text') == 'Frames'
+    root.apply_language('ja'); root.update()
+    assert root.save_button.cget('text') == '保存'
+    root.apply_language('pt'); root.update()
+    assert root.save_button.cget('text') == 'Salvar'
+    assert root.section_title.cget('text') == 'Editor de cartas'
+
+    # Tradução das descrições: serviço falso, vai para os rascunhos com backup.
+    import json as _json
+    import fmstudio.translate as translate_module
+    original_get = translate_module._get
+    translate_module._get = lambda url, data=None, headers=None: _json.dumps([[['TRANSLATED', 'x', None]]])
+    try:
+        from fmstudio.translate_gui import TranslateDialog
+        before_count = root.drafts.count
+        dialog = TranslateDialog(root, [1, 2])
+        dialog.start()
+        for _ in range(200):
+            root.update(); root.after(20)
+            if not dialog.running:
+                break
+        assert len(dialog.results) == 2 and all(r.translated == 'TRANSLATED' for r in dialog.results)
+        dialog.apply(); root.update()
+        assert root.drafts.get_card(1)['descricao'] == 'TRANSLATED'
+        assert list((project.folder / 'traducoes').glob('originais_*.json'))
+    finally:
+        translate_module._get = original_get
+
     # Operação longa: a janela continua viva e a exceção volta para a interface.
     assert root.run_blocking('Teste…', lambda a, b=0: a + b, 2, b=3) == 5
     try:

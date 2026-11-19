@@ -55,6 +55,9 @@ jobs:
             echo "== $test"
             PYTHONPATH=. xvfb-run -a -s '-screen 0 1600x950x24' python "$test"
           done
+      - name: Tradutor online preserva os comandos? (informativo)
+        continue-on-error: true
+        run: python tools/check_translation_online.py
       - name: Capturas de tela da interface (Linux)
         if: always()
         env:

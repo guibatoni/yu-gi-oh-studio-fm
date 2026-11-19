@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from . import ui_nav
+from . import i18n, ui_nav
 from .ui_theme import (ACCENT, BORDER, FAINT, MUTED, NAV_BG, SELECT, SURFACE, SURFACE2, SURFACE3,
                        TEXT, WARNING, DANGER, font)
 
@@ -35,7 +35,8 @@ class Tooltip:
         self._tip = tk.Toplevel(self.widget)
         self._tip.wm_overrideredirect(True)
         self._tip.wm_geometry(f'+{x}+{y}')
-        tk.Label(self._tip, text=self.text, bg=SURFACE2, fg=TEXT, font=font(9), padx=8, pady=5,
+        text = self.text() if callable(self.text) else i18n.t(self.text)
+        tk.Label(self._tip, text=text, bg=SURFACE2, fg=TEXT, font=font(9), padx=8, pady=5,
                  justify='left', wraplength=320, highlightthickness=1,
                  highlightbackground=BORDER).pack()
 
@@ -75,8 +76,9 @@ class NavSidebar(tk.Frame):
             if section.group != group:
                 group = section.group
                 if group:
-                    label = tk.Label(self, text=group.upper(), bg=NAV_BG, fg=FAINT, font=font(8, 'bold'),
+                    label = tk.Label(self, text=i18n.t(group).upper(), bg=NAV_BG, fg=FAINT, font=font(8, 'bold'),
                                      anchor='w', padx=16)
+                    label._i18n_skip = True
                     label.pack(fill='x', pady=(10, 2))
                     self.group_labels.append(label)
             self._row(section)
@@ -89,13 +91,14 @@ class NavSidebar(tk.Frame):
         marker.pack(side='left', fill='y')
         icon = tk.Label(row, text=section.icon, bg=NAV_BG, fg=MUTED, font=font(12), width=2, pady=5)
         icon.pack(side='left', padx=(8, 6))
-        label = tk.Label(row, text=section.label, bg=NAV_BG, fg=MUTED, font=font(10), anchor='w')
+        label = tk.Label(row, text=i18n.t(section.label), bg=NAV_BG, fg=MUTED, font=font(10), anchor='w')
+        label._i18n_skip = True
         label.pack(side='left', fill='x', expand=True)
         for widget in (row, icon, label):
             widget.bind('<Button-1>', lambda _e, key=section.key: self.on_select(key))
             widget.bind('<Enter>', lambda _e, key=section.key: self._hover(key, True))
             widget.bind('<Leave>', lambda _e, key=section.key: self._hover(key, False))
-        Tooltip(icon, f'{section.label}\n{section.hint}' if section.hint else section.label)
+        Tooltip(icon, lambda s=section: f'{i18n.t(s.label)}\n{i18n.t(s.hint)}' if s.hint else i18n.t(s.label))
         self.rows[section.key] = (row, icon, label, marker)
 
     def _paint(self, key, *, hover=False):
@@ -141,7 +144,12 @@ class NavSidebar(tk.Frame):
             groups = [s.group for s in ui_nav.SECTIONS]
             names = [g for i, g in enumerate(groups) if g and g not in groups[:i]]
             for label, name in zip(self.group_labels, names):
-                label.configure(text=name.upper(), anchor='w', padx=16)
+                label.configure(text=i18n.t(name).upper(), anchor='w', padx=16)
+
+    def retranslate(self):
+        for key, (_row, _icon, label, _marker) in self.rows.items():
+            label.configure(text=i18n.t(ui_nav.BY_KEY[key].label))
+        self._apply_collapsed()
 
 
 class StatusBar(tk.Frame):
@@ -161,6 +169,8 @@ class StatusBar(tk.Frame):
         self.message = tk.Label(self, textvariable=message_var, bg=SURFACE, fg=MUTED, anchor='w',
                                 padx=12, pady=5, font=font(9))
         self.message.pack(side='left', fill='x', expand=True)
+        for widget in (self.saved, self.disc, self.project):
+            widget._i18n_skip = True
         self.operation = tk.Frame(self, bg=SURFACE)
         self.operation_label = tk.Label(self.operation, text='', bg=SURFACE, fg=ACCENT, font=font(9, 'bold'),
                                         padx=8)
@@ -172,7 +182,7 @@ class StatusBar(tk.Frame):
         tk.Frame(self, bg=BORDER, width=1).pack(side='right', fill='y', pady=4)
 
     def set_project(self, name: str | None, folder: str | None = None):
-        self.project.configure(text=f'Projeto: {name}' if name else 'Nenhum projeto',
+        self.project.configure(text=f'{i18n.t("Projeto:")} {name}' if name else i18n.t('Nenhum projeto'),
                                fg=TEXT if name else MUTED)
         self._project_folder = folder
 
@@ -183,13 +193,13 @@ class StatusBar(tk.Frame):
         if not has_project:
             self.saved.configure(text='', fg=MUTED)
         elif pending:
-            self.saved.configure(text=f'● {pending} alteração(ões) não salva(s)', fg=WARNING)
+            self.saved.configure(text=f'● {pending} {i18n.t("alteração(ões) não salva(s)")}', fg=WARNING)
         else:
-            self.saved.configure(text='✓ Salvo', fg=ACCENT)
+            self.saved.configure(text='✓ ' + i18n.t('Salvo'), fg=ACCENT)
 
     def begin(self, text: str, *, total: int | None = None):
         """Mostra uma operação. Sem ``total`` a barra fica indeterminada (sem % inventado)."""
-        self.operation_label.configure(text=text)
+        self.operation_label.configure(text=i18n.t(text))
         if total:
             self.progress.stop()
             self.progress.configure(mode='determinate', maximum=total, value=0)
@@ -278,15 +288,15 @@ class CommandPalette(tk.Toplevel):
             self.close()
 
     def refresh(self):
-        self.items = ui_nav.search(self.query.get())
+        self.items = ui_nav.search(self.query.get(), translate=i18n.t)
         self.listbox.delete(0, 'end')
         for kind, item in self.items:
             if kind == 'secao':
-                group = f'{item.group} › ' if item.group else ''
-                self.listbox.insert('end', f'  {item.icon}   {group}{item.label}')
+                group = f'{i18n.t(item.group)} › ' if item.group else ''
+                self.listbox.insert('end', f'  {item.icon}   {group}{i18n.t(item.label)}')
             else:
                 shortcut = f'    [{item.shortcut}]' if item.shortcut else ''
-                self.listbox.insert('end', f'  ▸   {item.label}{shortcut}')
+                self.listbox.insert('end', f'  ▸   {i18n.t(item.label)}{shortcut}')
         if self.items:
             self.listbox.selection_set(0)
 

@@ -1,0 +1,78 @@
+"""Idiomas da interface do Studio (sem Tkinter).
+
+O português do Brasil é o idioma-fonte: cada texto da interface é procurado no
+catálogo e, se não houver tradução, aparece em português. Os catálogos ficam em
+módulos ``i18n_cat_*.py`` (``ENTRIES = {texto_pt: (en, de, it, ja, zh, ko)}``)
+para entrarem no executável sem arquivos de dados extras.
+"""
+from __future__ import annotations
+
+import importlib
+
+LANGUAGES = {
+    'pt': 'Português (Brasil)',
+    'en': 'English',
+    'de': 'Deutsch',
+    'it': 'Italiano',
+    'ja': '日本語',
+    'zh': '中文（简体）',
+    'ko': '한국어',
+}
+ORDER = ('en', 'de', 'it', 'ja', 'zh', 'ko')
+PARTS = ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h')
+
+_catalog: dict[str, tuple] | None = None
+_language = 'pt'
+
+
+def catalog() -> dict[str, tuple]:
+    global _catalog
+    if _catalog is None:
+        merged = {}
+        for part in PARTS:
+            try:
+                module = importlib.import_module(f'{__package__}.i18n_cat_{part}')
+            except ImportError:
+                continue
+            merged.update(getattr(module, 'ENTRIES', {}))
+        _catalog = merged
+    return _catalog
+
+
+def set_language(code: str) -> str:
+    global _language
+    _language = code if code in LANGUAGES else 'pt'
+    return _language
+
+
+def language() -> str:
+    return _language
+
+
+def translate(text: str, code: str | None = None) -> str:
+    """Tradução exata do texto (espaços nas pontas preservados); sem entrada, devolve o original."""
+    code = code or _language
+    if code == 'pt' or not isinstance(text, str) or not text.strip():
+        return text
+    stripped = text.strip()
+    entry = catalog().get(stripped)
+    if not entry:
+        return text
+    value = entry[ORDER.index(code)]
+    if not value:
+        return text
+    start = text[:len(text) - len(text.lstrip())]
+    end = text[len(text.rstrip()):]
+    return f'{start}{value}{end}'
+
+
+t = translate
+
+
+def coverage(code: str, texts) -> float:
+    texts = [x.strip() for x in texts if isinstance(x, str) and x.strip()]
+    if not texts:
+        return 1.0
+    index = ORDER.index(code)
+    table = catalog()
+    return sum(1 for x in texts if x in table and table[x][index]) / len(texts)

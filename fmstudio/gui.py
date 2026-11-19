@@ -484,7 +484,8 @@ class EffectDialog(tk.Toplevel):
         self.value_entry.configure(state='disabled' if protection else 'normal')
         if action in COUNT_ZONES:
             zone = {'campo': 'no campo', 'deck': 'do deck', 'mao': 'na mão', 'cemiterio': 'no cemitério'}[COUNT_ZONES[action]]
-            self.specific_button.configure(text=f'Contar uma carta específica {zone} em vez do tipo…')
+            from . import i18n
+            self.specific_button.configure(text=i18n.t(f'Contar uma carta específica {zone} em vez do tipo…'))
             self.specific_button.grid()
         else:
             self.specific_button.grid_remove()
@@ -765,6 +766,10 @@ class Studio(tk.Tk):
                 self.state('zoomed')
             except tk.TclError:
                 pass
+        from . import i18n
+        from .ui_i18n import patch_dialogs
+        i18n.set_language(self.prefs.get('idioma', 'pt'))
+        patch_dialogs()
         self.history = ui_nav.History()
         self._section = None
         self._busy = None
@@ -796,6 +801,7 @@ class Studio(tk.Tk):
         self.protocol('WM_DELETE_WINDOW',self._on_close)
         start = self.prefs.get('secao', 'inicio')
         self.show_section(start if start in ui_nav.BY_KEY else 'inicio')
+        self.apply_language()
 
     def _style(self):
         ui_theme.apply(self)
@@ -823,6 +829,18 @@ class Studio(tk.Tk):
         Tooltip(self.forward_button, 'Avançar (Alt+→)')
         actions = tk.Frame(header, bg=SURFACE)
         actions.pack(side='right')          # empacotado antes do título: os botões têm prioridade
+        from . import i18n
+        self.language_button = ttk.Menubutton(actions, text='A文')
+        self.language_button._i18n_skip = True
+        language_menu = self._menu(self.language_button)
+        language_menu._i18n_skip = True
+        self.language_choice = tk.StringVar(value=self.prefs.get('idioma', 'pt'))
+        for code, name in i18n.LANGUAGES.items():
+            language_menu.add_radiobutton(label=name, value=code, variable=self.language_choice,
+                                          command=lambda c=code: self.apply_language(c))
+        self.language_button.configure(menu=language_menu)
+        self.language_button.pack(side='left', padx=(0, 6))
+        Tooltip(self.language_button, 'Idioma da interface')
         self.search_button = ttk.Button(actions, text='⌕ Buscar  Ctrl+K', command=self.open_palette)
         self.search_button.pack(side='left', padx=(0, 6))
         Tooltip(self.search_button, 'Ir para qualquer tela ou ação pelo nome')
@@ -831,6 +849,7 @@ class Studio(tk.Tk):
                              ('Abrir projeto', self.open_project, 'Ctrl+O'),
                              ('Salvar projeto', self.save_project, 'Ctrl+S'),
                              None,
+                             ('Traduzir descrições…', lambda: self.open_translation(), 'Ctrl+T'),
                              ('Exportar alterações (JSON e SLUS auxiliar)', self.export, None),
                              ('Verificar integridade do projeto', self.verify, None)]),
                 ('Importar', [('Importar CSVs', self.import_csv, None),
@@ -853,6 +872,10 @@ class Studio(tk.Tk):
                                       command=self.save_project, state='disabled')
         self.save_button.pack(side='left', padx=(0, 5))
         Tooltip(self.save_button, 'Salvar projeto (Ctrl+S)')
+        self.translate_button = ttk.Button(actions, text='Traduzir…', command=self.open_translation,
+                                           state='disabled')
+        self.translate_button.pack(side='left', padx=(0, 5))
+        Tooltip(self.translate_button, 'Traduzir as descrições das cartas para outro idioma (Ctrl+T)')
         self.build_button = ttk.Button(actions, text='Gerar BIN/CUE', style='Accent.TButton',
                                        command=self.build_disc, state='disabled')
         self.build_button.pack(side='left', padx=(0, 5))
@@ -922,6 +945,8 @@ class Studio(tk.Tk):
         self.card_menu.add_command(label='Editar selecionadas em lote…', accelerator='Ctrl+E',
                                    command=self.open_bulk_edit)
         self.card_menu.add_command(label='Copiar linhas', accelerator='Ctrl+C', command=self._copy_card_rows)
+        self.card_menu.add_command(label='Traduzir descrições selecionadas…', accelerator='Ctrl+T',
+                                   command=self.open_translation)
         self.card_menu.add_separator()
         self.card_menu.add_command(label='Selecionar todas as visíveis', accelerator='Ctrl+A',
                                    command=self._select_visible_cards)
@@ -977,6 +1002,10 @@ class Studio(tk.Tk):
             return
         window._fitted = True
         from .ui_shell import fit_to_screen
+        from . import i18n
+        if i18n.language() != 'pt':
+            from .ui_i18n import translate_tree
+            translate_tree(window)
         window.after_idle(lambda: fit_to_screen(window))
 
     def _window_title(self):
@@ -1008,6 +1037,7 @@ class Studio(tk.Tk):
         global_key('<Control-n>', self.new_project)
         global_key('<Control-b>', self.build_disc)
         global_key('<Control-k>', self.open_palette)
+        global_key('<Control-t>', self.open_translation)
         global_key('<Control-l>', self.toggle_library)
         global_key('<Control-backslash>', self.toggle_sidebar)
         global_key('<Alt-Left>', self.go_back)
@@ -1047,8 +1077,7 @@ class Studio(tk.Tk):
         section = ui_nav.BY_KEY[key]
         self.history.visit(key)
         self.nav.set_active(key)
-        self.section_title.configure(text=section.label)
-        self.section_hint.configure(text=section.hint)
+        self._set_section_texts(section)
         self.back_button.configure(state='normal' if self.history.back else 'disabled')
         self.forward_button.configure(state='normal' if self.history.forward else 'disabled')
         if section.tab == 'tab_mod':
@@ -1057,6 +1086,32 @@ class Studio(tk.Tk):
         self.prefs['secao'] = key
         if key == 'inicio':
             self._refresh_home()
+
+    def _set_section_texts(self, section):
+        from . import i18n
+        self.section_title.configure(text=i18n.t(section.label))
+        self.section_hint.configure(text=i18n.t(section.hint))
+        if i18n.language() != 'pt':
+            from .ui_i18n import translate_tree
+            translate_tree(getattr(self, section.tab))
+
+    def apply_language(self, code=None):
+        """Troca o idioma da interface na hora (o português continua sendo o texto-fonte)."""
+        from . import i18n
+        from .ui_i18n import translate_tree
+        if code is not None:
+            self.prefs['idioma'] = i18n.set_language(code)
+            ui_prefs.save(self.prefs)
+        translate_tree(self)
+        for child in self.winfo_children():
+            if isinstance(child, tk.Toplevel):
+                translate_tree(child)
+        self.nav.retranslate()
+        if self._section:
+            self._set_section_texts(ui_nav.BY_KEY[self._section])
+        self._update_pending_label()
+        self._refresh_frame_status()
+        self.language_button.configure(text='A文 ' + i18n.LANGUAGES[i18n.language()].split(' ')[0].split('（')[0])
 
     def _apply_library_visibility(self):
         section = ui_nav.BY_KEY.get(self._section or 'inicio')
@@ -1133,8 +1188,7 @@ class Studio(tk.Tk):
         # show_section não registra de novo no histórico (já é a seção atual).
         section = ui_nav.BY_KEY[key]
         self.nav.set_active(key)
-        self.section_title.configure(text=section.label)
-        self.section_hint.configure(text=section.hint)
+        self._set_section_texts(section)
         self.back_button.configure(state='normal' if self.history.back else 'disabled')
         self.forward_button.configure(state='normal' if self.history.forward else 'disabled')
         if section.tab == 'tab_mod':
@@ -1303,6 +1357,21 @@ class Studio(tk.Tk):
         self._stage_current()
         from .card_batch_gui import CardBatchDialog
         CardBatchDialog(self, ids)
+
+    def open_translation(self):
+        if self._extract_running or not self._ensure_project() or not self.drafts:
+            return
+        self._stage_current()
+        from .translate_gui import TranslateDialog
+        TranslateDialog(self, [int(cid) for cid in self.tree.selection()])
+
+    def _after_translation(self, count, backup):
+        self._refresh_cards()
+        self._load_card()
+        self._refresh_project()
+        self._update_pending_label()
+        self.notify(f'{count} descrição(ões) traduzida(s). Revise e salve o projeto (Ctrl+S). '
+                    f'Originais guardados em {backup.name}.')
 
     def _after_batch(self, count):
         self._refresh_cards()
@@ -1841,14 +1910,15 @@ class Studio(tk.Tk):
         pane.insert('1.0',txt);pane.configure(state='disabled')
 
     def _update_status(self,text):
-        self.status.set(text)
+        from . import i18n
+        self.status.set(i18n.t(text))
         self.update_idletasks()
 
     def notify(self, text):
         self._update_status(text)
         if self._toast_timeout is not None:
             self.after_cancel(self._toast_timeout)
-        self.toast.configure(text=text)
+        self.toast.configure(text=self.status.get())
         self.toast.place(relx=1, rely=1, x=-16, y=-46, anchor='se')
         self.toast.lift()
         self._toast_timeout = self.after(3300, self._hide_toast)
@@ -3316,7 +3386,8 @@ class Studio(tk.Tk):
     def _refresh_all(self):
         self.proj_title.configure(text=self.project.metadata['nome'] if self.project else 'Nenhum projeto aberto')
         state = 'normal' if self.project else 'disabled'
-        for button in (self.save_button, self.build_button, self.export_button, self.new_card_button):
+        for button in (self.save_button, self.build_button, self.export_button, self.new_card_button,
+                       self.translate_button):
             button.configure(state=state)
         keep = self.selected_id if self.project and self.selected_id in self.project.cards else None
         if keep is None:
