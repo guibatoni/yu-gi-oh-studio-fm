@@ -7,8 +7,8 @@
     ori $t0, $t0, 0x9000
     lw $t1, 0($t0)
     lw $t2, 0x2FFC($t0)
-    lui $t3, 0x3456
-    ori $t3, $t3, 0x4F51     /* QOV4: invalidates old overlay save-state code. */
+    lui $t3, 0x3556
+    ori $t3, $t3, 0x4F51     /* QOV5: resident-controlled native duel handoff. */
     bne $t1, $t3, \fallback
     nop
     bne $t2, $t3, \fallback
@@ -99,7 +99,71 @@ QuestAnswerLoader:
     beq $t3, $zero, .Lordinary
     nop
     check_overlay .Lordinary
-    j QuestAnswer
+    /*
+     * QuestAnswer runs from the reloadable scene arena. Call it instead
+     * of tail-jumping to it: once it returns, the resident SLUS adapter
+     * is the only frame still active while the native handler arms the
+     * build-deck screen (game mode 3). This removes the dangling return
+     * address to the quest criteria text that crashed ePSXe.
+     */
+    addiu $sp, $sp, -24
+    sw $ra, 20($sp)
+    sw $a0, 16($sp)
+
+    /* A stale interrupted handoff can never arm an unrelated F8 12. */
+    lui $t0, 0x801D
+    lbu $t1, 0x070B($t0)
+    addiu $t2, $zero, 0x44
+    bne $t1, $t2, .Lanswer_call
+    nop
+    sb $zero, 0x070B($t0)
+.Lanswer_call:
+    jal QuestAnswer
+    nop
+
+    lw $a0, 16($sp)
+    lui $t0, 0x801D
+    lbu $t1, 0x070B($t0)
+    addiu $t2, $zero, 0x44
+    bne $t1, $t2, .Lanswer_return
+    nop
+
+    /* Consume marker before validation or scene transition. */
+    sb $zero, 0x070B($t0)
+    lui $t1, 0x800A
+    lbu $t2, -0x4D94($t1)
+    andi $t2, $t2, 31
+    addiu $t3, $zero, 2
+    bne $t2, $t3, .Lanswer_return
+    nop
+
+    /* The stream must be the unmodified six-byte F8 0D operand. */
+    lbu $t2, 0x58($a0)
+    sll $t2, $t2, 2
+    addu $t2, $a0, $t2
+    lw $t2, 0($t2)
+    srl $t3, $t2, 16
+    ori $t4, $zero, 0x801B
+    bne $t3, $t4, .Lanswer_return
+    nop
+    lhu $t3, 0x0708($t0)
+    andi $t4, $t2, 0xFFFF
+    bne $t3, $t4, .Lanswer_return
+    nop
+    lbu $t3, 0x070A($t0)
+    lbu $t4, 0($t2)
+    bne $t3, $t4, .Lanswer_return
+    nop
+
+    /* Tail-jump with the native VM's original return address. */
+    lw $ra, 20($sp)
+    addiu $sp, $sp, 24
+    j 0x80038530
+    nop
+.Lanswer_return:
+    lw $ra, 20($sp)
+    addiu $sp, $sp, 24
+    jr $ra
     nop
 .Lordinary:
     j 0x80038888
