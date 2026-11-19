@@ -1,3 +1,27 @@
+## v1.9.20 — Molduras por raridade (mão, campo e carta ampliada)
+
+- Nova aba **Edição do Mod → Molduras**: uma cor para cada classe (Comum,
+  Incomum, Rara, Épica, Lendária e Deus). Use "sem cor" para manter a moldura
+  original. Mágicas, armadilhas e equipamentos mantêm a moldura própria.
+- PS1: `func_80016784` desenha as cartas do duelo. A moldura é o último sprite
+  (52×60), enviado em `0x80016CCC`. O Studio troca esse `jal` por uma rotina
+  residente que, para carta virada para cima e com a cor normal (`0x808080`),
+  grava a cor da classe no RGB do sprite (modulação da GPU) e segue para
+  `DisplayObject_SubmitPacket`. A arte, o ATK/DEF e o ícone de tipo não mudam.
+  Cartas escurecidas ou destacadas pelo jogo mantêm o efeito original.
+- Validado no ePSXe: mão, campo e carta ampliada do baú.
+- Carta ampliada (baú/Build Deck, biblioteca, visualizador do duelo): a placa
+  é um objeto de sprite-sheet criado por `func_800291E0` e desenhado por
+  `DisplayObject_RenderSpriteSheet`, que copia o RGB do objeto em `0x8004177C`.
+  Essa cópia vira `jal` para uma segunda rotina: se o objeto tem o callback
+  `CardPreview_UpdateVariant`, não está de verso e tem a cor normal, ela acha o
+  objeto da arte (`func_80028B08`, `+0x54` = placa), lê o índice em `+0x67` e o
+  ID em `D_800EA0E8[índice] + 0x30`, e aplica a cor da classe.
+- A linha da lista do baú (nome/ATK/DEF) não tem moldura de carta e não muda.
+- Abas da Edição do Mod com nomes curtos (Deck oponente, Drops, Decks iniciais,
+  Config. MOD, Quests, Mágicas/Traps, Molduras), para as sete caberem na janela.
+  O Tkinter não quebra a linha das abas, e a última ficava escondida.
+
 ## v1.9.19 — Mágicas e armadilhas: cura, dano, destruição por tipo, campos e limites
 
 - Nova aba **Edição do Mod → Mágicas e armadilhas**, com os valores originais do

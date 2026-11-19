@@ -198,6 +198,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     from .ps1_magic_values import (apply as apply_magic_values, is_empty as magic_values_empty,
                                    magic_values, matches as magic_values_match)
     magic_values_requested = magic_values(project)
+    from .ps1_frame_colors import (apply as apply_frame_colors, block_size as frame_block_size,
+                                   card_classes, frame_settings, status as frame_status)
+    frames_requested = frame_settings(project)
+    frames_enabled = frames_requested['ativado'] and any(frames_requested['cores'].values())
     from .ps1_expansion import (EXPANDED_LEVELS, PS1_CARD_CAPACITY, compile_expansion, expand_archive,
                                 patch_expansion, inspect_expansion, retail_archive_view)
     from .ps1_campaign_quests import (QUEST_SCENE_SECTORS, append_quest_scene, build_quest_overlay, inspect_quest_overlay,
@@ -236,7 +240,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             expansion = compile_expansion(project, profile=native_profile)
             capacity = PS1_CARD_CAPACITY if expansion.enabled else CARD_COUNT
             if (prices_requested or win_reward_requested is not None or equip_bonus_requested
-                    or not magic_values_empty(magic_values_requested)
+                    or not magic_values_empty(magic_values_requested) or frames_enabled
                     or cards_per_win_requested is not None) and not native_profile:
                 raise ModError(
                     'Economia PS1 personalizada exige o SLUS Drop x15 original vinculado.')
@@ -342,7 +346,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     description_icons=set()
     descriptions_not_written=[]
     regions = None
-    if native_profile and (texts or quest_enabled or equip_bonus_requested):
+    if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     if quest_enabled:
@@ -351,6 +355,12 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if native_profile and equip_bonus_requested:
         equip_hook, regions = reserve_block(patched_exe, regions, equip_bonus_size(equip_bonus_requested))
         patched_exe, equip_bonus_report = apply_equip_bonus(patched_exe, equip_bonus_requested, equip_hook)
+    frames_report = {'status': 'desativado'} if native_profile else {'status': 'perfil_incompativel'}
+    if native_profile and frames_enabled:
+        frame_hook, regions = reserve_block(patched_exe, regions, frame_block_size())
+        cards_for_frames = {cid: project.get(cid) for cid in getattr(project, 'cards', {})}
+        patched_exe, frames_report = apply_frame_colors(
+            patched_exe, frames_requested['cores'], card_classes(cards_for_frames), frame_hook)
     if texts:
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
         (patched_exe, written_descriptions, description_icons,
@@ -767,6 +777,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'cartas_por_vitoria_ps1':cards_per_win_report,
                 'bonus_equipamentos_ps1':equip_bonus_report,
                 'valores_magicas_ps1':magic_values_report,
+                'molduras_por_raridade_ps1':frames_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
@@ -815,6 +826,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             if native_profile and checked['catalogo_bau_ps1']['status'] != (
                     'aplicado' if show_all_chest else 'ausente'):
                 raise ModError('A opção de visualização do baú não coincide com o BIN gerado. '
+                               'A cópia anterior foi preservada.')
+            if native_profile and frames_enabled and frame_status(reread_exe).get('status') != 'aplicado':
+                raise ModError('Molduras por raridade ausentes no SLUS final. '
                                'A cópia anterior foi preservada.')
             if (native_profile and not magic_values_empty(magic_values_requested)
                     and not magic_values_match(reread_exe, magic_values_requested)):
