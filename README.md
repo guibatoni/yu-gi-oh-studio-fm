@@ -1,3 +1,14 @@
+## Studio FM v1.9.12 — Correção do menu de quests no PS1
+
+A janela da quest usa as dimensões do diálogo padrão do PS1.
+O botão de avançar o texto abre o menu e a escolha exige outra
+confirmação. Atualize o Studio e gere novamente o BIN/CUE `_QUESTS`.
+Abra a imagem nova no emulador e carregue a campanha pelo memory card.
+
+[Instruções de teste](docs/QUESTS_CAMPANHA_PS1.md).
+
+---
+
 ## Studio FM v1.9.11 — Quests antes do duelo e retorno à loja
 
 Simon Muran está liberado. Os outros 37 duelistas pedem a doação

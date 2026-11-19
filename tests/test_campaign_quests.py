@@ -7,9 +7,8 @@ from unittest.mock import patch
 
 try:
     from unicorn import Uc, UC_ARCH_MIPS, UC_HOOK_CODE, UC_MODE_LITTLE_ENDIAN, UC_MODE_MIPS32
-    from unicorn.mips_const import (UC_MIPS_REG_A0, UC_MIPS_REG_A2, UC_MIPS_REG_A3,
-                                    UC_MIPS_REG_PC, UC_MIPS_REG_RA, UC_MIPS_REG_SP,
-                                    UC_MIPS_REG_T1)
+    from unicorn.mips_const import (UC_MIPS_REG_A0, UC_MIPS_REG_GP, UC_MIPS_REG_PC,
+                                    UC_MIPS_REG_RA, UC_MIPS_REG_SP)
 except ImportError:
     Uc = None
 
@@ -18,13 +17,16 @@ from fmstudio.campaign_quests import (LEGACY_FORMAT, QuestCatalog, compile_table
 from fmstudio.core import ModError, Project
 from fmstudio.deep_extract import exe_pos
 from fmstudio.ps1_campaign_quests import (
-    COMMAND_TABLE, HOOKS, OVERLAY_SECTORS, OVERLAY_START, build_quest_overlay, inspect_quest_overlay,
-    install_quest_handlers, quest_settings, reserve_quest_handlers, save_quest_settings,
+    CAMPAIGN_SCENE_SECTOR, CAMPAIGN_SCENE_SECTORS, COMMAND_TABLE, HOOKS, OVERLAY_SIZE,
+    OVERLAY_START, SCENE_PREFIX_SECTORS, SECTOR_BYTES, _scene_patches, append_quest_scene,
+    build_quest_overlay, inspect_quest_overlay, install_quest_handlers, quest_settings,
+    reserve_quest_handlers, save_quest_settings,
 )
 from fmstudio.ps1_expansion import EXPANDED_LEVELS, EXTRA_SLOTS
 from fmstudio.tables import PS1_SUPREME, STATS_ADDR
 
 GLYPHS = {i: chr(i) for i in range(32, 127)}
+QUEST_SECTOR = CAMPAIGN_SCENE_SECTOR + CAMPAIGN_SCENE_SECTORS
 MANUAL = {'2': [{'tipo': 'tipo', 'alvo': 8, 'quantidade': 1},
                 {'tipo': 'atributo', 'alvo': 1, 'quantidade': 1},
                 {'tipo': 'guardian_star', 'alvo': 16, 'quantidade': 1}]}
@@ -53,7 +55,8 @@ def compiled_overlay():
 
 def executable():
     exe = bytearray(0x1e0800)
-    native = list(HOOKS.values()) + [(COMMAND_TABLE + 4 * 0x19, 0x80038AB0)]
+    native = [*HOOKS.values(), (COMMAND_TABLE + 4 * 0x19, 0x80038AB0),
+              *((address, before) for address, before, _ in _scene_patches(QUEST_SECTOR))]
     for hook, address in native:
         struct.pack_into('<I', exe, exe_pos(hook, exe, 4), address)
     return bytes(exe)
@@ -133,21 +136,44 @@ class CampaignQuestsTests(unittest.TestCase):
         for hook in (HOOKS['answer'][0], COMMAND_TABLE + 4 * 0x19):
             struct.pack_into('<I', previous, exe_pos(hook, previous, 4), 0x801CF000)
         self.assertEqual(inspect_quest_overlay(previous)['status'], 'pos_vitoria')
-        patched = install_quest_handlers(exe, addresses, 2)
+        patched = install_quest_handlers(exe, addresses, QUEST_SECTOR)
         self.assertEqual(inspect_quest_overlay(patched)['status'], 'aguardando_wa')
         with self.assertRaisesRegex(ModError, 'Conflito'):
-            install_quest_handlers(patched, addresses, 2)
+            install_quest_handlers(patched, addresses, QUEST_SECTOR)
+        previous = bytearray(patched)
+        for address, before, _ in _scene_patches(QUEST_SECTOR):
+            struct.pack_into('<I', previous, exe_pos(address, previous, 4), before)
+        struct.pack_into('<2I', previous, exe_pos(addresses['duel'] + 176, previous, 8),
+                         0x3C0B3256, 0x356B4F51)
+        self.assertEqual(inspect_quest_overlay(previous)['status'], 'carregamento_dialogo_antigo')
+
         payload, _, _ = compiled_overlay()
-        reader = 'fmstudio.ps1_campaign_quests'
-        script = bytes(2 * 2048)
-        digest = hashlib.sha256(script).hexdigest()
-        wa = bytes(EXTRA_SLOTS * 2048) + script + payload
-        with (patch(f'{reader}.CAMPAIGN_SCRIPT_SECTOR', 0),
-              patch(f'{reader}.CAMPAIGN_SCRIPT_HASH', digest)):
-            self.assertEqual(inspect_quest_overlay(patched, wa, expanded=True)['status'], 'aplicado')
+        prefix = b'p' * (SCENE_PREFIX_SECTORS * SECTOR_BYTES)
+        portraits = b'f' * ((CAMPAIGN_SCENE_SECTORS - SCENE_PREFIX_SECTORS) * SECTOR_BYTES)
+        source = bytes(CAMPAIGN_SCENE_SECTOR * SECTOR_BYTES) + prefix + portraits
+        wa = bytes(EXTRA_SLOTS * SECTOR_BYTES) + append_quest_scene(source, payload)
+        self.assertTrue(wa.endswith(prefix + payload + portraits))
+        with patch('fmstudio.ps1_campaign_quests.CAMPAIGN_SCRIPT_HASH',
+                   hashlib.sha256(prefix[-2 * SECTOR_BYTES:]).hexdigest()):
+            report = inspect_quest_overlay(patched, wa, expanded=True)
+            self.assertEqual(report['status'], 'aplicado')
+            self.assertEqual(report['setor_cena_wa'], QUEST_SECTOR + EXTRA_SLOTS)
+            self.assertEqual(report['setor_wa'], QUEST_SECTOR + EXTRA_SLOTS + SCENE_PREFIX_SECTORS)
             self.assertEqual(inspect_quest_overlay(patched, wa[:-1], expanded=True)['status'], 'divergente')
-            wrong = bytes(EXTRA_SLOTS * 2048) + b'\xff' + script[1:] + payload
+            end = report['setor_wa'] * SECTOR_BYTES + OVERLAY_SIZE
+            wrong = wa[:end - 1] + b'\0' + wa[end:]
             self.assertEqual(inspect_quest_overlay(patched, wrong, expanded=True)['status'], 'divergente')
+
+    def test_scene_fits_four_requirements_for_every_npc(self):
+        requirements = [*MANUAL['2'], {'tipo': 'carta', 'alvo': 1, 'quantidade': 1}]
+        settings = {'seed': 'teste', 'requisitos': {str(npc): requirements for npc in range(2, 39)}}
+        with patch('fmstudio.ps1_campaign_quests.glyph_map', return_value=(GLYPHS, [])):
+            payload, config, table = build_quest_overlay(b'', sample_quests(), settings,
+                                                        level_address=EXPANDED_LEVELS)
+        self.assertEqual(len(payload), OVERLAY_SIZE)
+        self.assertEqual(len(config['quests']), 37)
+        self.assertTrue(all(len(quest['criterios']) == 4 for quest in config['quests']))
+        self.assertEqual(table_size(table), len(table))
 
 
 @unittest.skipIf(Uc is None, 'MIPS verification needs Unicorn')
@@ -161,7 +187,7 @@ class CampaignMipsTests(unittest.TestCase):
     def check_route(self, opponent, mode, action):
         exe = executable()
         addresses, _ = reserve_quest_handlers(exe, [(0x801CF700, 0x801CFF00)])
-        patched = install_quest_handlers(exe, addresses, 18432)
+        patched = install_quest_handlers(exe, addresses, QUEST_SECTOR)
         payload, _, _ = compiled_overlay()
         cpu = Uc(UC_ARCH_MIPS, UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN)
         cpu.mem_map(0, 0x200000)
@@ -180,11 +206,13 @@ class CampaignMipsTests(unittest.TestCase):
             return struct.unpack('<I', read(address, 4))[0]
 
         def call(name, channel):
+            cpu.reg_write(UC_MIPS_REG_GP, 0x8009AF08)
             cpu.reg_write(UC_MIPS_REG_SP, 0x801FF000)
             cpu.reg_write(UC_MIPS_REG_RA, stop)
             cpu.reg_write(UC_MIPS_REG_A0, channel)
             cpu.emu_start(addresses[name], stop, count=1_000_000, timeout=2_000_000)
             self.assertEqual(cpu.reg_read(UC_MIPS_REG_PC), stop)
+            self.assertEqual(cpu.reg_read(UC_MIPS_REG_GP), 0x8009AF08)
 
         def choose(channel, option):
             prompt = word(channel)
@@ -195,21 +223,21 @@ class CampaignMipsTests(unittest.TestCase):
             call('answer', channel)
 
         write(0x80010000, patched[0x800:])
-        for address in (HOOKS['duel'][1], HOOKS['shop'][1], 0x8002e5ac, 0x800137E4, 0xA0):
+        for address in (HOOKS['duel'][1], HOOKS['shop'][1], 0x8002e5ac, 0x800137E4,
+                        0x80014E1C, 0xA0, 0x800393B0, 0x80038B08, 0x800391E4):
             write(address, struct.pack('<II', 0x03E00008, 0))
-        write(0x80014E1C, struct.pack('<III', 0x24020001, 0x03E00008, 0))
+        write(OVERLAY_START, payload)
         events = []
 
         def device(_, address, size, data):
-            if address == 0x80014E1C:
-                self.assertEqual(cpu.reg_read(UC_MIPS_REG_A2), 18432)
-                self.assertEqual(cpu.reg_read(UC_MIPS_REG_A3), OVERLAY_SECTORS)
-                self.assertEqual(word(cpu.reg_read(UC_MIPS_REG_SP) + 24), OVERLAY_START)
-                write(OVERLAY_START, payload)
-                events.append('read')
-            elif address == 0xA0:
-                self.assertEqual(cpu.reg_read(UC_MIPS_REG_T1), 0x44)
-                events.append('flush')
+            if address in (0x800137E4, 0x80014E1C, 0xA0):
+                self.fail('O intérprete de diálogo não deve carregar a cena nem limpar o cache.')
+            if address == 0x800393B0:
+                word(shop_channel, 0x801B0000)  # First build replaces the text pointer.
+                events.append('initialized')
+            elif address == 0x80038B08:
+                box = cpu.reg_read(UC_MIPS_REG_A0)
+                write(box + 0x51, b'\x02')
             elif address == HOOKS['duel'][1]:
                 events.append(('native', word(cpu.reg_read(UC_MIPS_REG_A0))))
                 write(0x8009B26C, b'\x03')
@@ -229,11 +257,23 @@ class CampaignMipsTests(unittest.TestCase):
         if action == 'hiding':
             write(flags + 0x47 // 8, b'\x01')
         word(channel, entry)
+        write(channel + 0x34, struct.pack('<H', 0xFC0C))
+        write(channel + 0x3e, struct.pack('<H', 240))
+        write(channel + 0x42, struct.pack('<H', 32))
+        write(channel + 0x5a, b'\x10\x10')
+        write(channel + 0x61, b'\x05')
+        word(0x8009B340, 0x800393B0)
         call('duel', channel)
         if action == 'native':
             self.assertEqual(events, [('native', entry)])
             return
-        self.assertEqual(events, ['read', 'flush'])
+        self.assertEqual(events, [])
+        self.assertEqual(word(0x8009B340), 0)
+        self.assertEqual(read(channel + 0x34, 2), struct.pack('<H', 0xC008))
+        self.assertEqual(read(channel + 0x3e, 2), struct.pack('<H', 288))
+        self.assertEqual(read(channel + 0x42, 2), struct.pack('<H', 48))
+        self.assertEqual(read(channel + 0x5a, 2), b'\x08\x0c')
+        self.assertEqual(read(channel + 0x61, 1), b'\0')
         self.assertEqual(read(flags + 0x20 // 8, 1), b'\0')
         self.assertEqual(read(flags + 0x6e1 // 8, 1), b'\x40')
         if action in ('early', 'hiding', 'tournament'):
@@ -251,11 +291,19 @@ class CampaignMipsTests(unittest.TestCase):
             shop = 0x801A8295 if action == 'early' else 0x801A8B1D
             word(0x8009B290, shop)
             call('shop', 0)
-            self.assertEqual(events[-2:], ['read', 'flush'])
+            self.assertEqual(events, ['initialized'])
             self.assertEqual(word(0x8009B290), shop - 1)
             channel = shop_channel
         prompt = word(channel)
         self.assertIn(b'Rever requisitos', read(prompt, 256))
+        before_options = read(prompt, 256).index(b'\xf8\x12\xfb\x02')
+        word(channel, prompt + before_options + 2)
+        write(0x8009B398, struct.pack('<H', 0x00C1))
+        call('answer', channel)
+        self.assertEqual(read(0x8009B398, 2), b'\x01\0')
+        self.assertEqual(word(0x8009B350), 1)
+        self.assertEqual(read(trunk, 3), b'\x03\x01\x01')
+        word(channel, prompt)
         choose(channel, 0)
         self.assertEqual(word(channel), prompt)
         self.assertEqual(read(flag, 1), b'\0')

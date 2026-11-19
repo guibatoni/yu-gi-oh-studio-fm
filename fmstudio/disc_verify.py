@@ -215,6 +215,9 @@ def describe(result):
                     'Simon está liberado e a saída do Card Shop retoma o duelo pendente.')
     elif quests.get('status') == 'pos_vitoria':
         text.append('Esta cópia usa as quests após a vitória. Gere outro BIN/CUE para usar as quests pré-duelo.')
+    elif quests.get('status') == 'carregamento_dialogo_antigo':
+        text.append('Esta cópia usa o diálogo de quests da v1.9.11. '
+                    'Gere um novo BIN/CUE com o Studio atualizado para corrigir o travamento nas opções.')
     elif quests.get('ativado_no_projeto'):
         text.append('As quests do projeto não foram encontradas completas no BIN selecionado.')
     if runtime.get('status')=='aplicado':

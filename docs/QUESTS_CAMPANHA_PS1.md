@@ -23,7 +23,7 @@ se o baú comporta as doações com o deck protegido.
 
 ## Voltar ao Card Shop
 
-Antes de duelar, escolha **Voltar ao Card Shop** para adiar a entrega.
+Antes de duelar, escolha **Ir ao Card Shop** para adiar a entrega.
 No Egito, o jogo retorna ao mapa. Na reta final, ele posiciona o
 jogador no **Hiding**, onde fica o Card Shop. Durante o torneio, ele
 abre a loja da rodada atual.
@@ -52,13 +52,15 @@ disponíveis antes de cada duelo.
 ## Verificação
 
 **Verificar BIN/CUE** confirma a tabela das 37 quests e o carregador.
+Para substituir um BIN gerado pela v1.9.11, gere novamente pelo Studio atualizado.
+Reinicie a imagem no emulador e carregue a campanha pelo memory card.
 O teste MIPS usou os 59 descritores de duelo do Original Drop x15
 e conferiu a proteção do deck, a saída para a loja, o save e a
 retomada com os parâmetros nativos do confronto. A apresentação do
 diálogo ainda precisa de uma partida no ePSXe.
 
-O módulo reside no `DATA/WA_MRG.MRG` e carrega durante o diálogo
-pré-duelo. Os comandos nativos F8 0D e F8 12 ligam a entrada e a
+O módulo reside no `DATA/WA_MRG.MRG` e carrega junto com a cena.
+Os comandos nativos F8 0D e F8 12 ligam a entrada e a
 resposta ao módulo. O opcode de saída do mapa reconhece a loja pelo
 bytecode verificado. Para recompilar com Zig 0.13 e `nm`, rode
 `python tools/compile_ps1_campaign_quests.py --zig caminho/zig`.
