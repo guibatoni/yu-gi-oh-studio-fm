@@ -318,7 +318,8 @@ class PasswordsDialog(tk.Toplevel):
             tabs.select(self.ids)
 
         footer = ttk.Frame(self, padding=(12, 1, 12, 10))
-        footer.pack(fill='x')
+        from .ui_shell import pin_bottom
+        pin_bottom(footer)
         if ps1_supports_god24(project):
             ttk.Checkbutton(footer, text='Ativar passwords por ID no BIN/CUE Drop x15',
                             variable=self.ps1_enabled, command=self._toggle_ps1).pack(anchor='w')
@@ -649,7 +650,8 @@ class DeckGeneratorDialog(tk.Toplevel):
         ttk.Label(preview, textvariable=self.summary, wraplength=620, justify='left').pack(anchor='w', pady=(8, 0))
 
         footer = ttk.Frame(self, padding=(12, 2, 12, 10))
-        footer.pack(fill='x')
+        from .ui_shell import pin_bottom
+        pin_bottom(footer)
         ttk.Label(footer, textvariable=self.status, foreground=ACCENT, wraplength=660).pack(anchor='w', pady=4)
         controls = ttk.Frame(footer)
         controls.pack(fill='x')

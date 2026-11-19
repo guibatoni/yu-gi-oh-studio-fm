@@ -264,8 +264,11 @@ class EffectDialog(tk.Toplevel):
             self.pending_tree.pack(fill='both',expand=True)
             self.pending_label=tk.StringVar(value='Nenhum efeito preparado')
             ttk.Label(form,textvariable=self.pending_label).grid(row=row,column=0,sticky='w');row+=1
-        buttons=ttk.Frame(form)
-        buttons.grid(row=row,column=0,sticky='e')
+        # Rodapé fixo fora da área rolável: Aplicar/OK sempre visíveis.
+        footer=ttk.Frame(self,padding=(14,8))
+        footer.pack(side='bottom',fill='x',before=wrapper)
+        buttons=ttk.Frame(footer)
+        buttons.pack(side='right')
         ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='left',padx=6)
         if self.batch:
             ttk.Button(buttons,text='Remover selecionados',command=self._remove_pending).pack(side='left',padx=6)
@@ -572,19 +575,19 @@ class SpecificCardEffectDialog(tk.Toplevel):
         self.cards=cards
         self.on_save=on_save
         pane=ttk.Frame(self,padding=20);pane.pack(fill='both',expand=True)
-        ttk.Label(pane,text='Escolha a carta que será contada:').pack(anchor='w',pady=(0,5))
         self.labels={f'{cid:05d} — {display_name(cid,cards)}':cid for cid in sorted(cards)}
         self.selected=tk.StringVar()
-        self.combo=ttk.Combobox(pane,textvariable=self.selected,values=list(self.labels),width=62)
-        self.combo.pack(fill='x',pady=(0,12))
-        ttk.Label(pane, text='Digite o ID ou parte do nome para encontrar a carta.',
-                  foreground='#edc47e').pack(anchor='w',pady=(0,8))
-        if self.labels:self.combo.current(0)
+        if self.labels:
+            self.selected.set(next(iter(self.labels)))
         if self.initial_effect:
             old_ref = int(self.initial_effect.get('carta_referencia_id', 0))
             old_label = next((name for name, cid in self.labels.items() if cid == old_ref), None)
             if old_label is not None:
                 self.selected.set(old_label)
+        chosen=ttk.Frame(pane);chosen.pack(fill='x',pady=(0,12))
+        ttk.Label(chosen,text='Carta que será contada:').pack(side='left')
+        ttk.Label(chosen,textvariable=self.selected,style='Section.TLabel').pack(side='left',padx=8)
+        ttk.Button(chosen,text='Procurar carta…',command=self._browse).pack(side='right')
         ttk.Label(pane,text='Contar cartas em:').pack(anchor='w')
         self.origin=tk.StringVar(value=self.initial_effect.get('origem_contagem', 'campo')
                                  if self.initial_effect else default_origin)
@@ -618,6 +621,18 @@ class SpecificCardEffectDialog(tk.Toplevel):
         ttk.Button(buttons,text='Salvar alterações' if self.initial_effect
                    else 'Adicionar efeito + texto',style='Accent.TButton',
                    command=self.submit).pack(side='right')
+        from .ui_shell import pin_bottom
+        pin_bottom(buttons, pady=(8, 0))
+
+    def _browse(self):
+        from .card_picker import CardPickerDialog
+        current=self.labels.get(self.selected.get())
+        def picked(ids):
+            label=next((name for name, cid in self.labels.items() if cid == ids[0]), None)
+            if label:
+                self.selected.set(label)
+        CardPickerDialog(self, self.cards, picked, title='Carta que será contada', initial=current)
+
     def submit(self):
         value=self.selected.get().strip()
         ref=self.labels.get(value)
@@ -776,6 +791,8 @@ class Studio(tk.Tk):
             field.trace_add('write', lambda *_: self._refresh_cards() if not self._suspend_filters else None)
         self._bind_shortcuts()
         self.bind('<Configure>', self._on_resize, add='+')
+        # Toda janela secundária é ajustada à tela ao abrir (notebooks 1366×768, escala 125–150 %).
+        self.bind_class('Toplevel', '<Map>', self._fit_toplevel, add='+')
         self.protocol('WM_DELETE_WINDOW',self._on_close)
         start = self.prefs.get('secao', 'inicio')
         self.show_section(start if start in ui_nav.BY_KEY else 'inicio')
@@ -949,6 +966,19 @@ class Studio(tk.Tk):
         return ui_theme.menu(parent)
 
     # ── navegação ────────────────────────────────────────────────────────
+    def _fit_toplevel(self, event):
+        window = event.widget
+        if window is self or getattr(window, '_fitted', False) or not isinstance(window, tk.Toplevel):
+            return
+        try:
+            if window.overrideredirect():
+                return
+        except tk.TclError:
+            return
+        window._fitted = True
+        from .ui_shell import fit_to_screen
+        window.after_idle(lambda: fit_to_screen(window))
+
     def _window_title(self):
         from .build_info import BUILD
         title = f'Yu-Gi-Oh Studio Card FM | v{__version__}' + (f' ({BUILD})' if BUILD else '')
@@ -1675,9 +1705,15 @@ class Studio(tk.Tk):
         diagnostic=ttk.Frame(body)
         diagnostic.pack(fill='x',pady=(0,6))
         ttk.Button(diagnostic,text='Diagnosticar Equip no BIN/CUE',command=self.diagnose_equip).pack(side='left')
-        tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Gere um BIN/CUE novo depois de salvar efeitos.\n'
+        warning=tk.Label(body,text='IMPORTANTE: SLUS auxiliar ≠ BIN jogável. Gere um BIN/CUE novo depois de salvar efeitos.\n'
                  'No perfil Drop x15, apenas os efeitos suportados pelo relatório são aplicados ao PS1. Verifique o BIN/CUE e teste no ePSXe.',
-                 bg=BG,fg='#edc47e',font=('Segoe UI',10),justify='left',wraplength=750).pack(anchor='w',pady=(8,0))
+                 bg=BG,fg='#edc47e',font=('Segoe UI',10),justify='left',wraplength=750)
+        warning.pack(anchor='w',pady=(8,0))
+        # Em janelas baixas o painel de texto encolhe; os botões ficam visíveis.
+        from .ui_shell import pin_bottom
+        for widget, options in ((buttons, {'pady': 14}), (graphics, {'pady': (0, 8)}),
+                                (diagnostic, {'pady': (0, 6)}), (warning, {'pady': (8, 0), 'fill': 'none', 'anchor': 'w'})):
+            pin_bottom(widget, **options)
 
     def _extract_tab(self):
         body=tk.Frame(self.tab_extract,bg=BG,padx=22,pady=18)
@@ -2369,7 +2405,8 @@ class Studio(tk.Tk):
         ttk.Checkbutton(area,text='Usar raridade Deus no Studio',
                         variable=keep_god).pack(anchor='w',pady=(12,7))
         buttons=ttk.Frame(area)
-        buttons.pack(anchor='e',pady=(5,0))
+        from .ui_shell import pin_bottom
+        pin_bottom(buttons, pady=(5,0), fill='none', anchor='e')
         def apply():
             try:
                 chosen=types[selection.current()]
@@ -3065,14 +3102,10 @@ class Studio(tk.Tk):
 
     def choose_description_reference(self):
         if not self.project:return
-        value=simpledialog.askstring('Referenciar carta','ID da carta (ex.: 1, 723):',parent=self)
-        if not value:return
-        try:
-            cid=int(value.strip().lstrip('#'))
-            if cid not in self.project.cards: raise ValueError()
-        except ValueError:
-            messagebox.showerror('Referência','Carta não encontrada no projeto.',parent=self);return
-        self.insert_description_token(f'{{card:{cid}}}')
+        from .card_picker import CardPickerDialog
+        cards={cid:(self.drafts.get_card(cid) if self.drafts else self.project.get(cid)) for cid in self.project.cards}
+        CardPickerDialog(self, cards, lambda ids: self.insert_description_token(f'{{card:{ids[0]}}}'),
+                         title='Referenciar carta na descrição', confirm='Inserir referência')
 
     def get_icon_image(self,name):
         if not hasattr(self,'_icon_cache'):self._icon_cache={}

@@ -311,3 +311,75 @@ class CommandPalette(tk.Toplevel):
         else:
             self.studio.run_action(item.method)
         return 'break'
+
+
+def pin_bottom(widget, **options):
+    """Reempacota uma linha de botões no rodapé do container, antes do conteúdo.
+
+    Num layout pack, o que é empacotado primeiro tem prioridade de espaço: assim
+    Salvar/Aplicar/OK continuam visíveis mesmo quando a janela é menor que o conteúdo."""
+    master = widget.master
+    slaves = [w for w in master.pack_slaves() if w is not widget]
+    options = {'side': 'bottom', 'fill': 'x', **options}
+    if slaves:
+        widget.pack(before=slaves[0], **options)
+    else:
+        widget.pack(**options)
+    return widget
+
+
+class ScrollFrame(ttk.Frame):
+    """Área rolável vertical: use ``.body`` como container do conteúdo."""
+
+    def __init__(self, master, **kwargs):
+        super().__init__(master, **kwargs)
+        from .ui_theme import BG
+        self.canvas = tk.Canvas(self, bg=BG, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self, orient='vertical', command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.pack(side='right', fill='y')
+        self.canvas.pack(side='left', fill='both', expand=True)
+        self.body = ttk.Frame(self.canvas)
+        window = self.canvas.create_window((0, 0), window=self.body, anchor='nw')
+        self.body.bind('<Configure>', lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.canvas.bind('<Configure>', lambda e: self.canvas.itemconfigure(window, width=e.width))
+        for widget in (self.canvas, self.body):
+            widget.bind('<Enter>', self._bind_wheel, add='+')
+            widget.bind('<Leave>', self._unbind_wheel, add='+')
+
+    def _wheel(self, event):
+        if self.canvas.yview() == (0.0, 1.0):
+            return
+        if getattr(event, 'num', None) == 4:
+            self.canvas.yview_scroll(-1, 'units')
+        elif getattr(event, 'num', None) == 5:
+            self.canvas.yview_scroll(1, 'units')
+        else:
+            self.canvas.yview_scroll(-1 if event.delta > 0 else 1, 'units')
+
+    def _bind_wheel(self, _event=None):
+        self.canvas.bind_all('<MouseWheel>', self._wheel)
+        self.canvas.bind_all('<Button-4>', self._wheel)
+        self.canvas.bind_all('<Button-5>', self._wheel)
+
+    def _unbind_wheel(self, _event=None):
+        for sequence in ('<MouseWheel>', '<Button-4>', '<Button-5>'):
+            self.canvas.unbind_all(sequence)
+
+
+def fit_to_screen(window, margin=40, taskbar=80):
+    """Garante que uma janela secundária caiba na tela (tamanho e posição)."""
+    try:
+        window.update_idletasks()
+        screen_w, screen_h = window.winfo_screenwidth(), window.winfo_screenheight()
+        width = min(max(window.winfo_width(), window.winfo_reqwidth()), screen_w - margin)
+        height = min(max(window.winfo_height(), window.winfo_reqheight()), screen_h - taskbar)
+        x = min(max(window.winfo_x(), 0), max(0, screen_w - width))
+        y = min(max(window.winfo_y(), 0), max(0, screen_h - taskbar - height))
+        min_w, min_h = window.minsize()
+        if min_w > screen_w - margin or min_h > screen_h - taskbar:
+            window.minsize(min(min_w, screen_w - margin), min(min_h, screen_h - taskbar))
+        if (width, height) != (window.winfo_width(), window.winfo_height()) or (x, y) != (window.winfo_x(), window.winfo_y()):
+            window.geometry(f'{width}x{height}+{x}+{y}')
+    except tk.TclError:
+        pass

@@ -35,8 +35,9 @@ class QuestRequirementsDialog(tk.Toplevel):
 
         pane = ttk.Frame(self, padding=13)
         pane.pack(fill='both', expand=True)
-        ttk.Label(pane, text='Escolha o critério, o alvo e a quantidade. Digite o nome ou o ID para buscar cartas.',
-                  wraplength=560).grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 9))
+        ttk.Label(pane, text='Escolha o critério, o alvo e a quantidade. Digite o nome ou o ID para buscar cartas, '
+                             'ou use Procurar… para ver a lista com filtros.',
+                  wraplength=600).grid(row=0, column=0, columnspan=4, sticky='w', pady=(0, 9))
         for column, label in enumerate(('Critério', 'Carta ou categoria', 'Quantidade')):
             ttk.Label(pane, text=label).grid(row=1, column=column, sticky='w', padx=4)
         pane.columnconfigure(1, weight=1)
@@ -52,14 +53,28 @@ class QuestRequirementsDialog(tk.Toplevel):
             target.grid(row=row, column=1, padx=4, pady=4, sticky='ew')
             amount = ttk.Spinbox(pane, from_=1, to=255, width=5, textvariable=quantity)
             amount.grid(row=row, column=2, padx=4, pady=4, sticky='ew')
+            browse = ttk.Button(pane, text='Procurar…', width=10)
+            browse.grid(row=row, column=3, padx=4, pady=4)
             self.inputs.append((kind, target, quantity))
 
-            def set_kind(_event=None, *, kind=kind, target=target, amount=amount):
+            def pick(*, target=target):
+                from .card_picker import CardPickerDialog
+
+                def chosen(ids):
+                    prefix = f'{ids[0]} · '
+                    target.set(next((label for label in self.targets['carta'] if label.startswith(prefix)),
+                                    str(ids[0])))
+                CardPickerDialog(self, cards, chosen, title='Carta pedida na quest')
+
+            browse.configure(command=pick)
+
+            def set_kind(_event=None, *, kind=kind, target=target, amount=amount, browse=browse):
                 key = self.labels[kind.get()]
                 target.set('')
                 target.configure(values=self.targets.get(key, ()),
                                  state='normal' if key == 'carta' else 'readonly' if key else 'disabled')
                 amount.configure(state='normal' if key else 'disabled')
+                browse.configure(state='normal' if key == 'carta' else 'disabled')
 
             def search(_event, *, kind=kind, target=target):
                 if self.labels[kind.get()] == 'carta':
@@ -76,7 +91,7 @@ class QuestRequirementsDialog(tk.Toplevel):
                                 str(initial['alvo'])))
 
         speech = ttk.LabelFrame(pane, text='Frase do duelista antes do pedido', padding=8)
-        speech.grid(row=MAX_CRITERIA + 2, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        speech.grid(row=MAX_CRITERIA + 2, column=0, columnspan=4, sticky='ew', pady=(10, 0))
         ttk.Label(speech, text=f'Aparece numa página própria, antes dos requisitos. Até {PHRASE_LINES} linhas '
                                f'de {PHRASE_LINE} caracteres; acentos são removidos (a fonte do PS1 não os tem). '
                                'Deixe vazio para não mostrar frase.', wraplength=540).pack(anchor='w')
@@ -88,8 +103,8 @@ class QuestRequirementsDialog(tk.Toplevel):
         self.phrase.bind('<KeyRelease>', self._preview_phrase)
         self._preview_phrase()
 
-        actions = ttk.Frame(pane)
-        actions.grid(row=MAX_CRITERIA + 3, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        actions = ttk.Frame(self, padding=(13, 0, 13, 12))
+        actions.pack(side='bottom', fill='x', before=pane)       # sempre visível
         ttk.Button(actions, text='Usar a seed deste NPC', command=self._restore).pack(side='left')
         ttk.Button(actions, text='Cancelar', command=self.destroy).pack(side='right', padx=(6, 0))
         ttk.Button(actions, text='Aplicar requisitos', style='Accent.TButton', command=self._apply).pack(side='right')

@@ -11,6 +11,7 @@ from .ps1_magic_values import (ATK_SELECTOR_MIN, DAMAGE_CARDS, DAMAGE_SCALE, DRO
 from .ps1_magic_values import TERRAIN_DEFAULTS, TERRAIN_NAMES, TERRAIN_TYPES, TRAP_DEFAULTS
 from .ps1_native import TRAP_IDS
 from .tables import TYPE_NAMES
+from .ui_shell import ScrollFrame, pin_bottom
 
 ATK_OPTION = 'ATK mínimo'
 
@@ -36,8 +37,9 @@ class MagicTrapEditor(ttk.Frame):
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(0, 6))
         ttk.Label(values, text='Edite só o que quiser mudar; o resto continua como no Drop x15. '
                                'Os valores entram na próxima cópia BIN/CUE.', wraplength=760).pack(anchor='w')
-        body = ttk.Frame(values)
-        body.pack(fill='both', expand=True, pady=(8, 0))
+        scroll = ScrollFrame(values)
+        scroll.pack(fill='both', expand=True, pady=(8, 0))
+        body = scroll.body
         heal = ttk.LabelFrame(body, text='Cura (LP, múltiplos de 100)', padding=8)
         damage = ttk.LabelFrame(body, text='Dano ao oponente (LP, múltiplos de 10)', padding=8)
         removal = ttk.LabelFrame(body, text='Destruição por tipo (monstros do oponente)', padding=8)
@@ -72,20 +74,22 @@ class MagicTrapEditor(ttk.Frame):
                 state='normal' if k.get() == ATK_OPTION else 'disabled'))
             self.removal[cid] = (name, kind, atk, spin)
         actions = ttk.Frame(values)
-        actions.pack(fill='x', pady=(10, 0))
+        pin_bottom(actions, pady=(10, 0))
         ttk.Button(actions, text='Restaurar originais', command=self._restore).pack(side='left')
         ttk.Button(actions, text='Salvar valores das mágicas', style='Accent.TButton',
                    command=self._save).pack(side='right')
         self.status = tk.StringVar(self)
-        ttk.Label(self, textvariable=self.status, foreground='#5a6b7d').pack(anchor='w', pady=(4, 0))
+        status = ttk.Label(self, textvariable=self.status, foreground='#5a6b7d')
+        pin_bottom(status, pady=(4, 0), fill='none', anchor='w')
         self.set_project(None)
 
     # --- Campos (terreno) -------------------------------------------------
     def _build_fields(self, frame):
         ttk.Label(frame, text='Bônus de ATK/DEF de cada tipo em cada campo (múltiplos de 10, de -1200 a +1200). '
                               'Células alteradas ficam destacadas.', wraplength=760).pack(anchor='w', pady=(0, 6))
-        grid = ttk.Frame(frame)
-        grid.pack(fill='both', expand=True)
+        scroll = ScrollFrame(frame)
+        scroll.pack(fill='both', expand=True)
+        grid = scroll.body
         ttk.Label(grid, text='Tipo').grid(row=0, column=0, sticky='w')
         for column, name in enumerate(TERRAIN_NAMES, start=1):
             ttk.Label(grid, text=name).grid(row=0, column=column, padx=2)
@@ -99,7 +103,7 @@ class MagicTrapEditor(ttk.Frame):
                 value.trace_add('write', lambda *_a, k=(terrain, type_id), w=spin: self._mark_terrain(k, w))
                 self.terrain[(terrain, type_id)] = (value, spin)
         actions = ttk.Frame(frame)
-        actions.pack(fill='x', pady=(8, 0))
+        pin_bottom(actions, pady=(8, 0))
         ttk.Button(actions, text='Restaurar originais', command=lambda: self._fill_terrain({})).pack(side='left')
         ttk.Button(actions, text='Salvar campos', style='Accent.TButton',
                    command=self._save_terrain).pack(side='right')
@@ -164,7 +168,7 @@ class MagicTrapEditor(ttk.Frame):
                 row=row, column=2, sticky='w')
             self.traps[trap] = (name, value)
         actions = ttk.Frame(frame)
-        actions.pack(fill='x', pady=(8, 0))
+        pin_bottom(actions, pady=(8, 0))
         ttk.Button(actions, text='Restaurar originais', command=lambda: self._fill_traps({})).pack(side='left')
         ttk.Button(actions, text='Salvar armadilhas', style='Accent.TButton',
                    command=self._save_traps).pack(side='right')

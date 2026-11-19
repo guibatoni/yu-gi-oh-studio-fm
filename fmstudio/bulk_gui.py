@@ -64,7 +64,8 @@ class BulkEditDialog(tk.Toplevel):
         self.tree.pack(side='left',fill='both',expand=True)
         bar.pack(side='right',fill='y')
         buttons=ttk.Frame(form)
-        buttons.pack(fill='x',pady=(10,0))
+        from .ui_shell import pin_bottom
+        pin_bottom(buttons, pady=(10,0))
         ttk.Button(buttons,text='Cancelar',command=self.destroy).pack(side='right')
         self.confirm_button=ttk.Button(buttons,text='Confirmar alterações',
                                        state='disabled',command=self.commit)

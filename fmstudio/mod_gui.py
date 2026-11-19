@@ -72,6 +72,7 @@ class WeightTable(ttk.Frame):
         self.selected = tk.StringVar()
         self.card = ttk.Combobox(edit, textvariable=self.selected, width=28)
         self.card.pack(side='left', fill='x', expand=True)
+        ttk.Button(edit, text='Procurar…', command=self._browse).pack(side='left', padx=(4, 0))
         self.card.bind('<KeyRelease>', self._search)
         self.card.bind('<Return>', lambda _event: self._apply())
         self.weight = tk.StringVar(value='1')
@@ -226,6 +227,23 @@ class WeightTable(ttk.Frame):
             self._update_weights(dict.fromkeys(ids, amount))
         except (ModError, OSError, ValueError) as exc:
             messagebox.showerror('Tabela de pesos', str(exc), parent=self)
+
+    def _browse(self):
+        """Escolher uma ou várias cartas na lista com filtros e aplicar o peso digitado."""
+        from .card_picker import CardPickerDialog
+
+        def picked(ids):
+            try:
+                amount = simulation_nonnegative_int(self.weight.get(), 'Peso') or 1
+                self._update_weights(dict.fromkeys(ids, amount))
+                for cid in ids:
+                    if self.tree.exists(str(cid)):
+                        self.tree.see(str(cid))
+                self.tree.selection_set([str(cid) for cid in ids if self.tree.exists(str(cid))])
+            except (ModError, OSError, ValueError) as exc:
+                messagebox.showerror('Tabela de pesos', str(exc), parent=self)
+        CardPickerDialog(self, self.cards, picked, multiple=True,
+                         title='Adicionar cartas à tabela', confirm=f'Adicionar com o peso digitado')
 
     def _context_menu(self, event):
         item = self.tree.identify_row(event.y)
@@ -1462,7 +1480,8 @@ class ModEditor(ttk.Frame):
             'As edições de drops de rank, cartas, efeitos e fusões são preservadas.'
         ), wraplength=720, foreground=MUTED).pack(anchor='w', pady=(5, 7))
         actions=ttk.Frame(body)
-        actions.pack(fill='x')
+        from .ui_shell import pin_bottom
+        pin_bottom(actions, pady=(6, 0))
         def confirm():
             try:
                 # Releitura antes de salvar evita aplicar tabelas alteradas
@@ -1702,7 +1721,8 @@ class NewCardDialog(tk.Toplevel):
         self.feedback = tk.StringVar()
         ttk.Label(pane, textvariable=self.feedback, foreground=ACCENT, wraplength=320).pack(anchor='w', pady=(5, 0))
         actions = ttk.Frame(pane)
-        actions.pack(fill='x', pady=(6, 0))
+        from .ui_shell import pin_bottom
+        pin_bottom(actions, pady=(6, 0))
         ttk.Button(actions, text='Cancelar', command=self.destroy).pack(side='left')
         ttk.Button(actions, text='Criar e salvar', style='Accent.TButton', command=self.create).pack(side='right')
         self.bind('<Return>', lambda _e: self.create())

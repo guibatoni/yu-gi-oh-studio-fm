@@ -91,8 +91,8 @@ class CardBatchDialog(tk.Toplevel):
             combo.bind('<<ComboboxSelected>>', lambda _e, k=key: self.enabled[k].set(True))
             combo.bind('<MouseWheel>', lambda _e: 'break')
             row += 1
-        actions = ttk.Frame(body)
-        actions.pack(fill='x', pady=(10, 6))
+        actions = ttk.Frame(self, padding=(14, 8))
+        actions.pack(side='bottom', fill='x', before=body)
         ttk.Button(actions, text='Calcular prévia', command=self.preview).pack(side='left')
         self.apply_button = ttk.Button(actions, text='Aplicar às cartas', style='Accent.TButton',
                                        command=self.apply, state='disabled')

@@ -64,6 +64,24 @@ with tempfile.TemporaryDirectory() as temp:
     dialog.preview()
     shot('edicao_em_lote')
     dialog.destroy()
+    from fmstudio.gui import EffectDialog
+    root.show_section('efeitos')
+    effects = EffectDialog(root, lambda entries: None, batch=True)
+    effects._choice('acao', 'bonus_por_tipo')
+    shot('efeitos_varios')
+    effects.destroy()
+    from fmstudio.card_picker import CardPickerDialog
+    picker = CardPickerDialog(root, {cid: project.get(cid) for cid in project.cards}, lambda ids: None,
+                              multiple=True, title='Adicionar cartas à tabela')
+    picker.picker.query.set('dragon')
+    shot('seletor_de_cartas')
+    picker.destroy()
+    root.show_section('magias')
+    shot('magias')
+    from fmstudio.quest_gui import QuestRequirementsDialog
+    quest = QuestRequirementsDialog(root, 2, {cid: project.get(cid) for cid in project.cards}, [])
+    shot('quest_requisitos')
+    quest.destroy()
     root.statusbar.begin('Gerando BIN/CUE…')
     shot('status_operacao')
     root.statusbar.end()

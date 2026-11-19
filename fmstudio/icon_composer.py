@@ -48,7 +48,8 @@ class IconComposer(tk.Toplevel):
         self.composition=tk.Text(panel,height=4,wrap='word',state='disabled')
         self.composition.pack(fill='x')
         line=ttk.Frame(panel)
-        line.pack(fill='x',pady=(10,0))
+        from .ui_shell import pin_bottom
+        pin_bottom(line, pady=(10,0))
         self.counter=tk.StringVar(value='0 ícones preparados')
         ttk.Label(line,textvariable=self.counter).pack(side='left')
         ttk.Button(line,text='Cancelar',command=self.destroy).pack(side='right')

@@ -143,5 +143,23 @@ class DeckSummaryTests(unittest.TestCase):
         self.assertEqual(describe(composition(cards, [])), '0 monstros')
 
 
+class CardPickerFilterTests(unittest.TestCase):
+    def test_filter_cards(self):
+        from fmstudio.card_search import filter_cards
+        cards = {1: {'nome': 'Blue-Eyes White Dragon', 'tipo_id': 0, 'atributo_id': 0},
+                 2: {'nome': 'Mystical Elf', 'tipo_id': 1, 'atributo_id': 0},
+                 3: {'nome': 'Dian Keto', 'tipo_id': 20},
+                 4: {'nome': 'Armadilha', 'tipo_id': 21},
+                 5: {'nome': 'Dragão Negro', 'tipo_id': 0, 'atributo_id': 1}}
+        self.assertEqual(filter_cards(cards), [1, 2, 3, 4, 5])
+        self.assertEqual(filter_cards(cards, 'elf'), [2])
+        self.assertEqual(filter_cards(cards, 'dragao'), [5])          # sem acento
+        self.assertEqual(filter_cards(cards, category='Magias'), [3])
+        self.assertEqual(filter_cards(cards, category='Monstros'), [1, 2, 5])
+        self.assertEqual(filter_cards(cards, category='Tipo: Dragon'), [1, 5])
+        self.assertEqual(filter_cards(cards, attribute=1), [5])
+        self.assertEqual(filter_cards(cards, '3'), [3])
+
+
 if __name__ == '__main__':
     unittest.main()

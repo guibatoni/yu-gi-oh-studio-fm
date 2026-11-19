@@ -114,6 +114,34 @@ with tempfile.TemporaryDirectory() as temp:
     assert batch.specific_button.winfo_ismapped(), 'botão de carta específica oculto no modo vários efeitos'
     batch.destroy()
 
+    # Seletor de cartas: busca, filtros e escolha.
+    from fmstudio.card_picker import CardPickerDialog
+    chosen = []
+    picker = CardPickerDialog(root, {cid: project.get(cid) for cid in project.cards}, chosen.extend,
+                              multiple=True)
+    picker.picker.query.set('Carta 2'); root.update()
+    assert picker.picker.tree.get_children() == ('2',)
+    picker.picker._enter_from_search(); root.update()
+    assert chosen == [2] and not picker.winfo_exists()
+    # Tabela de drops: Procurar… adiciona com o peso digitado.
+    drops = root.mod_editor.drops
+    drops.refresh_catalog({cid: project.get(cid) for cid in project.cards})
+    drops.weight.set('7')
+    import fmstudio.card_picker as card_picker_module
+    original = card_picker_module.CardPickerDialog
+    card_picker_module.CardPickerDialog = lambda master, cards, callback, **kw: callback([1, 3])
+    try:
+        drops.changed = None
+        drops._browse()
+    finally:
+        card_picker_module.CardPickerDialog = original
+    assert drops.weights.get(1) == 7 and drops.weights.get(3) == 7, drops.weights
+    # Janelas maiores que a tela são ajustadas ao abrir.
+    import tkinter as tk
+    big = tk.Toplevel(root); big.geometry('3000x3000'); root.update(); root.update()
+    assert big.winfo_height() <= root.winfo_screenheight(), big.winfo_height()
+    big.destroy()
+
     # Operação longa: a janela continua viva e a exceção volta para a interface.
     assert root.run_blocking('Teste…', lambda a, b=0: a + b, 2, b=3) == 5
     try:
