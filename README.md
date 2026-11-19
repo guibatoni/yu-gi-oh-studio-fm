@@ -1,3 +1,12 @@
+## Studio FM v1.9.18 — Novo pedido das quests
+
+Todas as quests passam a mostrar **"Antes de duelar vamos precisar de:"** e uma
+página por requisito: **"Vou precisar de:"**, o requisito e o progresso (`0/10`).
+Requisitos de tipo mostram o **ícone do tipo**, e de carta específica o **nome da
+carta** com `#ID`, ambos desenhados pelo próprio jogo. Gere um **BIN/CUE novo**.
+
+---
+
 ## Studio FM v1.9.17 — Frase das quests, cartas por vitória e equipamentos
 
 - **Frase do duelista:** em Edição do Mod → Quests da campanha → Editar quest.

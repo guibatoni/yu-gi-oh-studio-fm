@@ -1,4 +1,4 @@
-## v1.9.18 (em teste) — Novo pedido das quests
+## v1.9.18 — Novo pedido das quests
 
 - Página fixa para todos: **"Antes de duelar vamos / precisar de:"** (depois da
   frase do duelista, se houver).
@@ -15,9 +15,7 @@
   carta selecionada antes da quest é devolvida ao sair, na doação e ao ir à loja.
 - Rótulos com até 24 caracteres. O vetor `inventory.spare` (cópia do baú) foi
   removido, liberando espaço na cena.
-- **Experimental:** é a primeira vez que o ícone e o nome nativos são usados na
-  caixa de diálogo da campanha. Precisa de teste no ePSXe antes de ir para a versão
-  oficial.
+- Validado no ePSXe pelo usuário: textos, ícone do tipo e nome da carta.
 
 ## v1.9.17 — Frase do duelista, cartas por vitória (1–100) e equipamentos
 
