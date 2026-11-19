@@ -178,6 +178,16 @@ class CampaignQuestsTests(unittest.TestCase):
 
 @unittest.skipIf(Uc is None, 'MIPS verification needs Unicorn')
 class CampaignMipsTests(unittest.TestCase):
+    def test_donation_return_never_executes_quest_table_as_instructions(self):
+        from fmstudio import ps1_campaign_quest_overlay_blob as blob
+        # The user's ePSXe PC falls inside quest-criteria data. In the test
+        # below we enforce the architectural contract that the answer VM
+        # returns *before* the native duel (scene reloader) is called.
+        crashing_pc = 0x801AAE80
+        self.assertLess(blob.ENTRY_POINTS['QuestConfiguration'], crashing_pc)
+        self.assertLess(crashing_pc, OVERLAY_START + OVERLAY_SIZE)
+        self.assertLess(blob.ENTRY_POINTS['QuestAnswer'], blob.ENTRY_POINTS['QuestConfiguration'])
+
     def test_enforced_gate_simon_and_shop_resume(self):
         for opponent, mode, action in ((1, 2, 'native'), (2, 6, 'native'), (2, 2, 'pay'),
                                        (2, 2, 'early'), (10, 2, 'tournament'), (38, 2, 'hiding')):
@@ -312,14 +322,28 @@ class CampaignMipsTests(unittest.TestCase):
         write(trunk, b'\x03\x02\x02')
         choose(channel, 0)
         self.assertEqual(read(word(channel), 256).count(b'1/1'), 3)
+        # Donating inside the F8 12 handler must only update chest+flag.
+        # Starting the duel *inside* the answer callback can overwrite the
+        # quest overlay (0x801A9000..0x801AC000) before its stack unwinds.
+        before_events = list(events)
         choose(channel, 0)
-        self.assertEqual(events[-1], ('native', entry))
+        self.assertEqual(events, before_events)
+        self.assertEqual(word(channel), entry - 2)  # Retail F8 0D opcode.
+        self.assertEqual(read(entry - 2, 2), b'\xf8\x0d')
+        self.assertEqual(word(0x8009B350), 1)       # Yield to next VM step.
+        self.assertEqual(read(0x8009B398, 2), b'\x01\0')  # No held confirm.
         self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
         self.assertEqual(read(deck, 80), initial_deck)
         self.assertEqual(read(trunk+722, 1), b'\x04')
         self.assertEqual(read(flag, 1), bytes([mask]))
         self.assertEqual(read(0x801D070B, 1), b'\0')
-        write(0x8009B26C, b'\x42')
+        # The next VM tick decodes F8 0D and runs the existing native hook.
+        word(channel, entry)
+        call('duel', channel)
+        self.assertEqual(events[-1], ('native', entry))
+        self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
+        # Re-entering after a saved completion must not donate a second time.
+        write(0x8009B26C, b'\x02')
         word(channel, entry)
         call('duel', channel)
         self.assertEqual(events[-1], ('native', entry))
