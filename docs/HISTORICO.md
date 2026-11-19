@@ -1,3 +1,8 @@
+## v1.9.13 — Correção das opções da quest no ePSXe
+
+- Grava os comandos das opções byte a byte para evitar a corrupção observada no menu da Teana.
+- A compilação do código MIPS passa a verificar que o diálogo usa escritas compatíveis com o ePSXe.
+
 ## v1.9.12 — Correção do menu de quests no PS1
 
 - Corrige a transição do diálogo original para as opções da quest.

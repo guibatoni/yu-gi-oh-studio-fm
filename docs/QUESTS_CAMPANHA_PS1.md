@@ -52,12 +52,13 @@ disponíveis antes de cada duelo.
 ## Verificação
 
 **Verificar BIN/CUE** confirma a tabela das 37 quests e o carregador.
-Para substituir um BIN gerado pela v1.9.11, gere novamente pelo Studio atualizado.
+Para substituir um BIN gerado pela v1.9.11 ou v1.9.12, gere novamente pelo Studio atualizado.
 Reinicie a imagem no emulador e carregue a campanha pelo memory card.
 O teste MIPS usou os 59 descritores de duelo do Original Drop x15
 e conferiu a proteção do deck, a saída para a loja, o save e a
-retomada com os parâmetros nativos do confronto. A apresentação do
-diálogo ainda precisa de uma partida no ePSXe.
+retomada com os parâmetros nativos do confronto. A cena da Teana
+foi testada no ePSXe 2.0.5 para Linux com a abertura do menu, a
+revisão dos requisitos e a saída para o mapa com a quest pendente.
 
 O módulo reside no `DATA/WA_MRG.MRG` e carrega junto com a cena.
 Os comandos nativos F8 0D e F8 12 ligam a entrada e a

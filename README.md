@@ -1,3 +1,11 @@
+## Studio FM v1.9.13 — Opções da quest no ePSXe
+
+Corrige o código inválido ao escolher uma opção da quest no ePSXe.
+Atualize o Studio, gere novamente o BIN/CUE `_QUESTS` e carregue a
+campanha pelo memory card depois de abrir a nova imagem.
+
+---
+
 ## Studio FM v1.9.12 — Correção do menu de quests no PS1
 
 A janela da quest usa as dimensões do diálogo padrão do PS1.

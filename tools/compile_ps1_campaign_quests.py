@@ -44,8 +44,11 @@ def main():
                         '-fno-unwind-tables', '-fno-jump-tables', '-Os',
                         '-S', str(SOURCES / 'campaign_quests.c'), '-o', str(asm)], check=True)
         # The retail text VM keeps its global-data base live across all calls.
-        if re.search(r'\$(?:gp|28)\b', asm.read_text(encoding='utf-8')):
+        assembly = asm.read_text(encoding='utf-8')
+        if re.search(r'\$(?:gp|28)\b', assembly):
             raise ValueError('O código das quests deve preservar o registrador global do PS1 ($gp).')
+        if re.search(r'^\s*(?:swl|swr)\s', assembly, re.MULTILINE):
+            raise ValueError('Escrita MIPS desalinhada no diálogo das quests é incompatível com o ePSXe.')
         subprocess.run([*cc, '-c', str(asm), '-o', str(obj)], check=True)
         subprocess.run([*cc, '-c', str(SOURCES / 'campaign_quest_loader.S'),
                         '-o', str(adapter)], check=True)
