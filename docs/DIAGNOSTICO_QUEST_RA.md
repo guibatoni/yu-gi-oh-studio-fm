@@ -111,3 +111,46 @@ registradores, `Cause.ExcCode` e a pilha.
 
 Limite: com 37 duelistas × 4 requisitos, a tabela do modo 2 excede o espaço
 da cena; o Studio recusa a exportação com mensagem. Configurações comuns cabem.
+
+## Resultado do modo 2 — CAUSA RAIZ (19/11/2026)
+
+Save state ePSXe `SLUS_014.11.000` (BIN `_QUESTS_DIAG2`), lido com
+`tools/ler_dump_quest.py`:
+
+- `ra = 0x801CF680`, `sp = 0x801FFE60`, `s0 = 0x800EB1C0` (caixa de texto),
+  `a0 = 0x20` (comando "nome da carta"), `v0 = 0x8000`.
+- `EPC = 0x0008E548`: não houve retorno de interrupção para a área das quests.
+- Pilha íntegra: interpretador de texto (`0x80038B98`) → `InsertTierName`
+  (Studio) → `func_80037DA4`, com o frame de `func_80037DA4` ainda ativo.
+
+Desmontagem da RAM em `func_80037DA4`:
+
+```
+80037df8: ori  v0, zero, 0x8000
+80037dfc: j    0x801AAE74        <- não é código retail nem do Studio
+```
+
+Varredura de toda a RAM por `j/jal` para `0x801A9000..0x801AC000`, excluindo o
+próprio overlay e os carregadores das quests:
+
+| Origem | Função (decomp) | Destino |
+|---|---|---|
+| `0x80021834` | `Duel_SelectCardDrop` | `0x801AAE54` |
+| `0x80021C6C` | `DuelScene_UpdateResultRewards` | `0x801AAC40` |
+| `0x80021F10` | `DuelScene_UpdateResultRewards` | `0x801AAD4C` |
+| `0x80037DFC` | `func_80037DA4` (nome de carta no texto) | `0x801AAE74` |
+
+**Conclusão.** O mod **Drop x15** mantém o próprio código (sorteio de drops,
+recompensas de fim de duelo e exibição de nome de carta) em
+`≈0x801AAC40..0x801AAE9x`. O patch das quests amplia a carga do script de campanha
+para `0x801A8000..0x801AC000` e grava o overlay por cima desse código. A primeira
+tela que escreve um nome de carta depois da doação (baú/deck) salta para
+`0x801AAE74` e executa a tabela de quests. Os três erros de ePSXe
+(`801AAE80`, `801AAE78`) são `0x801AAE74 + 4/0xC`. O caminho da doação
+(QOV3/4/5/6) nunca foi a causa. Mesmo corrigindo o baú, o fim do duelo também
+travaria ao chamar o código de drops do mod.
+
+Correção necessária: o Studio deve detectar saltos de terceiros para a arena,
+preservar os bytes do mod nessas faixas dentro do payload e posicionar o código,
+o BSS e a tabela das quests fora delas (relink do overlay), recusando a
+exportação se não couber. Falta medir a extensão exata do código do mod.
