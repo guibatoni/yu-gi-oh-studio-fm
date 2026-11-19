@@ -59,7 +59,7 @@ SOURCE_FILES = frozenset({
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
     'PUBLICAR_GITHUB.bat', 'PUBLICAR_GITHUB.ps1', 'LEIA-ME.txt',
     'docs/EXPANSAO_PS1_740.md', 'tools/verify_expanded_bau_mips.py',
-    'README.md', 'docs/HISTORICO.md', 'docs/ATUALIZACOES_GITHUB.md',
+    'README.md', 'docs/HISTORICO.md', 'docs/CORRECAO_DOACAO_QUESTS_PS1.md', 'docs/ATUALIZACOES_GITHUB.md',
     'docs/ORIGEM_E_VALIDACAO.md', 'docs/ROADMAP_EFEITOS.md',
     'docs/MIGRACAO_REPOSITORIO.md', 'docs/COMPAT_PS1.md', 'docs/EXPANSAO_722_GOD_TEXTO.md', 'docs/CLASSES_E_CORES.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md', 'docs/OTIMIZACAO_PS1_PILLOW.md', 'docs/ECONOMIA_PS1.md', 'docs/EDITOR_MULTIPLO_PS1.md',
 })
