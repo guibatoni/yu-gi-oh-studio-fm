@@ -18,11 +18,12 @@ TEXT_CLASSES = {'Label', 'TLabel', 'Button', 'TButton', 'Checkbutton', 'TCheckbu
 
 
 def _remember(widget, key, value):
+    """Texto original (português) deste rótulo; reconhece quando o programa trocou o texto depois."""
     store = widget.__dict__.setdefault('_i18n_original', {})
-    if key not in store:
+    applied = widget.__dict__.setdefault('_i18n_applied', {})
+    if key not in store or (value != applied.get(key) and value != store[key]):
         store[key] = value
-    elif value != i18n.translate(store[key]) and value != store[key]:
-        store[key] = value          # o programa trocou o texto depois: este é o novo original
+    applied[key] = i18n.translate(store[key])
     return store[key]
 
 
