@@ -7,8 +7,8 @@
     ori $t0, $t0, 0x9000
     lw $t1, 0($t0)
     lw $t2, 0x2FFC($t0)
-    lui $t3, 0x3356
-    ori $t3, $t3, 0x4F51     /* QOV3 */
+    lui $t3, 0x3456
+    ori $t3, $t3, 0x4F51     /* QOV4: invalidates old overlay save-state code. */
     bne $t1, $t3, \fallback
     nop
     bne $t2, $t3, \fallback
