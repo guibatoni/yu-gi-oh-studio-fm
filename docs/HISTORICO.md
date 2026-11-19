@@ -1,4 +1,4 @@
-## v1.9.19 (em teste) — Mágicas: cura, dano e destruição por tipo
+## v1.9.19 — Mágicas e armadilhas: cura, dano, destruição por tipo, campos e limites
 
 - Nova aba **Edição do Mod → Mágicas e armadilhas**, com os valores originais do
   Drop x15 ao lado de cada campo:
@@ -20,6 +20,7 @@
     múltiplos de 100 e em ordem crescente (o jogo escolhe a armadilha por faixa).
   - Usa as mesmas chaves do projeto (`ps1_terrain_boosts`, `ps1_trap_thresholds`)
     e a mesma gravação de antes. Projetos antigos continuam compatíveis.
+- Validado no ePSXe pelo usuário.
 
 ## v1.9.18 — Novo pedido das quests
 
