@@ -1,3 +1,17 @@
+## v1.9.20 (em teste) — Molduras por raridade (mão e campo)
+
+- Nova aba **Edição do Mod → Molduras**: uma cor para cada classe (Comum,
+  Incomum, Rara, Épica, Lendária e Deus). Use "sem cor" para manter a moldura
+  original. Mágicas, armadilhas e equipamentos mantêm a moldura própria.
+- PS1: `func_80016784` desenha as cartas do duelo. A moldura é o último sprite
+  (52×60), enviado em `0x80016CCC`. O Studio troca esse `jal` por uma rotina
+  residente que, para carta virada para cima e com a cor normal (`0x808080`),
+  grava a cor da classe no RGB do sprite (modulação da GPU) e segue para
+  `DisplayObject_SubmitPacket`. A arte, o ATK/DEF e o ícone de tipo não mudam.
+  Cartas escurecidas ou destacadas pelo jogo mantêm o efeito original.
+- Primeira etapa: mão e campo. A carta ampliada e a tela do baú vêm depois de
+  validar o visual no ePSXe.
+
 ## v1.9.19 — Mágicas e armadilhas: cura, dano, destruição por tipo, campos e limites
 
 - Nova aba **Edição do Mod → Mágicas e armadilhas**, com os valores originais do
