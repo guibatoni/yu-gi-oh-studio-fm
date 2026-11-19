@@ -7,7 +7,8 @@ import secrets
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from .campaign_quests import CATEGORY_NAMES, MAX_CRITERIA, STORY_DUELISTS, normalize_overrides
+from .campaign_quests import (CATEGORY_NAMES, MAX_CRITERIA, PHRASE_LINE, PHRASE_LINES, STORY_DUELISTS,
+                              normalize_overrides, normalize_phrases)
 from .core import ModError, ps1_supports_god24
 from .ps1_campaign_quests import preview_project_quests, quest_settings, save_quest_settings
 from .tables import CARD_COUNT, DUELIST_NAMES_REFERENCE
@@ -18,12 +19,13 @@ CRITERION_LABELS = {'': 'Vazio', 'carta': 'Carta', 'tipo': 'Tipo', 'atributo': '
 
 
 class QuestRequirementsDialog(tk.Toplevel):
-    def __init__(self, parent, opponent, cards, requirements):
+    def __init__(self, parent, opponent, cards, requirements, phrase=''):
         super().__init__(parent)
         self.title(f'Quest de {DUELIST_NAMES_REFERENCE[opponent]}')
         self.transient(parent.winfo_toplevel())
         self.opponent = str(opponent)
         self.result = None
+        self.phrase_result = None
         self.inputs = []
         self.labels = {label: kind for kind, label in CRITERION_LABELS.items()}
         self.targets = {kind: [f'{idx} · {label}' for idx, label in enumerate(names) if label]
@@ -73,15 +75,40 @@ class QuestRequirementsDialog(tk.Toplevel):
                 target.set(next((label for label in self.targets[initial['tipo']] if label.startswith(prefix)),
                                 str(initial['alvo'])))
 
+        speech = ttk.LabelFrame(pane, text='Frase do duelista antes do pedido', padding=8)
+        speech.grid(row=MAX_CRITERIA + 2, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        ttk.Label(speech, text=f'Aparece numa página própria, antes dos requisitos. Até {PHRASE_LINES} linhas '
+                               f'de {PHRASE_LINE} caracteres; acentos são removidos (a fonte do PS1 não os tem). '
+                               'Deixe vazio para não mostrar frase.', wraplength=540).pack(anchor='w')
+        self.phrase = tk.Text(speech, height=2, width=PHRASE_LINE + 6, wrap='word', font=('Consolas', 11))
+        self.phrase.pack(anchor='w', pady=(5, 3))
+        self.phrase.insert('1.0', phrase.replace('\n', ' '))
+        self.phrase_preview = tk.StringVar(self)
+        ttk.Label(speech, textvariable=self.phrase_preview, font=('Consolas', 10), justify='left').pack(anchor='w')
+        self.phrase.bind('<KeyRelease>', self._preview_phrase)
+        self._preview_phrase()
+
         actions = ttk.Frame(pane)
-        actions.grid(row=MAX_CRITERIA + 2, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        actions.grid(row=MAX_CRITERIA + 3, column=0, columnspan=3, sticky='ew', pady=(10, 0))
         ttk.Button(actions, text='Usar a seed deste NPC', command=self._restore).pack(side='left')
         ttk.Button(actions, text='Cancelar', command=self.destroy).pack(side='right', padx=(6, 0))
         ttk.Button(actions, text='Aplicar requisitos', style='Accent.TButton', command=self._apply).pack(side='right')
         self.grab_set()
 
+    def _phrase_text(self):
+        return self.phrase.get('1.0', 'end').strip()
+
+    def _preview_phrase(self, _event=None):
+        try:
+            text = normalize_phrases({self.opponent: self._phrase_text()}).get(self.opponent, '')
+        except ModError as exc:
+            self.phrase_preview.set(f'⚠ {exc}')
+            return
+        self.phrase_preview.set('No PS1:\n' + text if text else 'Sem frase: o pedido começa em "Antes do duelo".')
+
     def _restore(self):
         self.result = []
+        self.phrase_result = self._phrase_text()
         self.destroy()
 
     def _apply(self):
@@ -91,6 +118,7 @@ class QuestRequirementsDialog(tk.Toplevel):
                 if self.labels[kind.get()]]
         try:
             self.result = normalize_overrides({self.opponent: rows})[self.opponent]
+            self.phrase_result = normalize_phrases({self.opponent: self._phrase_text()}).get(self.opponent, '')
         except ModError as exc:
             messagebox.showerror('Editar quest', str(exc), parent=self)
             return
@@ -104,6 +132,7 @@ class CampaignQuestEditor(ttk.Frame):
         self.studio = studio
         self.project = None
         self.requirements = {}
+        self.phrases = {}
         self.preview_requirements = {}
         self.enabled = tk.BooleanVar(self)
         self.seed = tk.StringVar(self)
@@ -186,6 +215,7 @@ class CampaignQuestEditor(ttk.Frame):
         self.enabled.set(settings['ativado'])
         self.seed.set(settings['seed'])
         self.requirements = settings['requisitos']
+        self.phrases = dict(settings.get('frases', {}))
         self._manual_changed()
         if error:
             self.status.set(error)
@@ -246,10 +276,19 @@ class CampaignQuestEditor(ttk.Frame):
         key = str(opponent)
         requirements = self.requirements.get(key, self.preview_requirements.get(key, []))
         cards = {cid: self.project.get(cid) for cid in sorted(self.project.cards) if cid <= CARD_COUNT}
-        dialog = QuestRequirementsDialog(self, opponent, cards, requirements)
+        dialog = QuestRequirementsDialog(self, opponent, cards, requirements, self.phrases.get(key, ''))
         self.wait_window(dialog)
         if dialog.result is None:
             return
+        try:
+            phrase = normalize_phrases({key: dialog.phrase_result or ''}).get(key, '')
+        except ModError as exc:
+            messagebox.showerror('Frase da quest', str(exc), parent=self)
+            phrase = self.phrases.get(key, '')
+        if phrase:
+            self.phrases[key] = phrase
+        else:
+            self.phrases.pop(key, None)
         if dialog.result:
             self.requirements[key] = dialog.result
         else:
@@ -300,7 +339,7 @@ class CampaignQuestEditor(ttk.Frame):
             return
         try:
             settings = save_quest_settings(self.project, enabled=self.enabled.get(), seed=self.seed.get(),
-                                          requirements=self.requirements)
+                                          requirements=self.requirements, phrases=self.phrases)
         except (OSError, ModError, ValueError) as exc:
             messagebox.showerror('Salvar quests', str(exc), parent=self)
             return

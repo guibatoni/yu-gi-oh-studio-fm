@@ -17,6 +17,7 @@ from .passwords import (
     PS1_ID_PREFIX, chest_cards, grant_card, id_code, import_original_passwords, ps1_id_code,
     redeem_id, redeem_original, set_ps1_id_passwords, original_passwords,
 )
+from .ps1_drop_count import COUNT_MAX, COUNT_MIN, MOD_DEFAULT, cards_per_win, set_cards_per_win
 from .ps1_economy import (
     CHEST_VISIBILITY_KEY, PRICE_LIMIT, STAR_LIMIT, chest_show_all,
     fixed_win_reward, price_overrides, set_chest_show_all,
@@ -283,6 +284,36 @@ class PasswordsDialog(tk.Toplevel):
                                'O valor será gravado no SLUS da próxima cópia BIN/CUE.'),
                   wraplength=600,foreground=ACCENT).pack(anchor='w',pady=(20,0))
         tabs.add(rewards,text='Estrelas por duelo')
+
+        drops = ttk.Frame(tabs,padding=16)
+        ttk.Label(drops,text='Cartas recebidas ao vencer um duelo no PS1 (Drop x15)',
+                  font=('Segoe UI',11,'bold')).pack(anchor='w',pady=(0,12))
+        initial_cards = cards_per_win(project)
+        self.cards_default = tk.BooleanVar(value=initial_cards is None)
+        self.cards_per_win = tk.IntVar(value=initial_cards or MOD_DEFAULT)
+        ttk.Checkbutton(drops,text='Usar o padrão do mod (sem alteração no código de drops)',
+                        variable=self.cards_default,command=self._cards_mode_changed).pack(anchor='w')
+        row = ttk.Frame(drops)
+        row.pack(fill='x',pady=(12,4))
+        ttk.Label(row,text='Cartas por vitória:').pack(side='left')
+        self.cards_scale = ttk.Scale(row,from_=COUNT_MIN,to=COUNT_MAX,orient='horizontal',
+                                     command=lambda v: self.cards_per_win.set(int(float(v))))
+        self.cards_scale.pack(side='left',fill='x',expand=True,padx=8)
+        self.cards_spin = ttk.Spinbox(row,from_=COUNT_MIN,to=COUNT_MAX,width=5,
+                                      textvariable=self.cards_per_win,command=self._cards_spin_changed)
+        self.cards_spin.pack(side='left')
+        self.cards_spin.bind('<KeyRelease>',lambda _e: self._cards_spin_changed())
+        self.cards_scale.set(self.cards_per_win.get())
+        ttk.Label(drops,text=f'De {COUNT_MIN} a {COUNT_MAX}. Arraste a barra ou digite o número.',
+                  foreground='#5a6b7d').pack(anchor='w')
+        ttk.Button(drops,text='Salvar cartas por vitória',command=self._save_cards_per_win).pack(anchor='w',pady=(12,0))
+        ttk.Label(drops,text=('Cada carta é sorteada com os pesos de drop do oponente e do RANK, como no jogo. '
+                             'Pelo código do Drop x15, o padrão entrega 5 cartas; a tela de resultado repete '
+                             'os nomes das cartas sorteadas. O valor é gravado no SLUS e nos dados de duelo '
+                             'da próxima cópia BIN/CUE.'),
+                  wraplength=600,foreground=ACCENT).pack(anchor='w',pady=(20,0))
+        self._cards_mode_changed()
+        tabs.add(drops,text='Cartas por vitória')
         if owner is not studio or not originals:
             tabs.select(self.ids)
 
@@ -491,6 +522,33 @@ class PasswordsDialog(tk.Toplevel):
             return
         self.studio.notify('Ganho original por rank restaurado.' if amount is None else
                            f'Ganho fixo configurado: {amount} Star Chips por vitória.')
+
+    def _cards_mode_changed(self):
+        state = 'disabled' if self.cards_default.get() else 'normal'
+        self.cards_scale.state(['disabled'] if state == 'disabled' else ['!disabled'])
+        self.cards_spin.configure(state=state)
+
+    def _cards_spin_changed(self):
+        try:
+            value = int(self.cards_spin.get())
+        except ValueError:
+            return
+        if COUNT_MIN <= value <= COUNT_MAX:
+            self.cards_scale.set(value)
+
+    def _save_cards_per_win(self):
+        try:
+            self._check_project()
+            if self.cards_default.get():
+                count = None
+            else:
+                count = int(self.cards_spin.get())
+            set_cards_per_win(self.project,count)
+        except (ModError,ValueError,OSError) as exc:
+            messagebox.showerror('Cartas por vitória',str(exc) or f'Digite de {COUNT_MIN} a {COUNT_MAX}.',parent=self)
+            return
+        self.studio.notify('Padrão do mod restaurado.' if count is None else
+                           f'{count} carta(s) por vitória. Gere um BIN/CUE novo para aplicar.')
 
     def _toggle_chest_ps1(self):
         try:

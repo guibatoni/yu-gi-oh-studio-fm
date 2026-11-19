@@ -13,7 +13,7 @@ except ImportError:
     Uc = None
 
 from fmstudio.campaign_quests import (LEGACY_FORMAT, QuestCatalog, compile_table, generate_quests,
-                                      normalize_overrides, table_size, verify_quests)
+                                      normalize_overrides, normalize_phrases, table_size, verify_quests)
 from fmstudio.core import ModError, Project
 from fmstudio.deep_extract import exe_pos
 from fmstudio.ps1_campaign_quests import (
@@ -58,11 +58,15 @@ def setUpModule():
     unittest.addModuleCleanup(patcher.stop)
 
 
-def compiled_overlay(requirements=None):
+PHRASES = {str(npc): 'Traga-me estas cartas e eu duelo com voce!' for npc in range(2, 39)}
+
+
+def compiled_overlay(requirements=None, phrases=PHRASES):
     catalog = sample_quests()
     overrides = requirements or {**MANUAL, '38': MANUAL['2']}
     with patch('fmstudio.ps1_campaign_quests.glyph_map', return_value=(GLYPHS, [])):
-        return build_quest_overlay(executable(), catalog, {'seed': 'teste', 'requisitos': overrides},
+        return build_quest_overlay(executable(), catalog,
+                                   {'seed': 'teste', 'requisitos': overrides, 'frases': phrases},
                                    level_address=EXPANDED_LEVELS)
 
 
@@ -78,6 +82,40 @@ def executable():
 
 
 class CampaignQuestsTests(unittest.TestCase):
+    def test_npc_phrase_is_normalized_wrapped_and_stored_after_criteria(self):
+        self.assertEqual(normalize_phrases({'2': '  Traga-me o  Jinzo, por favor!  ', '1': 'Simon'}),
+                         {'2': 'Traga-me o Jinzo, por\nfavor!'})
+        self.assertEqual(normalize_phrases({'3': 'Você é ótimo'}), {'3': 'Voce e otimo'})
+        self.assertEqual(normalize_phrases({'4': '   '}), {})
+        with self.assertRaisesRegex(ModError, '2 linhas'):
+            normalize_phrases({'5': 'palavra ' * 10})
+        with self.assertRaisesRegex(ModError, 'Palavra'):
+            normalize_phrases({'5': 'x' * 30})
+        catalog = sample_quests()
+        config = generate_quests(catalog, 'mips', MANUAL)
+        plain = compile_table(config, catalog, GLYPHS)
+        table = compile_table(config, catalog, GLYPHS, phrases={'2': 'Ola duelista'})
+        start = struct.unpack_from('<H', table, 4 + 2 * 2)[0]
+        count, length = table[start], table[start + 1]
+        self.assertEqual(length, len('Ola duelista'))
+        phrase_at = start + 2 + count * 28
+        self.assertEqual(table[phrase_at:phrase_at + length], b'Ola duelista')
+        self.assertEqual(table_size(table), len(table))
+        self.assertEqual(len(table), len(plain) + length)
+        self.assertEqual(plain[struct.unpack_from('<H', plain, 4 + 2 * 2)[0] + 1], 0)
+        with self.assertRaisesRegex(ModError, 'caracteres'):
+            compile_table(config, catalog, {i: c for i, c in GLYPHS.items() if c != 'O'},
+                          phrases={'2': 'Ola'})
+
+    def test_phrases_persist_with_settings(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = Project.create(Path(folder), 'Teste')
+            save_quest_settings(project, enabled=True, seed='s', requirements=MANUAL,
+                                phrases={'2': 'Me de um Jinzo!'})
+            self.assertEqual(quest_settings(Project.open(Path(folder)))['frases'], {'2': 'Me de um Jinzo!'})
+            save_quest_settings(project, enabled=False, seed='s', requirements=MANUAL)
+            self.assertEqual(quest_settings(project)['frases'], {'2': 'Me de um Jinzo!'})
+
     def test_config_is_opt_in_and_persists_through_reopen(self):
         with tempfile.TemporaryDirectory() as folder:
             project = Project.create(Path(folder), 'Teste')
@@ -185,7 +223,7 @@ class CampaignQuestsTests(unittest.TestCase):
 
     def test_scene_fits_three_requirements_for_every_npc_around_drop15(self):
         requirements = MANUAL['2']
-        payload, config, table = compiled_overlay({str(npc): requirements for npc in range(2, 39)})
+        payload, config, table = compiled_overlay({str(npc): requirements for npc in range(2, 39)}, phrases={})
         self.assertEqual(len(payload), OVERLAY_SIZE)
         self.assertEqual(len(config['quests']), 37)
         self.assertTrue(all(len(quest['criterios']) == 3 for quest in config['quests']))
@@ -197,7 +235,7 @@ class CampaignQuestsTests(unittest.TestCase):
     def test_four_requirements_for_every_npc_is_refused_not_overlapped(self):
         requirements = [*MANUAL['2'], {'tipo': 'carta', 'alvo': 1, 'quantidade': 1}]
         with self.assertRaisesRegex(ModError, 'não cabem'):
-            compiled_overlay({str(npc): requirements for npc in range(2, 39)})
+            compiled_overlay({str(npc): requirements for npc in range(2, 39)}, phrases={})
 
     def test_drop15_code_is_preserved_byte_for_byte(self):
         payload, _, _ = compiled_overlay()
@@ -392,6 +430,9 @@ class CampaignMipsTests(unittest.TestCase):
             channel = shop_channel
         prompt = word(channel)
         self.assertIn(b'Rever requisitos', read(prompt, 256))
+        page = read(prompt, 256)
+        self.assertTrue(page.startswith(b'Traga-me estas cartas e\xfeeu duelo com voce!\xfaAntes do duelo'),
+                        page[:80])
         before_options = read(prompt, 256).index(b'\xf8\x12\xfb\x02')
         word(channel, prompt + before_options + 2)
         write(0x8009B398, struct.pack('<H', 0x00C1))

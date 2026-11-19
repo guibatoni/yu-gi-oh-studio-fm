@@ -1751,7 +1751,37 @@ class CardRelationsDialog(tk.Toplevel):
         ttk.Entry(ritual, textvariable=self.ritual_result).pack(fill='x', pady=(3, 8))
         ttk.Button(ritual, text='Salvar ritual', style='Accent.TButton', command=self._save_ritual).pack(anchor='e')
         self.equip_targets = tk.StringVar()
-        ttk.Label(equip, text='IDs dos monstros equipáveis, separados por vírgula').pack(anchor='w')
+        bonus_row = ttk.Frame(equip)
+        bonus_row.pack(fill='x', pady=(0, 8))
+        from .ps1_equip_bonus import BONUS_MAX, default_bonus, equip_bonuses
+        current_bonus = equip_bonuses(studio.project).get(cid)
+        self.equip_bonus = tk.StringVar(value=str(current_bonus if current_bonus is not None
+                                                  else default_bonus(cid)))
+        ttk.Label(bonus_row, text='Bônus de ATK/DEF no PS1:').pack(side='left')
+        ttk.Spinbox(bonus_row, from_=0, to=BONUS_MAX, increment=50, width=7,
+                    textvariable=self.equip_bonus).pack(side='left', padx=6)
+        ttk.Button(bonus_row, text='Salvar bônus', command=self._save_equip_bonus).pack(side='left')
+        ttk.Button(bonus_row, text='Original', command=lambda: self._save_equip_bonus(reset=True)).pack(side='left', padx=4)
+        self.equip_bonus_status = tk.StringVar(value=('Bônus personalizado.' if current_bonus is not None else
+                                                      f'Original: +{default_bonus(cid)}.'))
+        ttk.Label(bonus_row, textvariable=self.equip_bonus_status, foreground='#5a6b7d').pack(side='left', padx=6)
+
+        ttk.Label(equip, text='Monstros equipáveis: busque e selecione vários (Ctrl/Shift + clique)').pack(anchor='w')
+        search_row = ttk.Frame(equip)
+        search_row.pack(fill='x', pady=(3, 3))
+        self.equip_query = tk.StringVar()
+        query = ttk.Entry(search_row, textvariable=self.equip_query)
+        query.pack(side='left', fill='x', expand=True)
+        query.bind('<KeyRelease>', lambda _e: self._render_equip_list())
+        ttk.Button(search_row, text='Selecionar visíveis', command=lambda: self._select_equip_visible(True)).pack(side='left', padx=(5, 0))
+        ttk.Button(search_row, text='Limpar visíveis', command=lambda: self._select_equip_visible(False)).pack(side='left', padx=(5, 0))
+        self.equip_list = tk.Listbox(equip, selectmode='extended', height=9, exportselection=False)
+        self.equip_list.pack(fill='both', expand=True)
+        self.equip_list.bind('<<ListboxSelect>>', self._equip_list_changed)
+        self._equip_rows, self._equip_selected = [], set()
+        self.equip_count = tk.StringVar()
+        ttk.Label(equip, textvariable=self.equip_count).pack(anchor='w')
+        ttk.Label(equip, text='IDs (também editável à mão, separados por vírgula)').pack(anchor='w', pady=(4, 0))
         ttk.Entry(equip, textvariable=self.equip_targets).pack(fill='x', pady=(3, 8))
         ttk.Button(equip, text='Salvar alvos', style='Accent.TButton', command=self._save_equip).pack(anchor='e')
         typ = int(studio.project.get(cid)['tipo_id'])
@@ -1787,6 +1817,8 @@ class CardRelationsDialog(tk.Toplevel):
             self.ritual_result.set(str(result))
         if self.cid in equips:
             self.equip_targets.set(', '.join(map(str, sorted(equips[self.cid]))))
+        self._equip_selected = set(equips.get(self.cid, ()))
+        self._render_equip_list()
 
     def _select_fusion(self, _event):
         selected = self.fusion_tree.selection()
@@ -1832,6 +1864,54 @@ class CardRelationsDialog(tk.Toplevel):
         self._change('rituais', lambda entries: entries.update({str(self.cid): {
             'tributos': parse_card_ids(self.tributes.get(), maximum=5),
             'resultado': positive_int(self.ritual_result.get(), 'Resultado')}}))
+
+    def _monster_rows(self):
+        cards = self.studio.project.cards
+        rows = []
+        for cid in sorted(cards):
+            card = self.studio.project.get(cid)
+            if int(card.get('tipo_id', 0)) < 20:
+                type_name = TYPE_NAMES[int(card['tipo_id'])] if int(card['tipo_id']) < len(TYPE_NAMES) else ''
+                rows.append((cid, f"#{cid:03d}  {display_name(cid, cards)}  · {type_name}"))
+        return rows
+
+    def _render_equip_list(self):
+        query = self.equip_query.get().casefold().lstrip('#').strip()
+        self._equip_rows = [row for row in self._monster_rows() if not query or query in row[1].casefold()]
+        self.equip_list.delete(0, 'end')
+        for index, (cid, label) in enumerate(self._equip_rows):
+            self.equip_list.insert('end', label)
+            if cid in self._equip_selected:
+                self.equip_list.selection_set(index)
+        self.equip_count.set(f'{len(self._equip_selected)} monstro(s) selecionado(s)')
+
+    def _equip_list_changed(self, _event=None):
+        visible = {cid for cid, _ in self._equip_rows}
+        chosen = {self._equip_rows[i][0] for i in self.equip_list.curselection()}
+        self._equip_selected = (self._equip_selected - visible) | chosen
+        self.equip_targets.set(', '.join(map(str, sorted(self._equip_selected))))
+        self.equip_count.set(f'{len(self._equip_selected)} monstro(s) selecionado(s)')
+
+    def _select_equip_visible(self, selected):
+        if selected:
+            self.equip_list.selection_set(0, 'end')
+        else:
+            self.equip_list.selection_clear(0, 'end')
+        self._equip_list_changed()
+
+    def _save_equip_bonus(self, reset=False):
+        from .ps1_equip_bonus import default_bonus, set_equip_bonus
+        try:
+            value = None if reset else int(self.equip_bonus.get().strip())
+            set_equip_bonus(self.studio.project, self.cid, value)
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Bônus do equipamento', str(exc) or 'Digite um número inteiro.', parent=self)
+            return
+        if value is None:
+            self.equip_bonus.set(str(default_bonus(self.cid)))
+            self.equip_bonus_status.set(f'Original: +{default_bonus(self.cid)}.')
+        else:
+            self.equip_bonus_status.set(f'+{value} salvo. Gere um BIN/CUE novo para aplicar.')
 
     def _save_equip(self):
         self._change('equipamentos', lambda entries: entries.update({str(self.cid):

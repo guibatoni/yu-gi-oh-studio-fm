@@ -46,7 +46,7 @@ struct Criterion {
 };
 
 struct Quest {
-    u8 count, pad;
+    u8 count, phrase;   /* phrase = length of the NPC line stored after the criteria */
     struct Criterion criteria[];
 };
 
@@ -293,6 +293,14 @@ static void show_quest(void)
     const struct Quest *quest = active.quest;
     unsigned missing = QuestCountMissing(quest), req;
     volatile u8 *out = active.dialog, *targets;
+    if (quest->phrase) {
+        /* Studio-edited NPC line ('\n' = new line), on its own page. */
+        const u8 *phrase = (const u8 *)&quest->criteria[quest->count];
+        unsigned i;
+        for (i = 0; i < quest->phrase; ++i)
+            *out++ = phrase[i] == '\n' ? 0xfe : glyph(phrase[i]);
+        *out++ = 0xfa;
+    }
     out = text(out, "Antes do duelo", 24);
     *out++ = 0xfe;
     for (req = 0; req < quest->count; ++req) {
