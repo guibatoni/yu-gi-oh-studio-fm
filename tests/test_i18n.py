@@ -72,9 +72,23 @@ class TranslateTests(unittest.TestCase):
         self.assertIsNone(results[2].translated)
         self.assertIsNone(results[3].translated)           # marcador sumiu: não traduz
         self.assertEqual(results[4].translated, 'Gewinnt ss')  # adaptado para a fonte do PS1
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 5)                     # o item 3 tenta os 3 formatos de marcador
         backup = tr.backup_payload(list(results.values()), 'de', 'google')
         self.assertEqual(set(backup['originais']), {'1', '4'})
+
+    def test_color_reordered_falls_back_to_plain_text(self):
+        from fmstudio import translate as tr
+        import urllib.parse
+
+        def fetch(url, data, headers):
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)['q'][0]
+            import re
+            marks = re.findall(r'⟦\d⟧|\[\d\]|#\d#', q)
+            if len(marks) == 3:   # com cores: devolve fechamento antes da abertura (como o chinês fez)
+                return json.dumps([[[f'A {marks[1]} B {marks[0]} C {marks[2]}', q, None]]])
+            return json.dumps([[[q.replace('Ganha', 'Gains'), q, None]]])
+        out = tr.translate_description('Ganha {color:azul}500{/color} {card:3}', 'zh', fetch=fetch)
+        self.assertEqual(out, 'Gains 500 {card:3}')
 
     def test_deepl_and_errors(self):
         from fmstudio import translate as tr

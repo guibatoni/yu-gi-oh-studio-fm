@@ -35,7 +35,6 @@ PROVIDERS = {
 }
 PS1_SAFE = str.maketrans({'ß': 'ss', 'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue',
                           '«': '"', '»': '"', '„': '"'})
-MARK = re.compile(r'⟦\s*(\d+)\s*⟧')
 TIMEOUT = 20
 
 
@@ -43,22 +42,39 @@ class TranslationError(Exception):
     pass
 
 
-def protect(text: str) -> tuple[str, list[str]]:
-    """Troca comandos do Studio por ⟦n⟧ (não traduzíveis)."""
+MARKERS = (  # formatos de marcador tentados em ordem (alguns idiomas mexem em um formato e não em outro)
+    ('⟦{}⟧', re.compile(r'⟦\s*(\d+)\s*⟧')),
+    ('[{}]', re.compile(r'[\[［]\s*(\d+)\s*[\]］]')),
+    ('#{}#', re.compile(r'[#＃]\s*(\d+)\s*[#＃]')),
+)
+COLOR = re.compile(r'\{color:[a-z]+\}|\{/color\}|\{f8 0A [0-9A-Fa-f]{2}\}')
+
+
+def protect(text: str, marker: str = MARKERS[0][0]) -> tuple[str, list[str]]:
+    """Troca comandos do Studio por marcadores (não traduzíveis)."""
     tokens = []
 
     def keep(match):
         tokens.append(match.group(0))
-        return f'⟦{len(tokens) - 1}⟧'
+        return marker.format(len(tokens) - 1)
     return TOKEN.sub(keep, text), tokens
 
 
-def restore(text: str, tokens: list[str]) -> str:
-    """Devolve os comandos; falha se algum marcador sumiu ou foi duplicado."""
-    found = [int(n) for n in MARK.findall(text)]
+def restore(text: str, tokens: list[str], pattern=MARKERS[0][1]) -> str:
+    """Devolve os comandos; falha se algum marcador sumiu, duplicou ou se as cores ficaram fora de ordem."""
+    found = [int(n) for n in pattern.findall(text)]
     if sorted(found) != list(range(len(tokens))):
         raise TranslationError('o tradutor alterou os comandos de cor/ícone/carta do texto')
-    return MARK.sub(lambda m: tokens[int(m.group(1))], text)
+    result = pattern.sub(lambda m: tokens[int(m.group(1))], text)
+    depth = 0
+    for tag in COLOR.findall(result):
+        if tag == '{/color}' or tag.lower() == '{f8 0a 00}':
+            depth -= 1
+        else:
+            depth = 1
+        if depth < 0:
+            raise TranslationError('o tradutor trocou a ordem das cores do texto')
+    return result
 
 
 def prepare(text: str, *, keep_breaks: bool) -> str:
@@ -138,16 +154,31 @@ class Result:
 
 def translate_description(text: str, target: str, *, provider='google', api_key='', keep_breaks=False,
                           for_ps1=True, fetch=None) -> str:
-    protected, tokens = protect(prepare(text, keep_breaks=keep_breaks))
-    if keep_breaks and '\n' in protected:
-        lines = [translate_text(line, target, provider=provider, api_key=api_key, fetch=fetch) if line.strip() else line
-                 for line in protected.split('\n')]
-        translated = '\n'.join(lines)
-    else:
-        translated = translate_text(protected, target, provider=provider, api_key=api_key, fetch=fetch)
-    translated = restore(translated, tokens)
-    translated = re.sub(r'[ \t]+', ' ', translated).strip()
-    return ps1_safe(translated) if for_ps1 else translated
+    """Tenta marcadores diferentes; se as cores atrapalharem, traduz sem as cores (texto fica sem cor)."""
+    base = prepare(text, keep_breaks=keep_breaks)
+    attempts = [(base, marker, pattern) for marker, pattern in MARKERS]
+    plain = COLOR.sub('', base)
+    if plain != base:
+        attempts += [(plain, marker, pattern) for marker, pattern in MARKERS]
+    error = None
+    for source, marker, pattern in attempts:
+        protected, tokens = protect(source, marker)
+        try:
+            if keep_breaks and '\n' in protected:
+                translated = '\n'.join(
+                    translate_text(line, target, provider=provider, api_key=api_key, fetch=fetch)
+                    if line.strip() else line for line in protected.split('\n'))
+            else:
+                translated = translate_text(protected, target, provider=provider, api_key=api_key, fetch=fetch)
+            translated = restore(translated, tokens, pattern)
+        except TranslationError as exc:
+            if 'comandos' not in str(exc) and 'cores' not in str(exc):
+                raise                       # rede/serviço: não adianta tentar outro marcador
+            error = exc
+            continue
+        translated = re.sub(r'[ \t]+', ' ', translated).strip()
+        return ps1_safe(translated) if for_ps1 else translated
+    raise error or TranslationError('tradução vazia')
 
 
 def translate_many(items: dict[int, str], target: str, *, provider='google', api_key='', keep_breaks=False,
