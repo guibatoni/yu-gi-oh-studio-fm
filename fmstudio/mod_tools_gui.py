@@ -17,6 +17,7 @@ from .passwords import (
     PS1_ID_PREFIX, chest_cards, grant_card, id_code, import_original_passwords, ps1_id_code,
     redeem_id, redeem_original, set_ps1_id_passwords, original_passwords,
 )
+from .ps1_drop_count import CHOICES as CARD_CHOICES, MOD_DEFAULT, cards_per_win, set_cards_per_win
 from .ps1_economy import (
     CHEST_VISIBILITY_KEY, PRICE_LIMIT, STAR_LIMIT, chest_show_all,
     fixed_win_reward, price_overrides, set_chest_show_all,
@@ -283,6 +284,23 @@ class PasswordsDialog(tk.Toplevel):
                                'O valor será gravado no SLUS da próxima cópia BIN/CUE.'),
                   wraplength=600,foreground=ACCENT).pack(anchor='w',pady=(20,0))
         tabs.add(rewards,text='Estrelas por duelo')
+
+        drops = ttk.Frame(tabs,padding=16)
+        ttk.Label(drops,text='Cartas recebidas ao vencer um duelo no PS1 (Drop x15)',
+                  font=('Segoe UI',11,'bold')).pack(anchor='w',pady=(0,12))
+        initial_cards = cards_per_win(project)
+        self.cards_per_win = tk.StringVar(value=str(initial_cards or MOD_DEFAULT))
+        for count in CARD_CHOICES:
+            label = f'{count}x — {count} carta' + ('s' if count > 1 else '') + ' por vitória'
+            if count == MOD_DEFAULT:
+                label += ' (padrão do Drop x15)'
+            ttk.Radiobutton(drops,text=label,variable=self.cards_per_win,value=str(count)).pack(anchor='w',pady=3)
+        ttk.Button(drops,text='Salvar cartas por vitória',command=self._save_cards_per_win).pack(anchor='w',pady=(10,0))
+        ttk.Label(drops,text=('Cada carta é sorteada com os pesos de drop do oponente e do RANK, como no jogo. '
+                             'A tela de resultado alterna os nomes das cartas recebidas. '
+                             'O valor é gravado no SLUS e nos dados de duelo da próxima cópia BIN/CUE.'),
+                  wraplength=600,foreground=ACCENT).pack(anchor='w',pady=(20,0))
+        tabs.add(drops,text='Cartas por vitória')
         if owner is not studio or not originals:
             tabs.select(self.ids)
 
@@ -491,6 +509,16 @@ class PasswordsDialog(tk.Toplevel):
             return
         self.studio.notify('Ganho original por rank restaurado.' if amount is None else
                            f'Ganho fixo configurado: {amount} Star Chips por vitória.')
+
+    def _save_cards_per_win(self):
+        try:
+            self._check_project()
+            count=int(self.cards_per_win.get())
+            set_cards_per_win(self.project,None if count==MOD_DEFAULT else count)
+        except (ModError,ValueError,OSError) as exc:
+            messagebox.showerror('Cartas por vitória',str(exc),parent=self)
+            return
+        self.studio.notify(f'{count} carta(s) por vitória. Gere um BIN/CUE novo para aplicar.')
 
     def _toggle_chest_ps1(self):
         try:

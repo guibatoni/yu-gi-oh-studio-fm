@@ -146,7 +146,8 @@ def resident_mod_code(exe: bytes) -> bytes:
     size = DROP15_END - DROP15_CODE
     at = exe_pos(DROP15_CODE, exe, size)
     code = exe[at:at + size]
-    if hashlib.sha256(code).hexdigest() != DROP15_CODE_SHA256:
+    from .ps1_drop_count import canonical  # cards-per-win changes 6 words of this code
+    if hashlib.sha256(canonical(code)).hexdigest() != DROP15_CODE_SHA256:
         raise ModError('O código residente do Drop x15 em 0x801AAC40 diverge do perfil das quests; '
                        'as quests sobrescreveriam rotinas do mod.')
     return code

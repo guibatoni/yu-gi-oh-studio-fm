@@ -8,6 +8,22 @@
 - Frases ocupam espaço da cena do PS1. Se não couber, a exportação é recusada
   com mensagem.
 
+### Cartas por vitória (1x, 3x, 5x, 15x, 30x)
+
+- Nova aba **Cartas por vitória** em Passwords e baú. O Drop x15 sorteia 5 cartas
+  por vitória no próprio código residente (`0x801AAC40..0x801AAEE0`). O Studio
+  altera os limites do laço de sorteio (`0x801AAC78`), da entrega por
+  `Duel_AwardCard` (`0x801AAD74`) e do rodízio do nome no resultado (`0x801AADEC`).
+- A lista sorteada cabe em `0x801AAC20..0x801AAC3F` até 15 cartas. Com 30, a base
+  passa para `0x801AABE0` (três `addiu`). Essa área é o buffer de IA do campo,
+  recarregado a cada duelo.
+- Todas as cópias reconhecidas do código do mod são alteradas: a do SLUS é
+  obrigatória, e as do WA_MRG são incluídas quando existem. O relatório de
+  exportação mostra quantas cópias foram alteradas. As quests continuam
+  validando o código do mod pela forma canônica.
+- Ainda a validar no ePSXe: entrega e exibição das cartas para cada opção,
+  inclusive 30x.
+
 ## v1.9.16 — Quests preservam o código do Drop x15 (QOV7)
 
 - Causa raiz do travamento em **Doar e duelar** (`801AAE78/801AAE80`),
