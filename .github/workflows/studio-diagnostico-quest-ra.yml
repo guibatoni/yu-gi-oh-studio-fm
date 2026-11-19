@@ -1,0 +1,57 @@
+name: Studio FM - diagnostico quest RA (sem release)
+on:
+  push:
+    branches:
+      - claude/diagnostico-quest-ra
+    paths:
+      - '.github/workflows/studio-diagnostico-quest-ra.yml'
+      - 'fmstudio/campaign_quests.py'
+      - 'tests/test_quest_crash_diagnostic.py'
+      - 'DIAGNOSTICO_QUEST_RA.bat'
+      - 'tools/ps1/campaign_quests.c'
+      - 'tools/ps1/campaign_quest_loader.S'
+      - 'fmstudio/ps1_campaign_quest_overlay_blob.py'
+      - 'fmstudio/ps1_campaign_quests.py'
+      - 'tests/test_campaign_quests.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-quest-ra-diagnostic:
+    runs-on: windows-latest
+    steps:
+      - name: Obter codigo do diagnostico
+        uses: actions/checkout@v4
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias de teste e empacotamento
+        run: python -m pip install pillow unicorn==2.1.4 pyinstaller
+      - name: Testar quest/VM e ABI MIPS
+        run: python -m unittest discover -s tests -p "test_*quest*.py" -v
+      - name: Compilar Studio Windows (diagnostico)
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --add-data "assets/icons;assets/icons" --collect-all PIL --name FM-Mod-Studio app.py
+      - name: Compilar atualizador independente (nao publicar)
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name FM-Mod-Studio-Updater updater_main.py
+      - name: Empacotar candidato e checksum
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Copy-Item dist/FM-Mod-Studio.exe release/FM-Mod-Studio.exe
+          Copy-Item dist/FM-Mod-Studio-Updater.exe release/FM-Mod-Studio-Updater.exe
+          Copy-Item LEIA-ME.txt release/LEIA-ME.txt
+          Copy-Item INICIAR.bat release/INICIAR.bat
+          Copy-Item DIAGNOSTICO_QUEST_RA.bat release/DIAGNOSTICO_QUEST_RA.bat
+          Copy-Item docs/DIAGNOSTICO_QUEST_RA.md release/DIAGNOSTICO_QUEST_RA.md
+          Compress-Archive -Path release/* -DestinationPath Studio-FM-Diagnostico-Quest-RA.zip -Force
+          $hash = (Get-FileHash -Algorithm SHA256 Studio-FM-Diagnostico-Quest-RA.zip).Hash.ToLowerInvariant()
+          "$hash  Studio-FM-Diagnostico-Quest-RA.zip" | Set-Content -Encoding ascii Studio-FM-Diagnostico-Quest-RA.zip.sha256
+      - name: Disponibilizar binario de teste (sem ROM ou release oficial)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Studio-FM-Diagnostico-Quest-RA
+          path: |
+            Studio-FM-Diagnostico-Quest-RA.zip
+            Studio-FM-Diagnostico-Quest-RA.zip.sha256
+          retention-days: 14

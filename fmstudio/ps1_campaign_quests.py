@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import struct
 from pathlib import Path
 
 from . import ps1_campaign_quest_overlay_blob as overlay
-from .campaign_quests import (STORY_DUELISTS, QuestCatalog, compile_table, generate_quests,
+from .campaign_quests import (DIAG_CATCHER_OFFSET, DIAG_GAP, DIAG_RECORDS_START, STORY_DUELISTS,
+                              TABLE_START, QuestCatalog, compile_table, generate_quests,
                               normalize_overrides, table_size)
 from .core import ModError, ps1_supports_god24
 from .deep_extract import exe_pos, extract_texts, glyph_map
@@ -36,6 +38,10 @@ SCENE_SECTOR_OPERAND = 0x8002FD34
 CAMPAIGN_SCRIPT_SECTOR = 0x1E68
 CAMPAIGN_SCRIPT_HASH = '3fad8492631848e6074de293b809057644beaadf932af410c9500aa6dc2f73b1'
 SCENE_PREFIX_SECTORS = CAMPAIGN_SCRIPT_SECTOR - CAMPAIGN_SCENE_SECTOR + 2
+# Opt-in crash catcher (see campaign_quests.DIAG_GAP). Never set by the GUI.
+DIAGNOSTIC_ENV = 'FMSTUDIO_DIAGNOSTICO_QUEST_RA'
+# Physical PCs reported by ePSXe in QOV3..QOV5 after "Doar e duelar".
+OBSERVED_CRASH_PCS = (0x801AAE78, 0x801AAE80)
 QUEST_HANDLERS = {'duel': overlay.DUEL_LOADER, 'answer': overlay.ANSWER_LOADER,
                   'shop': overlay.SHOP_LOADER}
 
@@ -127,14 +133,22 @@ def preview_project_quests(project, source: Path, seed: str, requirements: dict)
     return generate_quests(catalog, seed, requirements)
 
 
-def build_quest_overlay(exe: bytes, catalog: QuestCatalog, settings: dict, *, level_address: int):
+def build_quest_overlay(exe: bytes, catalog: QuestCatalog, settings: dict, *, level_address: int,
+                        diagnostic: bool | None = None):
     if (hashlib.sha256(overlay.PAYLOAD).hexdigest() != overlay.SHA256
             or overlay.BASE != OVERLAY_START + OVERLAY_HEADER.size
             or overlay.BASE + len(overlay.PAYLOAD) != overlay.ENTRY_POINTS['QuestConfiguration']):
         raise ModError('O código MIPS das quests diverge do compilado.')
     config = generate_quests(catalog, settings['seed'], settings['requisitos'])
     glyphs, _ = glyph_map(exe)
-    table = compile_table(config, catalog, glyphs)
+    if diagnostic is None:
+        diagnostic = os.environ.get(DIAGNOSTIC_ENV) == '1'
+    if diagnostic:
+        base = overlay.ENTRY_POINTS['QuestConfiguration']
+        if not (base + TABLE_START < min(OBSERVED_CRASH_PCS)
+                and max(OBSERVED_CRASH_PCS) < base + DIAG_CATCHER_OFFSET):
+            raise ModError('A área de diagnóstico não cobre o PC observado no ePSXe.')
+    table = compile_table(config, catalog, glyphs, diagnostic=diagnostic)
     payload = OVERLAY_HEADER.pack(OVERLAY_MAGIC, level_address) + overlay.PAYLOAD + table
     if len(payload) > OVERLAY_SIZE - len(OVERLAY_MAGIC):
         raise ModError('A tabela de quests excede o espaço de carregamento do PS1.')
@@ -252,7 +266,9 @@ def inspect_quest_overlay(exe, wa=None, *, expanded=False):
             return {'status': 'divergente'}
         data = payload[OVERLAY_HEADER.size + overlay.SIZE:-len(OVERLAY_MAGIC)]
         table = data[:table_size(data)]
+        diagnostic = data[TABLE_START:DIAG_RECORDS_START] == DIAG_GAP
         return {'status': 'aplicado', 'setor_wa': sector, 'setor_cena_wa': scene_sector,
+                'diagnostico_ra': diagnostic,
                 'duelistas': len(STORY_DUELISTS),
                 'momento': 'antes_do_duelo', 'retorno_card_shop': True,
                 'sha256_tabela': hashlib.sha256(table).hexdigest(), 'validado_epsxe': False}

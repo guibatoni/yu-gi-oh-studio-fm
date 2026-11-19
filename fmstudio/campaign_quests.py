@@ -33,6 +33,29 @@ TABLE_PREFIX = b'FMQ2'
 TABLE_START = (4 + 39 * 2 + 95 + CARD_COUNT + 1) & ~1
 RECORD = struct.Struct(f'<BBHH{LABEL_WIDTH}s')
 
+# Diagnostic layout (never enabled by default). Every Drop x15 crash after
+# "Doar e duelar" (QOV3, QOV4 and QOV5) stopped at almost the same physical PC
+# (0x1AAE78/0x1AAE80) although the table and code moved between versions, so
+# a native jump lands at a fixed address inside the quest arena. ePSXe only
+# reports the PC. This layout fills the area with NOPs and ends it with a
+# catcher that writes an invalid opcode (0x1B) to the physical address in $ra
+# through the uncached KSEG1 alias and jumps there: the ePSXe error then
+# reports the caller's return address instead of 0x1AAE78.
+DIAG_CATCHER_OFFSET = 0x5B0
+DIAG_RECORDS_START = 0x5E0
+DIAG_CATCHER = struct.pack('<9I',
+    0x3C18001F,  # lui  t8, 0x001F
+    0x3718FFFC,  # ori  t8, t8, 0xFFFC
+    0x03F8C024,  # and  t8, ra, t8        physical return address
+    0x3C19A000,  # lui  t9, 0xA000
+    0x0319C025,  # or   t8, t8, t9        KSEG1 alias, not in the dynarec cache
+    0x3C196C00,  # lui  t9, 0x6C00        primary opcode 0x1B (invalid)
+    0xAF190000,  # sw   t9, 0(t8)
+    0x03000008,  # jr   t8                ePSXe: "Opcode 1b UNK (PC <ra>)"
+    0x00000000)  # nop
+DIAG_GAP = (bytes(DIAG_CATCHER_OFFSET - TABLE_START) + DIAG_CATCHER
+            + bytes(DIAG_RECORDS_START - DIAG_CATCHER_OFFSET - len(DIAG_CATCHER)))
+
 
 def guaranteed_predecessors(opponent: int) -> tuple[int, ...]:
     """Simon is available in Free Duel. Other sources require a prior story win."""
@@ -286,8 +309,10 @@ def verify_quests(config, catalog):
     return generate_quests(catalog, config['seed'], manual)
 
 
-def compile_table(config, catalog, glyphs):
-    """Little-endian table used by the campaign MIPS overlay."""
+def compile_table(config, catalog, glyphs, *, diagnostic=False):
+    """Little-endian table used by the campaign MIPS overlay.
+
+    ``diagnostic`` inserts DIAG_GAP before the quest records (crash catcher)."""
     config = verify_quests(config, catalog)
     lookup = {char: code for code, char in glyphs.items() if code < 0xF0}
     if any(char not in lookup for char in '0123456789/'):
@@ -297,6 +322,8 @@ def compile_table(config, catalog, glyphs):
     table.extend(lookup.get(chr(code), unknown) for code in range(32, 127))
     table.extend(tuple(RARITIES).index(catalog.cards[cid]['raridade']) for cid in range(1, CARD_COUNT + 1))
     table.extend(bytes(TABLE_START - len(table)))
+    if diagnostic:
+        table.extend(DIAG_GAP)
     for quest in config['quests']:
         struct.pack_into('<H', table, 4 + 2 * quest['oponente_id'], len(table))
         criteria = quest['criterios']
@@ -316,6 +343,9 @@ def table_size(data):
             or struct.unpack_from('<H', data, 4 + 2 * SIMON_MURAN)[0]):
         raise ModError('Cabeçalho da tabela de quests divergente.')
     end = TABLE_START
+    if (struct.unpack_from('<H', data, 4 + 2 * STORY_DUELISTS[0])[0] == DIAG_RECORDS_START
+            and data[TABLE_START:DIAG_RECORDS_START] == DIAG_GAP):
+        end = DIAG_RECORDS_START
     for duel in STORY_DUELISTS:
         if (struct.unpack_from('<H', data, 4 + 2 * duel)[0] != end or end + 2 > len(data)
                 or not 1 <= data[end] <= MAX_CRITERIA):
