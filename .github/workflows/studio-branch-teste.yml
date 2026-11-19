@@ -56,10 +56,12 @@ jobs:
             PYTHONPATH=. xvfb-run -a -s '-screen 0 1600x950x24' python "$test"
           done
       - name: Capturas de tela da interface (Linux)
+        if: always()
         env:
           FMSTUDIO_UI_PREFS: ${{ runner.temp }}/capturas.json
         run: xvfb-run -a -s '-screen 0 1600x950x24' python tools/ui_screenshots.py capturas-linux
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: capturas-linux
           path: capturas-linux

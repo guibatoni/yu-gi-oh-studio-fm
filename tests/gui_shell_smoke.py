@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory() as temp:
     root = Studio()
     root.update()
     assert root._section == 'inicio', root._section
-    assert str(root.library) not in root.outer.panes()          # início sem biblioteca
+    assert not root.library_shown()          # início sem biblioteca
     root.project, root.drafts = project, DraftSession(project)
     root._remember_project()
     root._refresh_all()
@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory() as temp:
         assert root.tabs.select() == str(getattr(root, section.tab))
         if section.mod is not None:
             assert root.mod_editor.tabs.index('current') == section.mod
-        assert (str(root.library) in root.outer.panes()) == section.library, section.key
+        assert root.library_shown() == section.library, section.key
         assert bool(root.mod_editor.head.winfo_manager()) == (section.key in ('deck', 'drops', 'iniciais', 'quests')) \
             or section.tab != 'tab_mod', section.key
 
@@ -65,9 +65,9 @@ with tempfile.TemporaryDirectory() as temp:
     root.toggle_sidebar(); root.update()
     root.show_section('cartas'); root.update()
     root.toggle_library(); root.update()
-    assert str(root.library) not in root.outer.panes()
+    assert not root.library_shown()
     root.toggle_library(); root.update()
-    assert str(root.library) in root.outer.panes()
+    assert root.library_shown()
 
     # Edição em lote: vai para os rascunhos, grava só ao salvar.
     from fmstudio.card_batch_gui import CardBatchDialog

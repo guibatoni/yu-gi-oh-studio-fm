@@ -1012,7 +1012,7 @@ class Studio(tk.Tk):
     def _apply_library_visibility(self):
         section = ui_nav.BY_KEY.get(self._section or 'inicio')
         wanted = bool(section and section.library and self.prefs.get('biblioteca_visivel', True))
-        shown = str(self.library) in self.outer.panes()
+        shown = self.library_shown()
         if wanted and not shown:
             self.outer.add(self.library, before=self.main_pane, width=self.prefs.get('largura_biblioteca', 327),
                            minsize=240, stretch='never')
@@ -1020,9 +1020,12 @@ class Studio(tk.Tk):
             self._remember_library_width()
             self.outer.forget(self.library)
 
+    def library_shown(self):
+        return str(self.library) in [str(pane) for pane in self.outer.panes()]
+
     def _remember_library_width(self):
         try:
-            if str(self.library) in self.outer.panes() and self.library.winfo_width() > 100:
+            if self.library_shown() and self.library.winfo_width() > 100:
                 self.prefs['largura_biblioteca'] = int(self.library.winfo_width())
         except tk.TclError:
             pass
