@@ -7,8 +7,8 @@
     ori $t0, $t0, 0x9000
     lw $t1, 0($t0)
     lw $t2, 0x2FFC($t0)
-    lui $t3, 0x3556
-    ori $t3, $t3, 0x4F51     /* QOV5: resident-controlled native duel handoff. */
+    lui $t3, 0x3756
+    ori $t3, $t3, 0x4F51     /* QOV7: resident handoff; overlay leaves Drop x15 code intact. */
     bne $t1, $t3, \fallback
     nop
     bne $t2, $t3, \fallback

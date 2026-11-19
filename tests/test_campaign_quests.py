@@ -17,11 +17,12 @@ from fmstudio.campaign_quests import (LEGACY_FORMAT, QuestCatalog, compile_table
 from fmstudio.core import ModError, Project
 from fmstudio.deep_extract import exe_pos
 from fmstudio.ps1_campaign_quests import (
-    CAMPAIGN_SCENE_SECTOR, CAMPAIGN_SCENE_SECTORS, COMMAND_TABLE, HOOKS, OVERLAY_SIZE,
+    DROP15_CODE, DROP15_END, DROP15_SCRATCH, CAMPAIGN_SCENE_SECTOR, CAMPAIGN_SCENE_SECTORS, COMMAND_TABLE, HOOKS, OVERLAY_SIZE,
     OVERLAY_START, OVERLAY_MAGIC, SCENE_PREFIX_SECTORS, SECTOR_BYTES, _scene_patches, append_quest_scene,
     build_quest_overlay, inspect_quest_overlay, install_quest_handlers, quest_settings,
-    reserve_quest_handlers, save_quest_settings,
+    reserve_quest_handlers, save_quest_settings, foreign_arena_jumps,
 )
+from fmstudio.campaign_quests import TABLE_START
 from fmstudio.ps1_expansion import EXPANDED_LEVELS, EXTRA_SLOTS
 from fmstudio.tables import PS1_SUPREME, STATS_ADDR
 from fmstudio import ps1_campaign_quest_overlay_blob as quest_blob
@@ -46,16 +47,29 @@ def sample_quests():
     return QuestCatalog.from_rows(cards, drops, starters)
 
 
-def compiled_overlay():
+# Stand-in for the Drop x15 resident code (the real bytes come from the user's SLUS).
+FAKE_DROP15 = bytes((i * 37 + 11) & 0xFF for i in range(DROP15_END - DROP15_CODE))
+FAKE_DROP15_SHA = hashlib.sha256(FAKE_DROP15).hexdigest()
+
+
+def setUpModule():
+    patcher = patch('fmstudio.ps1_campaign_quests.DROP15_CODE_SHA256', FAKE_DROP15_SHA)
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
+
+def compiled_overlay(requirements=None):
     catalog = sample_quests()
-    overrides = {**MANUAL, '38': MANUAL['2']}
+    overrides = requirements or {**MANUAL, '38': MANUAL['2']}
     with patch('fmstudio.ps1_campaign_quests.glyph_map', return_value=(GLYPHS, [])):
-        return build_quest_overlay(b'', catalog, {'seed': 'teste', 'requisitos': overrides},
+        return build_quest_overlay(executable(), catalog, {'seed': 'teste', 'requisitos': overrides},
                                    level_address=EXPANDED_LEVELS)
 
 
 def executable():
     exe = bytearray(0x1e0800)
+    at = exe_pos(DROP15_CODE, exe, len(FAKE_DROP15))
+    exe[at:at + len(FAKE_DROP15)] = FAKE_DROP15
     native = [*HOOKS.values(), (COMMAND_TABLE + 4 * 0x19, 0x80038AB0),
               *((address, before) for address, before, _ in _scene_patches(QUEST_SECTOR))]
     for hook, address in native:
@@ -164,21 +178,57 @@ class CampaignQuestsTests(unittest.TestCase):
             end = report['setor_wa'] * SECTOR_BYTES + OVERLAY_SIZE
             wrong = wa[:end - 1] + b'\0' + wa[end:]
             self.assertEqual(inspect_quest_overlay(patched, wrong, expanded=True)['status'], 'divergente')
-            self.assertEqual(OVERLAY_MAGIC, b'QOV5')
-            old_generation = wa[:end - 4] + b'QOV4' + wa[end:]
+            self.assertEqual(OVERLAY_MAGIC, b'QOV7')
+            old_generation = wa[:end - 4] + b'QOV5' + wa[end:]
             self.assertEqual(inspect_quest_overlay(
                 patched, old_generation, expanded=True)['status'], 'divergente')
 
-    def test_scene_fits_four_requirements_for_every_npc(self):
-        requirements = [*MANUAL['2'], {'tipo': 'carta', 'alvo': 1, 'quantidade': 1}]
-        settings = {'seed': 'teste', 'requisitos': {str(npc): requirements for npc in range(2, 39)}}
-        with patch('fmstudio.ps1_campaign_quests.glyph_map', return_value=(GLYPHS, [])):
-            payload, config, table = build_quest_overlay(b'', sample_quests(), settings,
-                                                        level_address=EXPANDED_LEVELS)
+    def test_scene_fits_three_requirements_for_every_npc_around_drop15(self):
+        requirements = MANUAL['2']
+        payload, config, table = compiled_overlay({str(npc): requirements for npc in range(2, 39)})
         self.assertEqual(len(payload), OVERLAY_SIZE)
         self.assertEqual(len(config['quests']), 37)
-        self.assertTrue(all(len(quest['criterios']) == 4 for quest in config['quests']))
-        self.assertEqual(table_size(table), len(table))
+        self.assertTrue(all(len(quest['criterios']) == 3 for quest in config['quests']))
+        gap = (DROP15_SCRATCH - quest_blob.ENTRY_POINTS['QuestConfiguration'],
+               quest_blob.BSS_END - quest_blob.ENTRY_POINTS['QuestConfiguration'])
+        self.assertEqual(table_size(table, gap), len(table))
+        self.assertGreater(len(table), gap[1])  # records continue after the mod code
+
+    def test_four_requirements_for_every_npc_is_refused_not_overlapped(self):
+        requirements = [*MANUAL['2'], {'tipo': 'carta', 'alvo': 1, 'quantidade': 1}]
+        with self.assertRaisesRegex(ModError, 'não cabem'):
+            compiled_overlay({str(npc): requirements for npc in range(2, 39)})
+
+    def test_drop15_code_is_preserved_byte_for_byte(self):
+        payload, _, _ = compiled_overlay()
+        at = DROP15_CODE - OVERLAY_START
+        self.assertEqual(payload[at:at + len(FAKE_DROP15)], FAKE_DROP15)
+        self.assertFalse(any(payload[DROP15_SCRATCH - OVERLAY_START:at]))       # mod save area
+        self.assertFalse(any(payload[quest_blob.BSS_START - OVERLAY_START:
+                                     quest_blob.BSS_END - OVERLAY_START]))     # quest state
+        self.assertLessEqual(quest_blob.ENTRY_POINTS['QuestConfiguration'] + TABLE_START, DROP15_SCRATCH)
+        self.assertGreaterEqual(quest_blob.BSS_START, DROP15_END)
+
+    def test_refuses_wrong_drop15_code_and_foreign_jumps(self):
+        exe = bytearray(executable())
+        at = exe_pos(DROP15_CODE, exe, 4)
+        exe[at] ^= 1
+        with patch('fmstudio.ps1_campaign_quests.glyph_map', return_value=(GLYPHS, [])), \
+                self.assertRaisesRegex(ModError, 'Drop x15'):
+            build_quest_overlay(bytes(exe), sample_quests(), {'seed': 's', 'requisitos': MANUAL},
+                                level_address=EXPANDED_LEVELS)
+        exe = bytearray(executable())
+        site = 0x80021834
+        struct.pack_into('<I', exe, exe_pos(site, exe, 4), 0x08000000 | (0x801AA000 >> 2) & 0x03FFFFFF)
+        self.assertEqual(foreign_arena_jumps(bytes(exe)), [(site, 0x801AA000)])
+        with patch('fmstudio.ps1_campaign_quests.glyph_map', return_value=(GLYPHS, [])), \
+                self.assertRaisesRegex(ModError, 'Conflito'):
+            build_quest_overlay(bytes(exe), sample_quests(), {'seed': 's', 'requisitos': MANUAL},
+                                level_address=EXPANDED_LEVELS)
+        # The real Drop x15 hooks (into its own code) are allowed.
+        exe = bytearray(executable())
+        struct.pack_into('<I', exe, exe_pos(0x80037DFC, exe, 4), 0x0806AB9D)   # j 0x801AAE74
+        self.assertEqual(foreign_arena_jumps(bytes(exe)), [])
 
 
 @unittest.skipIf(Uc is None, 'MIPS verification needs Unicorn')

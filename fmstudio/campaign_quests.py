@@ -286,8 +286,12 @@ def verify_quests(config, catalog):
     return generate_quests(catalog, config['seed'], manual)
 
 
-def compile_table(config, catalog, glyphs):
-    """Little-endian table used by the campaign MIPS overlay."""
+def compile_table(config, catalog, glyphs, *, gap=None, limit=None):
+    """Little-endian table used by the campaign MIPS overlay.
+
+    ``gap`` = (lo, hi) offsets reserved for another program (Drop x15 code and the
+    overlay's own state); records never cross it and the bytes stay zero here.
+    ``limit`` is the first offset the table may not reach."""
     config = verify_quests(config, catalog)
     lookup = {char: code for code, char in glyphs.items() if code < 0xF0}
     if any(char not in lookup for char in '0123456789/'):
@@ -298,8 +302,14 @@ def compile_table(config, catalog, glyphs):
     table.extend(tuple(RARITIES).index(catalog.cards[cid]['raridade']) for cid in range(1, CARD_COUNT + 1))
     table.extend(bytes(TABLE_START - len(table)))
     for quest in config['quests']:
-        struct.pack_into('<H', table, 4 + 2 * quest['oponente_id'], len(table))
         criteria = quest['criterios']
+        size = 2 + len(criteria) * RECORD.size
+        if gap is not None and len(table) < gap[1] and len(table) + size > gap[0]:
+            table.extend(bytes(gap[1] - len(table)))
+        if limit is not None and len(table) + size > limit:
+            raise ModError('As quests não cabem na área livre da cena do PS1. '
+                           'Reduza a quantidade de requisitos por duelista.')
+        struct.pack_into('<H', table, 4 + 2 * quest['oponente_id'], len(table))
         table.extend((len(criteria), 0))
         for row in criteria:
             label = unicodedata.normalize('NFKD', row['rotulo']).encode('ascii', 'ignore').strip()
@@ -310,18 +320,23 @@ def compile_table(config, catalog, glyphs):
     return bytes(table)
 
 
-def table_size(data):
-    """Validate the offsets and return the on-disc table length."""
+def table_size(data, gap=None):
+    """Validate the offsets and return the on-disc table length.
+
+    With ``gap`` = (lo, hi), a record may jump from before ``lo`` to exactly ``hi``."""
     if (not data.startswith(TABLE_PREFIX) or len(data) < TABLE_START
             or struct.unpack_from('<H', data, 4 + 2 * SIMON_MURAN)[0]):
         raise ModError('Cabeçalho da tabela de quests divergente.')
     end = TABLE_START
     for duel in STORY_DUELISTS:
+        if (gap is not None and end <= gap[0]
+                and struct.unpack_from('<H', data, 4 + 2 * duel)[0] == gap[1]):
+            end = gap[1]
         if (struct.unpack_from('<H', data, 4 + 2 * duel)[0] != end or end + 2 > len(data)
                 or not 1 <= data[end] <= MAX_CRITERIA):
             raise ModError(f'Registro binário de quest inválido para duelista #{duel}.')
         next_end = end + 2 + data[end] * RECORD.size
-        if next_end > len(data):
+        if next_end > len(data) or (gap is not None and end < gap[0] < next_end):
             raise ModError('Tabela binária de quests truncada.')
         for start in range(end + 2, next_end, RECORD.size):
             kind, amount, _, source, _ = RECORD.unpack_from(data, start)

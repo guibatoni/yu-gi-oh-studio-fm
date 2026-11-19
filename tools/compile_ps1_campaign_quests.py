@@ -59,16 +59,21 @@ def main():
                                          text=True).splitlines())}
         sections = quest_sections(executable.read_bytes())
     address, payload = sections['.quest']
+    bss_start = sections['.quest_bss'][0] if '.quest_bss' in sections else None
+    bss_end = names.get('QuestBssEnd')
     duel_at, duel = sections['.quest_before']
     answer_at, answer = sections['.quest_answer']
     shop_at, shop = sections['.quest_shop']
     if (address != BASE or names['QuestConfiguration'] != BASE + len(payload)
             or names['QuestDuelLoader'] != duel_at or names['QuestAnswerLoader'] != answer_at
-            or names['QuestShopLoader'] != shop_at):
+            or names['QuestShopLoader'] != shop_at
+            or bss_start is None or bss_end is None or not bss_start <= bss_end):
         raise ValueError('Endereços do código MIPS divergentes.')
     header = ['"""Gerado por tools/compile_ps1_campaign_quests.py."""',
               f'BASE = 0x{BASE:08X}', f'SIZE = {len(payload)}',
-              f'SHA256 = {hashlib.sha256(payload).hexdigest()!r}', 'ENTRY_POINTS = {']
+              f'SHA256 = {hashlib.sha256(payload).hexdigest()!r}',
+              '# Zero-initialised state, placed above the Drop x15 code (not in PAYLOAD).',
+              f'BSS_START = 0x{bss_start:08X}', f'BSS_END = 0x{bss_end:08X}', 'ENTRY_POINTS = {']
     header.extend(f'    {name!r}: 0x{names[name]:08X},' for name in
                   ('QuestBeforeDuel', 'QuestAnswer', 'QuestResumeShop', 'QuestCountMissing',
                    'QuestConfiguration'))

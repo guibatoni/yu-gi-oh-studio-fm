@@ -1,0 +1,91 @@
+name: Studio FM QOV7 - quests preservam o Drop x15 (teste, sem release)
+on:
+  push:
+    branches:
+      - claude/quests-preservar-drop-x15
+    paths:
+      - '.github/workflows/studio-qov7-preserva-drop15.yml'
+      - 'tools/ps1/campaign_quests.c'
+      - 'tools/ps1/campaign_quest_loader.S'
+      - 'tools/ps1/campaign_quests.ld'
+      - 'tools/compile_ps1_campaign_quests.py'
+      - 'fmstudio/campaign_quests.py'
+      - 'fmstudio/ps1_campaign_quests.py'
+      - 'tests/test_campaign_quests.py'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: qov7-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  recompilar-blob:
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.commit.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar Zig 0.13, Unicorn e dependencias
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb python3-tk
+          python -m pip install ziglang==0.13.0 unicorn==2.1.4 pillow
+      - name: Compilar overlay MIPS com Zig 0.13 (fonte da verdade do blob)
+        shell: bash
+        run: |
+          ZIG="$(python -c 'import ziglang,pathlib; print(pathlib.Path(ziglang.__file__).parent / "zig")')"
+          "$ZIG" version
+          python tools/compile_ps1_campaign_quests.py --zig "$ZIG" --nm nm
+          head -16 fmstudio/ps1_campaign_quest_overlay_blob.py
+      - name: Testes das quests (inclui MIPS/Unicorn)
+        run: python -m unittest discover -s tests -p "test_*quest*.py" -v
+      - name: Regressao completa do Studio
+        run: xvfb-run -a python -m unittest discover -s tests -v
+      - name: Gravar blob reproduzivel na branch
+        id: commit
+        shell: bash
+        run: |
+          if ! git diff --quiet -- fmstudio/ps1_campaign_quest_overlay_blob.py; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add fmstudio/ps1_campaign_quest_overlay_blob.py
+            git commit -m "build(ps1): blob QOV7 recompilado com Zig 0.13 pelo CI"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
+          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  build-windows:
+    needs: recompilar-blob
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.recompilar-blob.outputs.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias
+        run: python -m pip install pillow unicorn==2.1.4 pyinstaller
+      - name: Testes das quests no Windows
+        run: python -m unittest discover -s tests -p "test_*quest*.py" -v
+      - name: Compilar Studio de teste
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --add-data "assets/icons;assets/icons" --collect-all PIL --name FM-Studio-QOV7-TESTE app.py
+      - name: Empacotar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Copy-Item dist/FM-Studio-QOV7-TESTE.exe release/FM-Studio-QOV7-TESTE.exe
+          Copy-Item docs/CORRECAO_QUESTS_QOV7_DROP_X15.md release/LEIA-ME-QOV7.md
+          Compress-Archive -Path release/* -DestinationPath Studio-FM-QOV7-Teste.zip -Force
+          $hash = (Get-FileHash -Algorithm SHA256 Studio-FM-QOV7-Teste.zip).Hash.ToLowerInvariant()
+          "$hash  Studio-FM-QOV7-Teste.zip" | Set-Content -Encoding ascii Studio-FM-QOV7-Teste.zip.sha256
+      - name: Publicar pre-release de teste (ignorada pelo atualizador)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "teste-qov7-${{ github.run_number }}"
+          $notes = "Candidato de correcao das quests (QOV7): o overlay nao sobrescreve mais o codigo do Drop x15 em 0x801AAC00-0x801AAEE0. Feche outros Studios, abra FM-Studio-QOV7-TESTE.exe, gere um BIN/CUE novo a partir do Original Drop x15 e teste Doar e duelar ate o fim do duelo. Pre-release: o atualizador nao a instala."
+          gh release create $tag Studio-FM-QOV7-Teste.zip Studio-FM-QOV7-Teste.zip.sha256 --prerelease --target ${{ needs.recompilar-blob.outputs.ref }} --title "Studio FM - QOV7 quests + Drop x15 (teste)" --notes $notes

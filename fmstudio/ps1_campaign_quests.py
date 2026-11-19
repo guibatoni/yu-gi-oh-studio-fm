@@ -6,10 +6,10 @@ import struct
 from pathlib import Path
 
 from . import ps1_campaign_quest_overlay_blob as overlay
-from .campaign_quests import (STORY_DUELISTS, QuestCatalog, compile_table, generate_quests,
-                              normalize_overrides, table_size)
+from .campaign_quests import (STORY_DUELISTS, TABLE_START, QuestCatalog, compile_table,
+                              generate_quests, normalize_overrides, table_size)
 from .core import ModError, ps1_supports_god24
-from .deep_extract import exe_pos, extract_texts, glyph_map
+from .deep_extract import EXE_HEADER, EXE_START, exe_pos, extract_texts, glyph_map
 from .tables import CARD_COUNT, LEVEL_ADDR, decode_cards, decode_pools, decode_starters
 
 COMMAND_TABLE = 0x80090EAC
@@ -21,7 +21,7 @@ HOOKS = {
 }
 SETTINGS_KEY = 'ps1_campaign_quests'
 SECTOR_BYTES = 2048
-OVERLAY_MAGIC = b'QOV5'
+OVERLAY_MAGIC = b'QOV7'
 OVERLAY_SECTORS = 6
 OVERLAY_SIZE = OVERLAY_SECTORS * SECTOR_BYTES
 OVERLAY_START = 0x801A9000
@@ -36,6 +36,16 @@ SCENE_SECTOR_OPERAND = 0x8002FD34
 CAMPAIGN_SCRIPT_SECTOR = 0x1E68
 CAMPAIGN_SCRIPT_HASH = '3fad8492631848e6074de293b809057644beaadf932af410c9500aa6dc2f73b1'
 SCENE_PREFIX_SECTORS = CAMPAIGN_SCRIPT_SECTOR - CAMPAIGN_SCENE_SECTOR + 2
+OVERLAY_END = OVERLAY_START + OVERLAY_SIZE
+# Drop x15 resident code inside the quest scene arena (measured in ePSXe save
+# states of the unmodified Drop x15 image, identical to the SLUS bytes): card
+# drop draw (Duel_SelectCardDrop), result rewards and the card-name text
+# command jump into 0x801AAC40..0x801AAEE0; 0x801AAC00..0x801AAC3F is its
+# register save area. Overwriting it crashed "Doar e duelar" at PC 0x801AAE78.
+DROP15_SCRATCH = 0x801AAC00
+DROP15_CODE = 0x801AAC40
+DROP15_END = 0x801AAEE0
+DROP15_CODE_SHA256 = '4049fea05891ce3cd728d8d14e538eb899c053f8dc2eefec3507b5e4c2cd600e'
 QUEST_HANDLERS = {'duel': overlay.DUEL_LOADER, 'answer': overlay.ANSWER_LOADER,
                   'shop': overlay.SHOP_LOADER}
 
@@ -127,18 +137,74 @@ def preview_project_quests(project, source: Path, seed: str, requirements: dict)
     return generate_quests(catalog, seed, requirements)
 
 
-def build_quest_overlay(exe: bytes, catalog: QuestCatalog, settings: dict, *, level_address: int):
+def resident_mod_code(exe: bytes) -> bytes:
+    """Drop x15 code that must survive the quest scene load (verified by SHA-256)."""
+    size = DROP15_END - DROP15_CODE
+    at = exe_pos(DROP15_CODE, exe, size)
+    code = exe[at:at + size]
+    if hashlib.sha256(code).hexdigest() != DROP15_CODE_SHA256:
+        raise ModError('O código residente do Drop x15 em 0x801AAC40 diverge do perfil das quests; '
+                       'as quests sobrescreveriam rotinas do mod.')
+    return code
+
+
+def foreign_arena_jumps(exe: bytes) -> list[tuple[int, int]]:
+    """J/JAL outside the arena that land in it, other than Drop x15 code and quest entries."""
+    allowed = {overlay.ENTRY_POINTS[name] for name in ('QuestBeforeDuel', 'QuestAnswer', 'QuestResumeShop')}
+    found = []
+    for at in range(EXE_HEADER, len(exe) - 3, 4):
+        address = at - EXE_HEADER + EXE_START
+        if OVERLAY_START <= address < OVERLAY_END:
+            continue
+        word = struct.unpack_from('<I', exe, at)[0]
+        if word >> 26 not in (2, 3):
+            continue
+        target = (address & 0xF0000000) | (word & 0x03FFFFFF) << 2
+        if (OVERLAY_START <= target < OVERLAY_END and target not in allowed
+                and not DROP15_CODE <= target < DROP15_END):
+            found.append((address, target))
+    return found
+
+
+def _overlay_layout():
+    base = overlay.ENTRY_POINTS['QuestConfiguration']
     if (hashlib.sha256(overlay.PAYLOAD).hexdigest() != overlay.SHA256
             or overlay.BASE != OVERLAY_START + OVERLAY_HEADER.size
-            or overlay.BASE + len(overlay.PAYLOAD) != overlay.ENTRY_POINTS['QuestConfiguration']):
+            or overlay.BASE + len(overlay.PAYLOAD) != base
+            or base + TABLE_START > DROP15_SCRATCH
+            or not DROP15_END <= overlay.BSS_START <= overlay.BSS_END <= OVERLAY_END - len(OVERLAY_MAGIC)):
         raise ModError('O código MIPS das quests diverge do compilado.')
+    gap = (DROP15_SCRATCH - base, overlay.BSS_END - base)
+    return base, gap, OVERLAY_END - len(OVERLAY_MAGIC) - base
+
+
+def build_quest_overlay(exe: bytes, catalog: QuestCatalog, settings: dict, *, level_address: int,
+                        mod_code: bytes | None = None):
+    """Return (payload, config, table). ``table`` is the on-disc bytes from QuestConfiguration,
+    including the preserved Drop x15 code when the records continue after it."""
+    base, gap, limit = _overlay_layout()
+    if mod_code is None:
+        conflicts = foreign_arena_jumps(exe)
+        if conflicts:
+            source, target = conflicts[0]
+            raise ModError(f'Conflito: 0x{source:08X} salta para 0x{target:08X}, área usada pelas quests.')
+        mod_code = resident_mod_code(exe)
+    if len(mod_code) != DROP15_END - DROP15_CODE:
+        raise ModError('Código residente do Drop x15 incompleto.')
     config = generate_quests(catalog, settings['seed'], settings['requisitos'])
     glyphs, _ = glyph_map(exe)
-    table = compile_table(config, catalog, glyphs)
-    payload = OVERLAY_HEADER.pack(OVERLAY_MAGIC, level_address) + overlay.PAYLOAD + table
+    table = compile_table(config, catalog, glyphs, gap=gap, limit=limit)
+    payload = bytearray(OVERLAY_HEADER.pack(OVERLAY_MAGIC, level_address) + overlay.PAYLOAD + table)
     if len(payload) > OVERLAY_SIZE - len(OVERLAY_MAGIC):
         raise ModError('A tabela de quests excede o espaço de carregamento do PS1.')
-    return payload.ljust(OVERLAY_SIZE - len(OVERLAY_MAGIC), b'\0') + OVERLAY_MAGIC, config, table
+    payload = payload.ljust(OVERLAY_SIZE - len(OVERLAY_MAGIC), b'\0') + OVERLAY_MAGIC
+    reserved = slice(DROP15_SCRATCH - OVERLAY_START, overlay.BSS_END - OVERLAY_START)
+    if any(payload[reserved]):
+        raise ModError('A tabela de quests invadiu o código do Drop x15.')
+    at = DROP15_CODE - OVERLAY_START
+    payload[at:at + len(mod_code)] = mod_code
+    start = base - OVERLAY_START
+    return bytes(payload), config, bytes(payload[start:start + len(table)])
 
 
 def reserve_quest_handlers(exe, regions):
@@ -250,11 +316,15 @@ def inspect_quest_overlay(exe, wa=None, *, expanded=False):
                 or payload[:OVERLAY_HEADER.size] != OVERLAY_HEADER.pack(OVERLAY_MAGIC, level_address)
                 or payload[OVERLAY_HEADER.size:OVERLAY_HEADER.size + overlay.SIZE] != overlay.PAYLOAD):
             return {'status': 'divergente'}
+        _, gap, _ = _overlay_layout()
         data = payload[OVERLAY_HEADER.size + overlay.SIZE:-len(OVERLAY_MAGIC)]
-        table = data[:table_size(data)]
+        table = data[:table_size(data, gap)]
+        if payload[DROP15_CODE - OVERLAY_START:DROP15_END - OVERLAY_START] != resident_mod_code(exe):
+            return {'status': 'divergente'}
         return {'status': 'aplicado', 'setor_wa': sector, 'setor_cena_wa': scene_sector,
                 'duelistas': len(STORY_DUELISTS),
                 'momento': 'antes_do_duelo', 'retorno_card_shop': True,
+                'preserva_codigo_drop_x15': True,
                 'sha256_tabela': hashlib.sha256(table).hexdigest(), 'validado_epsxe': False}
     except (ModError, ValueError):
         return {'status': 'divergente'}
