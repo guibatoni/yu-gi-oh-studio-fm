@@ -164,8 +164,8 @@ class CampaignQuestsTests(unittest.TestCase):
             end = report['setor_wa'] * SECTOR_BYTES + OVERLAY_SIZE
             wrong = wa[:end - 1] + b'\0' + wa[end:]
             self.assertEqual(inspect_quest_overlay(patched, wrong, expanded=True)['status'], 'divergente')
-            self.assertEqual(OVERLAY_MAGIC, b'QOV4')
-            old_generation = wa[:end - 4] + b'QOV3' + wa[end:]
+            self.assertEqual(OVERLAY_MAGIC, b'QOV5')
+            old_generation = wa[:end - 4] + b'QOV4' + wa[end:]
             self.assertEqual(inspect_quest_overlay(
                 patched, old_generation, expanded=True)['status'], 'divergente')
 
@@ -262,8 +262,27 @@ class CampaignMipsTests(unittest.TestCase):
                 box = cpu.reg_read(UC_MIPS_REG_A0)
                 write(box + 0x51, b'\x02')
             elif address == HOOKS['duel'][1]:
-                events.append(('native', word(cpu.reg_read(UC_MIPS_REG_A0))))
+                # The real Text_StartCampaignDuel consumes the 6 original
+                # operands, sets game mode 3, then Main_RunDuel enters
+                # Build Deck / chest (case 0) on the next frame.
+                native_ra = cpu.reg_read(UC_MIPS_REG_RA)
+                self.assertFalse(0x801A9000 <= native_ra < 0x801AC000,
+                                 'O retorno nativo não pode apontar ao overlay descartável.')
+                native_channel = cpu.reg_read(UC_MIPS_REG_A0)
+                position = word(native_channel)
+                op_id, win, loss, terrain, soundlo, soundhi = read(position, 6)
+                self.assertEqual(op_id, opponent)
+                self.assertEqual((win,loss,terrain,soundlo,soundhi),
+                                 (96,97,0,0,0x72))
+                events.append(('native', position))
+                word(native_channel, position + 6)
                 write(0x8009B26C, b'\x03')
+                if action not in ('native','bad-marker','out-of-window'):
+                    if read(flag,1)[0] & mask:
+                        # Simulate the next mode's scene loader replacing the
+                        # *entire* quest overlay; any active return into it
+                        # would be invalid (user's ePSXe crash).
+                        write(OVERLAY_START, bytes(OVERLAY_SIZE))
 
         cpu.hook_add(UC_HOOK_CODE, device)
         write(entry - 2, bytes((0xF8, 0x0C if action == 'bad-marker' else 0x0D,
@@ -336,30 +355,25 @@ class CampaignMipsTests(unittest.TestCase):
         write(trunk, b'\x03\x02\x02')
         choose(channel, 0)
         self.assertEqual(read(word(channel), 256).count(b'1/1'), 3)
-        # Donating inside the F8 12 handler must only update chest+flag.
-        # Starting the duel *inside* the answer callback can overwrite the
-        # quest overlay (0x801A9000..0x801AC000) before its stack unwinds.
+        # A SINGLE confirm must donate and hand control to the resident
+        # adapter, which uses the original six-byte duel descriptor. No
+        # rewriting the VM cursor to F8 0D, no second VM tick needed.
         before_events = list(events)
         choose(channel, 0)
-        self.assertEqual(events, before_events)
-        self.assertEqual(word(channel), entry - 2)  # Retail F8 0D opcode.
+        self.assertEqual(events, before_events + [('native', entry)])
+        self.assertEqual(word(channel), entry + 6)
         self.assertEqual(read(entry - 2, 2), b'\xf8\x0d')
-        self.assertEqual(word(0x8009B350), 1)       # Yield to next VM step.
-        self.assertEqual(read(0x8009B398, 2), b'\x01\0')  # No held confirm.
+        self.assertEqual(read(0x8009B26C,1), b'\x03')
+        self.assertEqual(word(0x8009B350), 1)
+        self.assertEqual(read(0x8009B398, 2), b'\x01\0')
         self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
         self.assertEqual(read(deck, 80), initial_deck)
         self.assertEqual(read(trunk+722, 1), b'\x04')
         self.assertEqual(read(flag, 1), bytes([mask]))
-        self.assertEqual(read(0x801D070B, 1), b'\0')
-        # The next VM tick decodes F8 0D. The resident loader must jump
-        # directly to the original native duel handler, not into overlay C.
+        self.assertEqual(read(0x801D070B, 1), b'\0') # handoff flag consumed
+        self.assertEqual(read(OVERLAY_START + 4, 4), b'\0'*4)
+        # Mode 3's next frame must enter Build Deck without donating twice.
         overlay_entries = len(entered_overlay)
-        word(channel, entry)
-        call('duel', channel)
-        self.assertEqual(len(entered_overlay), overlay_entries)
-        self.assertEqual(events[-1], ('native', entry))
-        self.assertEqual(read(trunk, 3), b'\x02\x01\x01')
-        # Re-entering after a saved completion must not donate a second time.
         write(0x8009B26C, b'\x02')
         word(channel, entry)
         call('duel', channel)
