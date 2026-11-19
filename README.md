@@ -1,3 +1,18 @@
+## Studio FM v1.9.20 — Molduras por raridade
+
+Nova aba **Edição do Mod → Molduras**: uma cor para cada classe (Comum, Incomum,
+Rara, Épica, Lendária e Deus); deixe vazio para manter a moldura original.
+
+- A cor vale para as cartas **na mão e no campo do duelo** e para a **carta
+  ampliada** (baú/Build Deck, biblioteca e visualizador do duelo).
+- A arte, o ATK/DEF e o ícone de tipo não mudam; mágicas, armadilhas e
+  equipamentos mantêm a moldura própria.
+- Abas da Edição do Mod com nomes curtos, para todas caberem na janela.
+
+Gere um **BIN/CUE novo** para aplicar.
+
+---
+
 ## Studio FM v1.9.19 — Mágicas e armadilhas
 
 Nova aba **Edição do Mod → Mágicas e armadilhas**, com os valores originais do

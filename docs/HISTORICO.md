@@ -1,4 +1,4 @@
-## v1.9.20 (em teste) — Molduras por raridade (mão, campo e carta ampliada)
+## v1.9.20 — Molduras por raridade (mão, campo e carta ampliada)
 
 - Nova aba **Edição do Mod → Molduras**: uma cor para cada classe (Comum,
   Incomum, Rara, Épica, Lendária e Deus). Use "sem cor" para manter a moldura
@@ -9,6 +9,7 @@
   grava a cor da classe no RGB do sprite (modulação da GPU) e segue para
   `DisplayObject_SubmitPacket`. A arte, o ATK/DEF e o ícone de tipo não mudam.
   Cartas escurecidas ou destacadas pelo jogo mantêm o efeito original.
+- Validado no ePSXe: mão, campo e carta ampliada do baú.
 - Carta ampliada (baú/Build Deck, biblioteca, visualizador do duelo): a placa
   é um objeto de sprite-sheet criado por `func_800291E0` e desenhado por
   `DisplayObject_RenderSpriteSheet`, que copia o RGB do objeto em `0x8004177C`.
