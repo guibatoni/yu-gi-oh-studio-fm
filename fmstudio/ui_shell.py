@@ -149,9 +149,6 @@ class StatusBar(tk.Frame):
 
     def __init__(self, master, message_var: tk.StringVar):
         super().__init__(master, bg=SURFACE, highlightthickness=1, highlightbackground=BORDER)
-        self.message = tk.Label(self, textvariable=message_var, bg=SURFACE, fg=MUTED, anchor='w',
-                                padx=12, pady=5, font=font(9))
-        self.message.pack(side='left', fill='x', expand=True)
         self.saved = tk.Label(self, text='', bg=SURFACE, fg=MUTED, padx=10, font=font(9, 'bold'))
         self.saved.pack(side='right')
         self._sep(); self.disc = tk.Label(self, text='', bg=SURFACE, fg=MUTED, padx=10, font=font(9))
@@ -159,6 +156,11 @@ class StatusBar(tk.Frame):
         self._sep(); self.project = tk.Label(self, text='Nenhum projeto', bg=SURFACE, fg=MUTED, padx=10,
                                              font=font(9))
         self.project.pack(side='right')
+        # Empacotada por último: em janelas estreitas é a mensagem que encolhe,
+        # não o projeto, a base e o estado salvo.
+        self.message = tk.Label(self, textvariable=message_var, bg=SURFACE, fg=MUTED, anchor='w',
+                                padx=12, pady=5, font=font(9))
+        self.message.pack(side='left', fill='x', expand=True)
         self.operation = tk.Frame(self, bg=SURFACE)
         self.operation_label = tk.Label(self.operation, text='', bg=SURFACE, fg=ACCENT, font=font(9, 'bold'),
                                         padx=8)
