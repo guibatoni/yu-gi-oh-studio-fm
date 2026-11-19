@@ -18,7 +18,7 @@ from fmstudio.core import ModError, Project
 from fmstudio.deep_extract import exe_pos
 from fmstudio.ps1_campaign_quests import (
     CAMPAIGN_SCENE_SECTOR, CAMPAIGN_SCENE_SECTORS, COMMAND_TABLE, HOOKS, OVERLAY_SIZE,
-    OVERLAY_START, SCENE_PREFIX_SECTORS, SECTOR_BYTES, _scene_patches, append_quest_scene,
+    OVERLAY_START, OVERLAY_MAGIC, SCENE_PREFIX_SECTORS, SECTOR_BYTES, _scene_patches, append_quest_scene,
     build_quest_overlay, inspect_quest_overlay, install_quest_handlers, quest_settings,
     reserve_quest_handlers, save_quest_settings,
 )
@@ -164,6 +164,10 @@ class CampaignQuestsTests(unittest.TestCase):
             end = report['setor_wa'] * SECTOR_BYTES + OVERLAY_SIZE
             wrong = wa[:end - 1] + b'\0' + wa[end:]
             self.assertEqual(inspect_quest_overlay(patched, wrong, expanded=True)['status'], 'divergente')
+            self.assertEqual(OVERLAY_MAGIC, b'QOV4')
+            old_generation = wa[:end - 4] + b'QOV3' + wa[end:]
+            self.assertEqual(inspect_quest_overlay(
+                patched, old_generation, expanded=True)['status'], 'divergente')
 
     def test_scene_fits_four_requirements_for_every_npc(self):
         requirements = [*MANUAL['2'], {'tipo': 'carta', 'alvo': 1, 'quantidade': 1}]
