@@ -192,6 +192,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     win_reward_requested = fixed_win_reward(project)
     from .ps1_drop_count import apply as apply_cards_per_win, cards_per_win, status as cards_per_win_status
     cards_per_win_requested = cards_per_win(project)
+    from .ps1_equip_bonus import (apply as apply_equip_bonus, block_size as equip_bonus_size,
+                                  equip_bonuses, reserve_block, status as equip_bonus_status)
+    equip_bonus_requested = equip_bonuses(project)
     from .ps1_expansion import (EXPANDED_LEVELS, PS1_CARD_CAPACITY, compile_expansion, expand_archive,
                                 patch_expansion, inspect_expansion, retail_archive_view)
     from .ps1_campaign_quests import (QUEST_SCENE_SECTORS, append_quest_scene, build_quest_overlay, inspect_quest_overlay,
@@ -229,7 +232,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             god24_enabled=native_profile and bool(god_cards)
             expansion = compile_expansion(project, profile=native_profile)
             capacity = PS1_CARD_CAPACITY if expansion.enabled else CARD_COUNT
-            if (prices_requested or win_reward_requested is not None
+            if (prices_requested or win_reward_requested is not None or equip_bonus_requested
                     or cards_per_win_requested is not None) and not native_profile:
                 raise ModError(
                     'Economia PS1 personalizada exige o SLUS Drop x15 original vinculado.')
@@ -335,11 +338,15 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     description_icons=set()
     descriptions_not_written=[]
     regions = None
-    if native_profile and (texts or quest_enabled):
+    if native_profile and (texts or quest_enabled or equip_bonus_requested):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     if quest_enabled:
         quest_handlers, regions = reserve_quest_handlers(patched_exe, regions)
+    equip_bonus_report = {'status': 'original'} if native_profile else {'status': 'perfil_incompativel'}
+    if native_profile and equip_bonus_requested:
+        equip_hook, regions = reserve_block(patched_exe, regions, equip_bonus_size(equip_bonus_requested))
+        patched_exe, equip_bonus_report = apply_equip_bonus(patched_exe, equip_bonus_requested, equip_hook)
     if texts:
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
         (patched_exe, written_descriptions, description_icons,
@@ -750,6 +757,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'precos_password_ps1':price_report,
                 'estrelas_por_vitoria_ps1':reward_report,
                 'cartas_por_vitoria_ps1':cards_per_win_report,
+                'bonus_equipamentos_ps1':equip_bonus_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
@@ -798,6 +806,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             if native_profile and checked['catalogo_bau_ps1']['status'] != (
                     'aplicado' if show_all_chest else 'ausente'):
                 raise ModError('A opção de visualização do baú não coincide com o BIN gerado. '
+                               'A cópia anterior foi preservada.')
+            if native_profile and equip_bonus_requested and equip_bonus_status(reread_exe).get('bonus') != {
+                    str(k): v for k, v in sorted(equip_bonus_requested.items())}:
+                raise ModError('Bônus de equipamentos divergentes no SLUS final. '
                                'A cópia anterior foi preservada.')
             if native_profile and cards_per_win_requested is not None and (
                     cards_per_win_status(reread_exe).get('cartas') != cards_per_win_requested):

@@ -24,6 +24,20 @@
 - Ainda a validar no ePSXe: entrega e exibição das cartas para cada opção,
   inclusive 30x.
 
+### Equipamentos: bônus e alvos
+
+- Em **Relações → Equipamentos** (carta de equipamento), novo campo **Bônus de
+  ATK/DEF no PS1** (0–5000) e botão **Original** (+500; Megamorph +1000).
+- No PS1, `DuelScene_UpdateCardPlacement` decide o bônus em `0x8001A7F8..0x8001A830`.
+  O Studio troca `0x8001A81C` por um salto para uma rotina residente
+  (tabela ID → bônus, num intervalo livre do SLUS), que grava o bônus da animação
+  e ajusta o valor desfeito por Reverse Trap (`0x24C($gp)`). Equipamentos fora da
+  tabela mantêm o +500/+1000 original. Funciona junto com a expansão de 740
+  cartas, que traduz o ID antes desse ponto.
+- Alvos: lista de monstros com busca e seleção múltipla (Ctrl/Shift),
+  "Selecionar visíveis" e "Limpar visíveis", sincronizada com o campo de IDs.
+- Ainda a validar no ePSXe: valor aplicado, animação e Reverse Trap.
+
 ## v1.9.16 — Quests preservam o código do Drop x15 (QOV7)
 
 - Causa raiz do travamento em **Doar e duelar** (`801AAE78/801AAE80`),
