@@ -70,9 +70,9 @@ struct PendingQuest {
 static struct {
     u8 *channel;
     const u8 *resume;
-    const u8 *options;
-    const u8 *accept;
-    const u8 *retreat;
+    const volatile u8 *options;
+    const volatile u8 *accept;
+    const volatile u8 *retreat;
     const struct Quest *quest;
     u8 opponent;
     u8 dialog[256];
@@ -230,14 +230,16 @@ static u8 glyph(unsigned c)
     return QuestConfiguration.glyphs[c >= 32 && c <= 126 ? c - 32 : '?' - 32];
 }
 
-static u8 *text(u8 *out, const char *line, unsigned limit)
+/* The stream can start at any alignment. The ePSXe dynarec can corrupt
+   the emitted commands if the compiler combines byte writes into SWL/SWR. */
+static volatile u8 *text(volatile u8 *out, const char *line, unsigned limit)
 {
     while (limit-- && *line)
         *out++ = glyph(*(const u8 *)line++);
     return out;
 }
 
-static u8 *number(u8 *out, unsigned n)
+static volatile u8 *number(volatile u8 *out, unsigned n)
 {
     if (n >= 100)
         *out++ = glyph('0' + n / 100);
@@ -247,7 +249,7 @@ static u8 *number(u8 *out, unsigned n)
     return out;
 }
 
-static u8 *choice_command(u8 *out, unsigned action)
+static volatile u8 *choice_command(volatile u8 *out, unsigned action)
 {
     *out++ = 0xf8;
     *out++ = 0x1a;  /* Close the native choice before changing pages. */
@@ -258,7 +260,7 @@ static u8 *choice_command(u8 *out, unsigned action)
     return out;
 }
 
-static void set_target(u8 *field, const u8 *target)
+static void set_target(volatile u8 *field, const volatile u8 *target)
 {
     unsigned address = (unsigned)target;
     field[0] = address;
@@ -291,7 +293,7 @@ static void show_quest(void)
 {
     const struct Quest *quest = active.quest;
     unsigned missing = QuestCountMissing(quest), req;
-    u8 *out = active.dialog, *targets;
+    volatile u8 *out = active.dialog, *targets;
     out = text(out, "Antes do duelo", 24);
     *out++ = 0xfe;
     for (req = 0; req < quest->count; ++req) {

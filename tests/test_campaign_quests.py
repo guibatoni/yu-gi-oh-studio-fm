@@ -219,6 +219,8 @@ class CampaignMipsTests(unittest.TestCase):
             dialogue = read(prompt, 256)
             branch = dialogue.index(b'\xfb\x80') + 2
             target = (prompt & 0xFFFF0000) | struct.unpack_from('<H', dialogue, branch + option * 2)[0]
+            self.assertEqual(read(target, 4), b'\xf8\x1a\xf8\x12')
+            self.assertEqual(read(target + 5, 1), b'\xff')
             word(channel, target + 4)
             call('answer', channel)
 
