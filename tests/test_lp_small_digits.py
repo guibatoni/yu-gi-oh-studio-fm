@@ -25,17 +25,17 @@ RETURN = 0x80000100
 class SmallDigitTests(unittest.TestCase):
     def run_digits(self, value, count, x=200):
         cpu = Uc(UC_ARCH_MIPS, UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN)
-        cpu.mem_map(BASE, 0x200000)
-        cpu.mem_write(DIGIT_FUNC, struct.pack('<44I', *small_digit_words()))
+        cpu.mem_map(0, 0x200000)   # kseg0 (0x80xxxxxx) cai na física 0
+        cpu.mem_write((DIGIT_FUNC) & 0x1FFFFF, struct.pack('<44I', *small_digit_words()))
         for stub in (TEXT_ENCODE_DIGITS, GS_SORT_SPRITE):
-            cpu.mem_write(stub, struct.pack('<2I', 0x03E00008, 0))   # jr ra; nop
+            cpu.mem_write(stub & 0x1FFFFF, struct.pack('<2I', 0x03E00008, 0))   # jr ra; nop
         # style: ot_index (+0x17) = 3, prioridade (+0x14) = 0x55
-        cpu.mem_write(STYLE + 0x14, struct.pack('<H', 0x55))
-        cpu.mem_write(STYLE + 0x17, bytes([3]))
-        cpu.mem_write(OT_TABLE + 12, struct.pack('<I', 0x80123450))
+        cpu.mem_write((STYLE + 0x14) & 0x1FFFFF, struct.pack('<H', 0x55))
+        cpu.mem_write((STYLE + 0x17) & 0x1FFFFF, bytes([3]))
+        cpu.mem_write((OT_TABLE + 12) & 0x1FFFFF, struct.pack('<I', 0x80123450))
         # sprite de rascunho como o jogo o monta
-        cpu.mem_write(SPRITE, struct.pack('<IhhHHH', 0x09000000, x, 50, 8, 8, 0x1E))
-        cpu.mem_write(SPRITE + 0x18, b'\xAA' * 12)
+        cpu.mem_write((SPRITE) & 0x1FFFFF, struct.pack('<IhhHHH', 0x09000000, x, 50, 8, 8, 0x1E))
+        cpu.mem_write((SPRITE + 0x18) & 0x1FFFFF, b'\xAA' * 12)
         calls = []
 
         def hook(uc, address, size, _):
@@ -44,10 +44,10 @@ class SmallDigitTests(unittest.TestCase):
                 n = uc.reg_read(UC_MIPS_REG_A1)
                 v = uc.reg_read(UC_MIPS_REG_A0)
                 digits = bytes((v // 10 ** i) % 10 for i in range(n))  # [0] = unidade
-                uc.mem_write(out, digits)
+                uc.mem_write(out & 0x1FFFFF, digits)
             elif address == GS_SORT_SPRITE:
                 sp = uc.reg_read(UC_MIPS_REG_A0)
-                raw = uc.mem_read(sp, 0x24)
+                raw = uc.mem_read(sp & 0x1FFFFF, 0x24)
                 calls.append({
                     'sprite': sp, 'ot': uc.reg_read(UC_MIPS_REG_A1),
                     'pri': uc.reg_read(UC_MIPS_REG_A2),
