@@ -157,6 +157,14 @@ jobs:
         run: echo "BUILD = 'teste-dev-${{ github.run_number }}'" > fmstudio/build_info.py
       - name: Compilar Studio de teste
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --add-data "assets/icons;assets/icons" --collect-all PIL --name FM-Studio-TESTE app.py
+      - name: Conferir o .exe empacotado (traduções incluídas)
+        shell: pwsh
+        run: |
+          $env:FMSTUDIO_SELFTEST = "$env:RUNNER_TEMP\selftest.json"
+          Start-Process -FilePath dist/FM-Studio-TESTE.exe -Wait
+          $r = Get-Content $env:FMSTUDIO_SELFTEST -Raw -Encoding UTF8 | ConvertFrom-Json
+          Write-Host "catalogo=$($r.catalogo) salvar_en=$($r.salvar_en) molduras_ja=$($r.molduras_ja)"
+          if ($r.catalogo -lt 700 -or $r.salvar_en -ne 'Save') { throw 'O executável ficou sem as traduções' }
       - name: Empacotar
         shell: pwsh
         run: |

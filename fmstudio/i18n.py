@@ -7,8 +7,6 @@ para entrarem no executável sem arquivos de dados extras.
 """
 from __future__ import annotations
 
-import importlib
-
 LANGUAGES = {
     'pt': 'Português (Brasil)',
     'en': 'English',
@@ -19,7 +17,6 @@ LANGUAGES = {
     'ko': '한국어',
 }
 ORDER = ('en', 'de', 'it', 'ja', 'zh', 'ko')
-PARTS = ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h')
 
 _catalog: dict[str, tuple] | None = None
 _language = 'pt'
@@ -28,13 +25,14 @@ _language = 'pt'
 def catalog() -> dict[str, tuple]:
     global _catalog
     if _catalog is None:
+        # Imports estáticos: o PyInstaller só empacota módulos que enxerga no código
+        # (com importlib dinâmico o executável ficava sem traduções).
+        from . import (i18n_cat_a, i18n_cat_b, i18n_cat_c, i18n_cat_d, i18n_cat_e, i18n_cat_f,
+                       i18n_cat_g, i18n_cat_h)
         merged = {}
-        for part in PARTS:
-            try:
-                module = importlib.import_module(f'{__package__}.i18n_cat_{part}')
-            except ImportError:
-                continue
-            merged.update(getattr(module, 'ENTRIES', {}))
+        for module in (i18n_cat_a, i18n_cat_b, i18n_cat_c, i18n_cat_d, i18n_cat_e, i18n_cat_f,
+                       i18n_cat_g, i18n_cat_h):
+            merged.update(module.ENTRIES)
         _catalog = merged
     return _catalog
 
