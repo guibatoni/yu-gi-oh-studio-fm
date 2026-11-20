@@ -4,7 +4,7 @@ import struct
 from unittest import TestCase
 from unittest.mock import patch
 
-from fmstudio.ps1_lp_hud import DECK_COUNT_WORDS, LP_HUD_PATCHES, patch_lp_hud, verify_lp_hud
+from fmstudio.ps1_lp_hud import DECK_COUNT_WORDS, LP_HUD_PATCHES, patch_lp_hud, retail_words, verify_lp_hud
 from fmstudio.ps1_rank_hud import (
     CALL_PC, CODE_END, CODE_START, CONTEXT_PC, RETAIL_WORDS, inspect_rank_hud, patch_rank_hud,
 )
@@ -16,7 +16,7 @@ class RankHudTests(TestCase):
     def fixture(self):
         data = bytearray(CODE_END)
         struct.pack_into('<12I', data, CONTEXT_PC - EXE_DELTA, *RETAIL_WORDS)
-        for pc, retail, *_ in (*LP_HUD_PATCHES, *DECK_COUNT_WORDS):
+        for pc, retail in retail_words().items():
             struct.pack_into('<I', data, pc - EXE_DELTA, retail)
         return bytes(data)
 

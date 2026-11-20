@@ -60,6 +60,7 @@ class Asm:
     def lbu(self, rt, off, rs): self._i(36, rs, rt, off)
     def sw(self, rt, off, rs): self._i(43, rs, rt, off)
     def sh(self, rt, off, rs): self._i(41, rs, rt, off)
+    def sb(self, rt, off, rs): self._i(40, rs, rt, off)
     def addu(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x21)
     def subu(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x23)
     def slt(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x2A)

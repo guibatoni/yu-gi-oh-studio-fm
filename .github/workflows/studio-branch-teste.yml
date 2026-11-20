@@ -44,7 +44,7 @@ jobs:
       - name: Testes das quests (inclui MIPS/Unicorn)
         run: python -m unittest discover -s tests -p "test_*quest*.py" -v
       - name: MIPS — marcadores ao entrar em campo (reduzir/acumular ATK/DEF)
-        run: PYTHONPATH=. python tests/verify_entry_markers_mips.py
+        run: PYTHONPATH=. python tests/verify_entry_markers_mips.py && PYTHONPATH=. python tests/verify_five_digit_hud_mips.py
       - name: Regressao completa do Studio
         run: xvfb-run -a python -m unittest discover -s tests -v
       - name: Testes de interface (janela real sob xvfb)

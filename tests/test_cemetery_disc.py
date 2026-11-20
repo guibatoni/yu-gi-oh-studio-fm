@@ -263,9 +263,8 @@ class StableDiscOutputTests(DiscBuildTests):
         struct.pack_into('<I', source, INIT_CALL-EXE_DELTA, _LP_INIT)
         struct.pack_into('<I', source, FIRST_TURN_PC-EXE_DELTA, FIRST_TURN_SOURCE)
         seed_chest_catalog(source)
-        for pc, original, _, _ in LP_HUD_PATCHES:
-            struct.pack_into('<I', source, pc-EXE_DELTA, original)
-        for pc, original in DECK_COUNT_WORDS:
+        from fmstudio.ps1_lp_hud import retail_words
+        for pc, original in retail_words().items():
             struct.pack_into('<I', source, pc-EXE_DELTA, original)
         self.original = bytes(source)
         self.patched = self.original
