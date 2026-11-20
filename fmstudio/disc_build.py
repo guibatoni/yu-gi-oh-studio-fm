@@ -201,6 +201,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     from .ps1_frame_colors import (apply as apply_frame_colors, block_size as frame_block_size,
                                    card_classes, frame_settings, status as frame_status)
     frames_requested = frame_settings(project)
+    from .ps1_life_splash import (apply as apply_life_splash, block_size as splash_block_size,
+                                  has_summon_life, wants_splash)
+    splash_wanted = wants_splash(project)
     frames_enabled = frames_requested['ativado'] and any(frames_requested['cores'].values())
     from .ps1_expansion import (EXPANDED_LEVELS, PS1_CARD_CAPACITY, compile_expansion, expand_archive,
                                 patch_expansion, inspect_expansion, retail_archive_view)
@@ -346,7 +349,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     description_icons=set()
     descriptions_not_written=[]
     regions = None
-    if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled):
+    splash_requested = bool(native_profile) and splash_wanted
+    if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled
+                           or splash_requested):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     if quest_enabled:
@@ -361,6 +366,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         cards_for_frames = {cid: project.get(cid) for cid in getattr(project, 'cards', {})}
         patched_exe, frames_report = apply_frame_colors(
             patched_exe, frames_requested['cores'], card_classes(cards_for_frames), frame_hook)
+    splash_hook = None
+    splash_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
+    if splash_requested:
+        # Reserva agora (antes dos textos); instala depois do runtime, que cria o salto a trocar.
+        splash_hook, regions = reserve_block(patched_exe, regions, splash_block_size())
     if texts:
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
         (patched_exe, written_descriptions, description_icons,
@@ -620,6 +630,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         chest_catalog_report = inspect_chest_catalog(patched_exe)
     if quest_enabled:
         patched_exe = install_quest_handlers(patched_exe, quest_handlers, quest_scene_sector)
+    if splash_hook is not None:
+        if has_summon_life(patched_exe):
+            patched_exe, splash_report = apply_life_splash(patched_exe, splash_hook)
+        else:
+            splash_report = {'status': 'sem_efeitos_no_runtime'}
 
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
     if not native_profile and patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
@@ -778,6 +793,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'bonus_equipamentos_ps1':equip_bonus_report,
                 'valores_magicas_ps1':magic_values_report,
                 'molduras_por_raridade_ps1':frames_report,
+                'animacao_lp_ao_entrar_ps1':splash_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,
