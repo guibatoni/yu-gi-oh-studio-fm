@@ -383,3 +383,30 @@ def status(exe: bytes) -> dict:
     if word == SIGNATURE[TICK_SITE]:
         return {'status': 'original'}
     return {'status': 'aplicado', 'tick': f'0x{0x80000000 | (word & 0x03FFFFFF) << 2:08X}'}
+
+
+def runtime_view(exe: bytes) -> bytes:
+    """O SLUS como o runtime original o deixou, sem o desvio da animação.
+
+    ``apply`` troca uma palavra dentro do runtime (o ``j summon_damage`` em
+    SUMMON_SITE). Quem confere o runtime byte a byte usa esta visão; ela só
+    desfaz o desvio se a rotina inteira e o gancho do quadro estiverem
+    instalados exatamente como ``apply`` os deixa.
+    """
+    try:
+        site = exe_pos(SUMMON_SITE, exe, 4)
+        word = struct.unpack_from('<I', exe, site)[0]
+        if word == SIGNATURE[SUMMON_SITE] or word >> 26 != 2:
+            return exe
+        hook = (SUMMON_SITE & 0xF0000000) | ((word & 0x03FFFFFF) << 2)
+        block = code(hook)
+        at = exe_pos(hook, exe, len(block))
+        tick = struct.unpack_from('<I', exe, exe_pos(TICK_SITE, exe, 4))[0]
+        if (exe[at:at + len(block)] != block
+                or tick != _jump(3, labels(hook)['tick'])):
+            return exe
+    except Exception:  # fora dos limites / SLUS de outro perfil: não mexe
+        return exe
+    out = bytearray(exe)
+    struct.pack_into('<I', out, site, SIGNATURE[SUMMON_SITE])
+    return bytes(out)

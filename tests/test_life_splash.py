@@ -26,6 +26,23 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(block[names['data'] - HOOK:], bytes(ls.DATA_SIZE))
         self.assertEqual(ls.SIGNATURE[ls.SUMMON_SITE], 0x08073F7E)   # j 0x801CFDF8
 
+    def test_runtime_view_restores_runtime_word(self):
+        exe = bytearray(0x800 + 0x1F0000)
+        struct.pack_into('<I', exe, 0x18, 0x80010000)
+        struct.pack_into('<I', exe, 0x1C, len(exe) - 0x800)
+        for address, word in ls.SIGNATURE.items():
+            struct.pack_into('<I', exe, 0x800 + address - 0x80010000, word)
+        original = bytes(exe)
+        self.assertIs(ls.runtime_view(original), original)
+        patched, _ = ls.apply(original, HOOK)
+        view = ls.runtime_view(patched)
+        site = 0x800 + ls.SUMMON_SITE - 0x80010000
+        self.assertEqual(view[site:site + 4], original[site:site + 4])
+        self.assertEqual(view[:site] + view[site + 4:], patched[:site] + patched[site + 4:])
+        broken = bytearray(patched)
+        broken[0x800 + HOOK - 0x80010000] ^= 1          # rotina alterada: não disfarça
+        self.assertEqual(ls.runtime_view(bytes(broken)), bytes(broken))
+
     def test_apply_patches_sites(self):
         exe = bytearray(0x800 + 0x1F0000)
         struct.pack_into('<4I', exe, 0x10, 0x80010000, 0, 0, len(exe) - 0x800)  # cabeçalho PS-X EXE

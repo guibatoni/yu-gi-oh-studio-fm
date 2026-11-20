@@ -445,6 +445,9 @@ def _valid_call_count(key, count):
 
 def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = None) -> dict:
     """Read the resident code, rules and hooks from the selected BIN/CUE."""
+    # A animação de LP ao entrar em campo troca um salto dentro do runtime.
+    from .ps1_life_splash import runtime_view
+    exe = runtime_view(exe)
     bundle = _runtime_bundle(plan)
     ENTRY_POINTS = bundle.ENTRY_POINTS
     RUNTIME = bundle.RUNTIME
