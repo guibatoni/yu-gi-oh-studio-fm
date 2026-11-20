@@ -1650,6 +1650,7 @@ class Studio(tk.Tk):
             'nao_bloqueavel':'Não bloqueável',
             'sem_limite_deck':'Sem limite de cópias',
             'ataque_primeiro_turno':'Ataca no 1º turno',
+            'monstro_indestrutivel_batalha':'Indestrutível por criaturas',
         }
         for index,action in enumerate(BOOLEAN_ACTIONS):
             v=tk.BooleanVar(value=False)

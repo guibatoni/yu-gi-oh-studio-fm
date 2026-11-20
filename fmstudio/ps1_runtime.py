@@ -29,9 +29,10 @@ BANK_END = 0x801D0000
 COPY_ACTIONS = frozenset(('sem_limite_deck', 'limite_copias_deck'))
 PROTECTIONS = {
     'monstro_imune_magia': 1, 'monstro_imune_armadilha': 2, 'monstro_indestrutivel': 4,
-    'dano_perfurante': 8,
+    'dano_perfurante': 8, 'monstro_indestrutivel_batalha': 64,
     'nao_bloqueavel': 16, 'ataque_primeiro_turno': 32,
     'equip_imune_armadilha': 2, 'equip_imune_magia_armadilha': 3, 'equip_indestrutivel': 4,
+    'equip_indestrutivel_batalha': 64,
 }
 PLAY_ACTIONS = ((EFFECT_ACTIONS - {'bonus_mao_tipo'}) | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
                 set(ENTRY_EFFECTS) | {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp', 'cura_lp'})

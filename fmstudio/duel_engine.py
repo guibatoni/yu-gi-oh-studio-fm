@@ -259,7 +259,7 @@ class DuelLab:
         elif against == 'defesa':
             diff=atk-target_values[1]
             if diff > 0:
-                if not target['indestrutivel']:
+                if not battle_proof(target):
                     destroyed.append((enemy,target['slot']))
                 if attacker['perfurante']:
                     lost_defender=diff
@@ -269,16 +269,16 @@ class DuelLab:
             diff=atk-target_values[0]
             if diff>0:
                 lost_defender=diff
-                if not target['indestrutivel']:
+                if not battle_proof(target):
                     destroyed.append((enemy,target['slot']))
             elif diff<0:
                 lost_attacker=-diff
-                if not attacker['indestrutivel']:
+                if not battle_proof(attacker):
                     destroyed.append((side,attacker['slot']))
             else:
-                if not target['indestrutivel']:
+                if not battle_proof(target):
                     destroyed.append((enemy,target['slot']))
-                if not attacker['indestrutivel']:
+                if not battle_proof(attacker):
                     destroyed.append((side,attacker['slot']))
         lifesteal = sum(1 for raw in card_effects(self.effects, int(source['card_id']))
                         if raw.get('acao') == 'vinculo_vida' and raw.get('evento') == 'atacar'
@@ -488,3 +488,8 @@ class DuelLab:
                 unit[key] = unit.get(key, 0) + delta
                 summary.append({'acao':action,'alvo':(receiver, slot),'valor':delta})
         return summary
+
+
+def battle_proof(unit) -> bool:
+    """Não é destruído em batalha: indestrutível total ou só por criaturas."""
+    return bool(unit.get('indestrutivel') or unit.get('indestrutivel_batalha'))

@@ -53,9 +53,11 @@ ACTIONS = {
     'equip_imune_armadilha':'Equipamento: imune a armadilhas',
     'equip_imune_magia_armadilha':'Equipamento: imune a mágicas e armadilhas',
     'equip_indestrutivel':'Equipamento: indestrutível',
+    'equip_indestrutivel_batalha':'Equipamento: indestrutível por criaturas (em batalha)',
     'equip_atk':'Equipamento: aumenta ATK',
     'ataques_multiplos':'Ataca 2x ou 3x por turno',
     'monstro_indestrutivel':'Indestrutível',
+    'monstro_indestrutivel_batalha':'Indestrutível por criaturas (em batalha)',
     'monstro_imune_magia':'Imune a mágicas',
     'monstro_imune_armadilha':'Imune a armadilhas',
     'dano_perfurante':'Dano perfurante',
@@ -82,7 +84,7 @@ DECK_ACTIONS = {'bonus_deck_tipo','cura_lp_deck_tipo','dano_lp_deck_tipo'}
 ONCE_ACTIONS = {'cura_lp_deck_tipo','dano_lp_deck_tipo','descartar_alvo','dano_monstro_alvo'}
 MONSTER_PASSIVE_ACTIONS = {
     'ataques_multiplos','ataque_primeiro_turno','monstro_indestrutivel','monstro_imune_magia',
-    'monstro_imune_armadilha','dano_perfurante','nao_bloqueavel',
+    'monstro_imune_armadilha','dano_perfurante','nao_bloqueavel','monstro_indestrutivel_batalha',
 }
 
 class ModError(ValueError):

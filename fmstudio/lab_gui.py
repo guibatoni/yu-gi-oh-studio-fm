@@ -269,6 +269,8 @@ class AdvancedFieldDialog(tk.Toplevel):
                 continue
             da,dd=m['ataque']-m['ataque_base'],m['defesa']-m['defesa_base']
             protection=[p for p in ('imune_armadilha','imune_magia','indestrutivel') if m[p]]
+            if m.get('indestrutivel_batalha') and not m['indestrutivel']:
+                protection.append('indestrutível por criaturas')
             if m['perfurante']: protection.append('perfurante')
             if m['nao_bloqueavel']: protection.append('não bloqueável')
             if m['ataques_max']>1: protection.append(f'{m["ataques_max"]} ataques')

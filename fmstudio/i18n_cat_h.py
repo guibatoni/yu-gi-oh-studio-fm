@@ -99,4 +99,12 @@ ENTRIES = {
     'Tipo desconhecido: ainda sem suporte de exportação PS1.': ('Unknown type: no PS1 export support yet.', 'Unbekannter Typ: noch kein PS1-Export.', 'Tipo sconosciuto: esportazione PS1 non ancora supportata.', '不明な種族:PS1への書き出しは未対応です。', '未知种族：尚不支持导出到 PS1。', '알 수 없는 종족: 아직 PS1 내보내기를 지원하지 않습니다.'),
     'Este é um tipo de magia, armadilha, ritual ou equipamento. Para jogar como monstro, selecione um tipo de monstro ou God (24).': ('This is a magic, trap, ritual or equip type. To play it as a monster, select a monster type or God (24).', 'Dies ist ein Magie-, Fallen-, Ritual- oder Ausrüstungstyp. Um sie als Monster zu spielen, wählen Sie einen Monstertyp oder God (24).', 'Questo è un tipo magia, trappola, rituale o equipaggiamento. Per giocarla come mostro, scegli un tipo di mostro o God (24).', 'これは魔法・罠・儀式・装備の種族です。モンスターとして使うにはモンスターの種族か神(24)を選んでください。', '这是魔法、陷阱、仪式或装备种族。要作为怪兽使用，请选择怪兽种族或神（24）。', '마법, 함정, 의식, 장착 종족입니다. 몬스터로 쓰려면 몬스터 종족이나 신(24)을 선택하세요.'),
     'Tipo não reconhecido.': ('Type not recognized.', 'Typ nicht erkannt.', 'Tipo non riconosciuto.', '種族を認識できません。', '无法识别的种族。', '인식할 수 없는 종족.'),
+    'Indestrutível por criaturas': ('Indestructible by monsters', 'Unzerstörbar durch Monster', 'Indistruttibile dai mostri', 'モンスターに破壊されない', '不会被怪兽破坏', '몬스터에게 파괴되지 않음'),
+    'Indestrutível': ('Indestructible', 'Unzerstörbar', 'Indistruttibile', '破壊されない', '不可破坏', '파괴되지 않음'),
+    'Imune a mágicas': ('Immune to magic', 'Immun gegen Magie', 'Immune alle magie', '魔法に耐性', '免疫魔法', '마법 면역'),
+    'Imune a traps': ('Immune to traps', 'Immun gegen Fallen', 'Immune alle trappole', '罠に耐性', '免疫陷阱', '함정 면역'),
+    'Dano perfurante': ('Piercing damage', 'Durchschlagender Schaden', 'Danno perforante', '貫通ダメージ', '贯穿伤害', '관통 피해'),
+    'Não bloqueável': ('Unblockable', 'Nicht blockierbar', 'Non bloccabile', 'ブロック不可', '不可阻挡', '막을 수 없음'),
+    'Sem limite de cópias': ('No copy limit', 'Kein Kopienlimit', 'Nessun limite di copie', '枚数制限なし', '无张数限制', '장수 제한 없음'),
+    'Ataca no 1º turno': ('Attacks on turn 1', 'Greift im 1. Zug an', 'Attacca al 1º turno', '1ターン目に攻撃可能', '第 1 回合可攻击', '1턴에 공격 가능'),
 }

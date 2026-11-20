@@ -62,18 +62,19 @@ def _field_value(game, board, side, stance):
         strength = unit[stat]
         total += strength * (4 if stat == 'defesa' and stance == 'defensiva' else
                              4 if stat == 'ataque' else 2)
-        total += 500 * (unit['imune_magia'] + unit['imune_armadilha'] + unit['indestrutivel'])
+        total += 500 * (unit['imune_magia'] + unit['imune_armadilha'] + unit['indestrutivel']
+                        + bool(unit.get('indestrutivel_batalha')))
         if not rivals and stat == 'ataque':
             total += strength
         for rival in rivals:
             own_star, enemy_star = guardian_bonuses(unit['guardian_id'], rival['guardian_id'])
             own_power = max(0, strength + own_star)
             threat = max(0, rival['ataque'] + enemy_star)
-            if not unit['indestrutivel'] and threat > own_power:
+            if not (unit['indestrutivel'] or unit.get('indestrutivel_batalha')) and threat > own_power:
                 total -= (threat - own_power) * (3 if stance == 'defensiva' else 2)
             if stat == 'ataque':
                 defense = max(0, rival[rival['posicao']] + enemy_star)
-                if not rival['indestrutivel'] and own_power > defense:
+                if not (rival['indestrutivel'] or rival.get('indestrutivel_batalha')) and own_power > defense:
                     total += 900 + min(own_power - defense, game.lp[opposite(side)])
             total += own_star - enemy_star
     return total

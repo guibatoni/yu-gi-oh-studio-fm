@@ -36,7 +36,8 @@ ACTION_GROUPS = {
         'bonus_cemiterio_tipo', 'equip_atk'}),
     'protecao': frozenset({
         'monstro_indestrutivel', 'monstro_imune_magia', 'monstro_imune_armadilha',
-        'equip_indestrutivel', 'equip_imune_armadilha', 'equip_imune_magia_armadilha'}),
+        'equip_indestrutivel', 'equip_imune_armadilha', 'equip_imune_magia_armadilha',
+        'monstro_indestrutivel_batalha', 'equip_indestrutivel_batalha'}),
     'combate': frozenset({
         'ataques_multiplos','dano_perfurante','nao_bloqueavel',
         'perder_lp_por_ataque','ataque_primeiro_turno'}),

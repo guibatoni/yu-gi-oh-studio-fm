@@ -13,7 +13,7 @@ COUNT_ZONES = {'bonus_por_tipo': 'campo', 'bonus_deck_tipo': 'deck',
                'bonus_cemiterio_tipo': 'cemiterio', 'bonus_mao_tipo': 'mao'}
 SCALING_ACTIONS = frozenset(COUNT_ZONES) | {'bonus_por_carta_id'}
 EQUIPMENT_ACTIONS = {'equip_imune_armadilha', 'equip_imune_magia_armadilha',
-                     'equip_indestrutivel', 'equip_atk'}
+                     'equip_indestrutivel', 'equip_indestrutivel_batalha', 'equip_atk'}
 MAX_MONSTERS_PER_SIDE = 5
 SIDES = ('jogador', 'adversario')
 
@@ -113,6 +113,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             'guardian_id':int(raw.get('guardian_id', raw.get('guardian_1_id', 0))),
             'posicao':raw.get('posicao', 'ataque'),
             'imune_armadilha':False, 'imune_magia':False, 'indestrutivel':False,
+            'indestrutivel_batalha':False,
             'ataques_max':1, 'perfurante':False, 'nao_bloqueavel':False,
             'ataque_primeiro_turno':False})
     index = {(m['lado'],m['slot']): m for m in field}
@@ -143,7 +144,8 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             action = raw.get('acao')
             if (source['face_up'] or action == 'ataque_primeiro_turno') and action in (
                 'ataques_multiplos', 'ataque_primeiro_turno', 'monstro_indestrutivel', 'monstro_imune_magia',
-                'monstro_imune_armadilha', 'dano_perfurante', 'nao_bloqueavel'):
+                'monstro_imune_armadilha', 'dano_perfurante', 'nao_bloqueavel',
+                'monstro_indestrutivel_batalha'):
                 eff = check_effect(raw)
                 if action == 'ataques_multiplos':
                     source['ataques_max'] = max(source['ataques_max'], eff['valor'])
@@ -151,6 +153,8 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
                     source['ataque_primeiro_turno'] = True
                 elif action == 'monstro_indestrutivel':
                     source['indestrutivel'] = True
+                elif action == 'monstro_indestrutivel_batalha':
+                    source['indestrutivel_batalha'] = True
                 elif action == 'monstro_imune_magia':
                     source['imune_magia'] = True
                 elif action == 'monstro_imune_armadilha':
@@ -197,6 +201,8 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
                 target['imune_armadilha'] = target['imune_magia'] = True
             elif action == 'equip_indestrutivel':
                 target['indestrutivel'] = True
+            elif action == 'equip_indestrutivel_batalha':
+                target['indestrutivel_batalha'] = True
             else:
                 target['ataque'] = target['ataque'] + eff['valor']
             events.append({'origem':('equip', cid), 'destino':(side,slot),

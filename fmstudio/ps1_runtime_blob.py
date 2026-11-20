@@ -446,3 +446,24 @@ RUNTIME = (RUNTIME[:_life_icon_offset] + bytes.fromhex('0b 00 44 2c')
            + RUNTIME[_life_icon_offset + 4:])
 RUNTIME_SHA256 = _runtime_hashlib.sha256(RUNTIME).hexdigest()
 del _runtime_hashlib, _life_icon_offset
+
+
+# BATTLE_PROOF_PATCH: "indestrutível por criaturas" (bit 0x40 da proteção). Só as três
+# checagens de destruição EM BATALHA dentro de Battle passam a aceitar 0x40 além de
+# INDESTRUCTIBLE (andi v0,v0,0x4 -> 0x44); efeitos de mágica/armadilha continuam
+# destruindo. tools/ps1/runtime.c contém a mudança equivalente (BATTLE_PROOF).
+import hashlib as _runtime_hashlib
+import struct as _runtime_struct
+_expected = _runtime_hashlib.sha256(RUNTIME).hexdigest()
+_battle = [o for o in range(ENTRY_POINTS['Battle'] - RUNTIME_BASE, ENTRY_POINTS['Resume'] - RUNTIME_BASE, 4)
+           if _runtime_struct.unpack_from('<I', RUNTIME, o)[0] == 0x30420004
+           and _runtime_struct.unpack_from('<I', RUNTIME, o - 8)[0]
+           == 0x0C000000 | ((ENTRY_POINTS['protection'] & 0x0FFFFFFF) >> 2)]
+if _expected != 'fa1d5e9177b5eb2d6a2cb469468c634c9cb3b356a71ccd106f703c59623f1a81' or len(_battle) != 3:
+    raise RuntimeError('PS1 runtime recompilado ou divergente; revise a proteção em batalha.')
+RUNTIME = bytearray(RUNTIME)
+for _offset in _battle:
+    _runtime_struct.pack_into('<I', RUNTIME, _offset, 0x30420044)
+RUNTIME = bytes(RUNTIME)
+RUNTIME_SHA256 = _runtime_hashlib.sha256(RUNTIME).hexdigest()
+del _runtime_hashlib, _runtime_struct, _expected, _battle, _offset

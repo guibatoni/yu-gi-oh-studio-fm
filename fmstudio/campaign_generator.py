@@ -33,7 +33,7 @@ EFFECT_ACTIONS = frozenset((
     'dano_lp_deck_tipo', 'cura_lp_deck_tipo', 'descartar_alvo',
     'dano_monstro_alvo', 'vinculo_vida', 'ataques_multiplos',
     'monstro_indestrutivel', 'monstro_imune_magia', 'monstro_imune_armadilha',
-    'dano_perfurante', 'nao_bloqueavel', 'ataque_primeiro_turno',
+    'dano_perfurante', 'nao_bloqueavel', 'ataque_primeiro_turno', 'monstro_indestrutivel_batalha',
     ENTRY_GROW, ENTRY_SHRINK,
     'aumentar_atk', 'aumentar_def', 'reduzir_atk', 'reduzir_def',
 ))

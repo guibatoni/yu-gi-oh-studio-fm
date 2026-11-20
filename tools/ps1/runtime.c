@@ -8,6 +8,7 @@ typedef unsigned int u32;
 enum {
     OCCUPIED = 0x8000, USED = 0x4000, FACE_DOWN = 0x1000, DEFENSE = 0x800,
     MAGIC = 1, TRAP = 2, INDESTRUCTIBLE = 4, PIERCING = 8, DIRECT = 16, FIRST_TURN = 32,
+    BATTLE_PROOF = 64,  /* indestrutível só em batalha (por criaturas) */
     FIELD = 5, PLACING = 7, CONFIRMING = 8, BATTLE = 9,
 #ifndef FM_CARD_CAPACITY
 #define FM_CARD_CAPACITY 722
@@ -390,7 +391,7 @@ ENTRY void Battle(void)
         if (target < 2 && (!BATTLE_TRAP || target == 0)) {
             int slot = duel.battle[target];
             if (monster_zone(slot) && !(duel.lost & (1 << target))) {
-                if (protection(slot) & INDESTRUCTIBLE) STEP = 6;
+                if (protection(slot) & (INDESTRUCTIBLE | BATTLE_PROOF)) STEP = 6;
                 else {
                     duel.lost |= 1 << target;
                     end_instance(slot);
@@ -402,7 +403,7 @@ ENTRY void Battle(void)
     if (before == 5 && GAME(u8, 0x8009B369) == 1) {
         for (unsigned i = 0; i < 2; i++) {
             int slot = GAME(s8, 0x8009B208 + i);
-            if (protection(slot) & INDESTRUCTIBLE) GAME(s8, 0x8009B208 + i) = -1;
+            if (protection(slot) & (INDESTRUCTIBLE | BATTLE_PROOF)) GAME(s8, 0x8009B208 + i) = -1;
         }
     }
 }
