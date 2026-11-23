@@ -18,6 +18,11 @@ from .tables import CARD_COUNT
 ICON_CODES = {name: 0x40 + index for index, name in enumerate(
     name for name in CUSTOM_ICONS if name != 'god')}
 ICON_CODES['god'] = 0x31
+# 0x49 (célula u=160, CLUT 672,255) é do ícone da Guardian Star Supreme
+# (ps1_supreme). O vínculo de vida usa 0x4B; o runtime aceita 0x40..0x4B.
+SUPREME_ICON_CODE = 0x49
+ICON_CODES['vinculo_vida'] = 0x4B
+assert SUPREME_ICON_CODE not in ICON_CODES.values()
 MAX_ROWS, COLUMN_WIDTH = 9, 21
 MAX_TEXT_BYTES = 2048  # Includes the terminator read by the BIN verifier.
 COLOR_CONTROL = b'\xf8\x0a'
@@ -27,7 +32,7 @@ PUNCTUATION = str.maketrans({'–': '-', '—': '-', '−': '-', '’': "'", '�
                             # alemão/italiano traduzidos: letras sem glifo na fonte americana
                             'ß': 'ss', 'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue',
                             '«': '"', '»': '"', '„': '"'})
-TEXT_ICON_LABELS = {}  # Os dois glifos LP possuem agora slots MIPS 0x49 e 0x4A.
+TEXT_ICON_LABELS = {}  # Glifos LP: restaurar_lp 0x4A, vinculo_vida 0x4B (0x49 = Supreme).
 
 
 def _text_tokens(raw: bytes):

@@ -467,3 +467,16 @@ for _offset in _battle:
 RUNTIME = bytes(RUNTIME)
 RUNTIME_SHA256 = _runtime_hashlib.sha256(RUNTIME).hexdigest()
 del _runtime_hashlib, _runtime_struct, _expected, _battle, _offset
+
+
+# SUPREME_ICON_PATCH: o código 0x49 (célula u=160, CLUT 672,255) é do ícone Supreme.
+# O ícone "vínculo de vida" passa para 0x4B (u=192, CLUT 704,255): DescriptionIcon
+# aceita 12 ícones (sltiu 11 -> 12). tools/ps1/hooks.S tem a mudança equivalente.
+import hashlib as _runtime_hashlib
+_icon_offset = ENTRY_POINTS['DescriptionIcon'] - RUNTIME_BASE + 4
+if (_runtime_hashlib.sha256(RUNTIME).hexdigest() != '70a80f6e17a034a55ad914e4fd256f0892f009c10612a23ed319c535fb2d3491'
+        or RUNTIME[_icon_offset:_icon_offset + 4] != bytes.fromhex('0b 00 44 2c')):
+    raise RuntimeError('PS1 runtime recompilado ou divergente; revise os 12 ícones de descrição.')
+RUNTIME = RUNTIME[:_icon_offset] + bytes.fromhex('0c 00 44 2c') + RUNTIME[_icon_offset + 4:]
+RUNTIME_SHA256 = _runtime_hashlib.sha256(RUNTIME).hexdigest()
+del _runtime_hashlib, _icon_offset

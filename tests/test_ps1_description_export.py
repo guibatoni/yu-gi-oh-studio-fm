@@ -48,7 +48,7 @@ class DescriptionWriteTests(unittest.TestCase):
         self.assertEqual(icons, {'vinculo_vida'})
         self.assertEqual(len(rows), 1)
         offset, _ = description_slot(patched, 1)
-        self.assertEqual(patched[offset:offset+4], bytes((0xf8,0x0b,0x49,0xff)))
+        self.assertEqual(patched[offset:offset+4], bytes((0xf8,0x0b,0x4b,0xff)))
 
     def test_explicit_fallback_keeps_old_slot_and_records_reason(self):
         original = sample_exe()
@@ -192,7 +192,7 @@ class DescriptionWriteTests(unittest.TestCase):
         self.assertFalse(pending)
         self.assertFalse(rows[0].get('resumida', False))
         self.assertEqual(patched[rows[0]['offset_exe']:rows[0]['offset_exe']+3],
-                         bytes((0xf8,0x0b,0x49)))
+                         bytes((0xf8,0x0b,0x4b)))
         with patch('fmstudio.ps1_expansion.inspect_expansion',
                    return_value={'status': 'aplicado', 'capacidade': 740}):
             result = inspect_exe_description(patched, 723, text, {}, native_profile=True)

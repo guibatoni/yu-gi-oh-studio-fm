@@ -24,7 +24,7 @@ DeckCopyGate:
 .globl DescriptionIcon
 DescriptionIcon:
     addiu $v0, $v1, -0x40
-    sltiu $a0, $v0, 11
+    sltiu $a0, $v0, 12
     beq $a0, $zero, .Loriginal
     addiu $v0, $v0, 1
     sll $a0, $v0, 20
@@ -41,7 +41,8 @@ DescriptionIcon:
     sw $a2, 8($s1)
     sw $v0, 0($s1)
 
-    /* Eleven icons. CLUTs 0-6 at (656,251), 7-10 at (640..688,255). */
+    /* Twelve icons. CLUTs 0-6 at (656,251), 7-11 at (640..704,255).
+       0x49 (index 9) is drawn by Supreme; vinculo_vida uses 0x4B. */
     addiu $v0, $v1, -0x40
     sltiu $a0, $v0, 7
     beq $a0, $zero, .Lsecond_clut_row
