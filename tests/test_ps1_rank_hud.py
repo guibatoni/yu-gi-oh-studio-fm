@@ -26,7 +26,7 @@ class RankHudTests(TestCase):
         self.assertEqual(inspect_rank_hud(source)['status'], 'ausente')
         with patch('fmstudio.ps1_rank_hud.SOURCE_SHA256', digest), patch(
                 'fmstudio.ps1_lp_hud.SOURCE_SHA256', digest):
-            wide, _ = patch_lp_hud(source, source, initial_lp=20000)
+            wide, _ = patch_lp_hud(source, source, initial_lp=20000, hook=0x80018000)
             updated, report = patch_rank_hud(source, wide)
             self.assertEqual(report['status'], 'aplicado')
             self.assertTrue(verify_lp_hud(source, updated, initial_lp=20000))

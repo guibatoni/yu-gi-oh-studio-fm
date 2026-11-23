@@ -6,16 +6,16 @@ algarismo é um sprite 8x8 desenhado com GsSortFastSprite, avançando 8 px.
 
 Com LP acima de 9.999 este patch:
 
-* reescreve func_80016D2C (mesmos 44 words, mesma assinatura) para desenhar
-  cada algarismo com GsSortSprite, reduzido para ~6x7 px (escala 0,8 x 0,875),
-  avançando 6 px. Os 5 dígitos ocupam 30 px, dentro dos 32 px que os 4
-  dígitos originais usavam: cabem no quadro do LP sem invadir o rótulo;
+* troca, dentro de func_80016D2C, a chamada ao GsSortFastSprite por uma
+  rotina própria (bloco reservado no SLUS) que emite o mesmo glifo como um
+  POLY_FT4 de 6x7 px, sem usar a GTE, e reduz o avanço de 8 para 6 px. Os 5
+  dígitos ocupam 30 px, dentro dos 32 px que os 4 dígitos originais usavam;
 * chama essa função com largura 5 e origem -2 (era -3) nos dois lados;
 * desenha o contador do deck com os mesmos dígitos menores, centralizado
   sob/sobre os dígitos de LP (origem +7 em vez de +14).
 
-O bit 27 do atributo (0x08000000, "sem escala/rotação" na libgs) é limpo só
-no sprite de rascunho desta função; os demais campos são os do jogo.
+A primeira versão usava GsSortSprite com escala; ele depende do estado da
+GTE da cena 3D e os dígitos piscavam/sumiam (ex.: escolha de Guardian Star).
 Só funciona no SLUS_014.11 do Drop x15 conferido por SHA-256, e cada palavra
 original precisa corresponder exatamente. Reaplicável. Visual a conferir no
 ePSXe (validado_epsxe=False).
@@ -56,13 +56,14 @@ DECK_X_PATCHES = (
 )
 
 DIGIT_FUNC = 0x80016D2C
-TEXT_ENCODE_DIGITS = 0x800357E8
-GS_SORT_SPRITE = 0x800844F0
-OT_TABLE = 0x800E9D90               # D_800E9D90[style->ot_index]
+SORT_CALL = 0x80016DA0              # jal GsSortFastSprite dentro do laço
+ADVANCE_PC = 0x80016DB0             # addiu v0,v0,8 (avanço de x)
+GS_SORT_FAST_SPRITE = 0x800849F0
+PACKET_POINTER = 0x800FE240         # GsOUT_PACKET_P
+DRAW_OFFSET = 0x800FE0BC            # deslocamento x/y somado pelo GsSortFastSprite
 DIGIT_ADVANCE = 6
-SCALE_X = 0x0CCD                    # 0,8 (ONE = 0x1000)
-SCALE_Y = 0x0E00                    # 0,875
-SPRITE_ATTRIBUTE = 0x01000000       # 8 bpp, escala ligada (sem o bit 27)
+DIGIT_W, DIGIT_H = 6, 7             # glifo 8x8 da fonte desenhado em 6x7
+QUAD_BYTES = 0x28                   # POLY_FT4: tag + 9 palavras
 RETAIL_DIGIT_WORDS = (
     0x27BDFFD0, 0xAFB20020, 0x00809021, 0xAFB1001C, 0x00A08821, 0x00C02021,
     0xAFB00018, 0x00E08021, 0x02002821, 0x27A60010, 0xAFBF002C, 0xAFB40028,
@@ -75,62 +76,102 @@ RETAIL_DIGIT_WORDS = (
 )
 
 
-def small_digit_words() -> tuple[int, ...]:
-    """func_80016D2C(style, sprite, valor, largura) com dígitos reduzidos."""
-    a = Asm(DIGIT_FUNC)
-    a.addiu('sp', 'sp', -0x30)
-    a.sw('ra', 0x2C, 'sp'); a.sw('s2', 0x20, 'sp')
-    a.sw('s1', 0x1C, 'sp'); a.sw('s0', 0x18, 'sp')
-    a.move('s2', 'a0'); a.move('s1', 'a1'); a.move('s0', 'a3')
-    a.move('a0', 'a2'); a.move('a1', 'a3')
-    a.jal(TEXT_ENCODE_DIGITS)
-    a.addiu('a2', 'sp', 0x10)
-    # GsSPRITE: attribute +0, mx/my +0x18, scalex +0x1C, scaley +0x1E, rotate +0x20
-    a.lui('t0', SPRITE_ATTRIBUTE >> 16)
-    a.sw('t0', 0x00, 's1')
-    a.sw('zero', 0x18, 's1')
-    a.lui('t0', SCALE_Y); a.ori('t0', 't0', SCALE_X)
-    a.sw('t0', 0x1C, 's1')
-    a.addiu('s0', 's0', -1)
-    a.bltz('s0', 'done')
-    a.sw('zero', 0x20, 's1')        # delay slot: rotate = 0
-    a.label('loop')
-    a.addu('t0', 'sp', 's0')
-    a.lbu('t0', 0x10, 't0')
-    a.lbu('t1', 0x17, 's2')         # load delay: instrução independente
-    a.sll('t0', 't0', 3)
-    a.sb('t0', 0x0E, 's1')
-    a.sll('t1', 't1', 2)
-    high, low = hi_lo(OT_TABLE)
-    a.lui('t2', high)
-    a.addu('t1', 't1', 't2')
-    a.lw('a1', low, 't1')
-    a.lhu('a2', 0x14, 's2')
-    a.jal(GS_SORT_SPRITE)
-    a.move('a0', 's1')
-    a.lhu('t0', 0x04, 's1')
-    a.addiu('s0', 's0', -1)
-    a.addiu('t0', 't0', DIGIT_ADVANCE)
-    a.bgez('s0', 'loop')
-    a.sh('t0', 0x04, 's1')
+def _jal(target: int) -> int:
+    return 0x0C000000 | ((target & 0x0FFFFFFF) >> 2)
+
+
+def quad_code(base: int) -> bytes:
+    """SmallDigit(sprite, ot, pri): igual ao GsSortFastSprite, mas em 6x7.
+
+    Emite um POLY_FT4 texturizado direto no buffer de pacotes, sem GTE (o
+    GsSortSprite com escala dependia do estado da GTE da cena 3D e fazia os
+    dígitos piscarem). Atributo, cor, tpage, CLUT, deslocamento de tela e
+    encadeamento na OT seguem exatamente o GsSortFastSprite retail.
+    """
+    a = Asm(base)
+    a.lw('t4', 0, 'a0')
+    a.lui('t7', hi_lo(PACKET_POINTER)[0])
+    a.bltz('t4', 'done')                        # bit 31: não exibir
+    a.lw('t7', hi_lo(PACKET_POINTER)[1], 't7')
+    # palavra 1: 0x2C | semitransparente (bit 30) | sem brilho (bit 6) | cor
+    a.srl('t0', 't4', 5); a.lui('t1', 0x0200); a.and_('t0', 't0', 't1')
+    a.sll('t1', 't4', 18); a.lui('t2', 0x0100); a.and_('t1', 't1', 't2')
+    a.or_('t0', 't0', 't1')
+    a.lui('t1', 0x2C00); a.or_('t0', 't0', 't1')
+    a.lbu('t1', 0x16, 'a0'); a.lbu('t2', 0x15, 'a0'); a.lbu('t3', 0x14, 'a0')
+    a.sll('t1', 't1', 16); a.or_('t0', 't0', 't1')
+    a.sll('t2', 't2', 8); a.or_('t0', 't0', 't2')
+    a.or_('t0', 't0', 't3')
+    a.sw('t0', 4, 't7')
+    # vértices (x/y + deslocamento de tela)
+    off_hi, off_lo = hi_lo(DRAW_OFFSET)
+    a.lui('t1', off_hi)
+    a.lhu('t2', off_lo, 't1'); a.lhu('t3', off_lo + 2, 't1')
+    a.lhu('t0', 4, 'a0'); a.lhu('t1', 6, 'a0')
+    a.addu('t2', 't2', 't0'); a.andi('t2', 't2', 0xFFFF)
+    a.addu('t3', 't3', 't1'); a.sll('t3', 't3', 16)
+    a.or_('t0', 't2', 't3'); a.sw('t0', 0x08, 't7')
+    a.addiu('t5', 't2', DIGIT_W); a.andi('t5', 't5', 0xFFFF)
+    a.or_('t0', 't5', 't3'); a.sw('t0', 0x10, 't7')
+    a.lui('t1', DIGIT_H); a.addu('t3', 't3', 't1')
+    a.or_('t0', 't2', 't3'); a.sw('t0', 0x18, 't7')
+    a.or_('t0', 't5', 't3'); a.sw('t0', 0x20, 't7')
+    # uv0 + CLUT
+    a.lbu('t0', 0x0E, 'a0'); a.lbu('t1', 0x0F, 'a0')
+    a.lh('t2', 0x12, 'a0'); a.lh('t3', 0x10, 'a0')
+    a.sll('t1', 't1', 8); a.or_('t6', 't0', 't1')         # t6 = u | v<<8
+    a.sll('t2', 't2', 22)
+    a.sll('t3', 't3', 12); a.lui('t1', 0x3F); a.and_('t3', 't3', 't1')
+    a.or_('t2', 't2', 't3'); a.or_('t2', 't2', 't6'); a.sw('t2', 0x0C, 't7')
+    # uv1 + tpage (modo de cor bits 24-25, abr bits 28-29, página do sprite)
+    a.lhu('t3', 0x0C, 'a0')
+    a.srl('t2', 't4', 17); a.andi('t2', 't2', 0x180)     # (preenche o load delay)
+    a.andi('t3', 't3', 0x1F); a.or_('t2', 't2', 't3')
+    a.srl('t3', 't4', 23); a.andi('t3', 't3', 0x60); a.or_('t2', 't2', 't3')
+    a.sll('t2', 't2', 16)
+    a.addiu('t3', 't6', 8); a.or_('t2', 't2', 't3'); a.sw('t2', 0x14, 't7')
+    a.addiu('t3', 't6', 0x800); a.sw('t3', 0x1C, 't7')
+    a.addiu('t3', 't6', 0x808); a.sw('t3', 0x24, 't7')
+    # encadear na OT: entrada = org + pri*4 - length*4 (como GsSortFastSprite)
+    a.andi('a2', 'a2', 0xFFFF); a.sll('a2', 'a2', 2)
+    a.lw('t0', 4, 'a1'); a.lw('t1', 8, 'a1')
+    a.addu('t0', 't0', 'a2'); a.sll('t1', 't1', 2); a.subu('t0', 't0', 't1')
+    a.lw('t1', 0, 't0')
+    a.lui('t2', 0x0900)
+    a.addu('t1', 't1', 't2'); a.sw('t1', 0, 't7')
+    a.lui('t2', 0x00FF); a.ori('t2', 't2', 0xFFFF)
+    a.and_('t2', 't7', 't2'); a.sw('t2', 0, 't0')
+    a.addiu('t7', 't7', QUAD_BYTES)
+    a.lui('t1', hi_lo(PACKET_POINTER)[0])
+    a.sw('t7', hi_lo(PACKET_POINTER)[1], 't1')
     a.label('done')
-    a.lw('ra', 0x2C, 'sp'); a.lw('s2', 0x20, 'sp')
-    a.lw('s1', 0x1C, 'sp'); a.lw('s0', 0x18, 'sp')
     a.jr('ra')
-    a.addiu('sp', 'sp', 0x30)
-    words = a.words()
-    if len(words) > len(RETAIL_DIGIT_WORDS):
-        raise ModError('Contador LP: rotina de dígitos maior que a original.')
-    return tuple(words) + (0,) * (len(RETAIL_DIGIT_WORDS) - len(words))
+    a.nop()
+    return a.bytes()
 
 
-def _all_patches():
-    small = small_digit_words()
+def block_size() -> int:
+    return len(quad_code(0x80100000))
+
+
+def _func_patches(hook: int):
+    return ((SORT_CALL, _jal(GS_SORT_FAST_SPRITE), _jal(hook)),
+            (ADVANCE_PC, 0x24420008, 0x24420000 | DIGIT_ADVANCE))
+
+
+def _all_patches(hook: int | None = None):
     out = [(pc, old, new) for pc, old, new, _ in LP_HUD_PATCHES]
     out += [(pc, old, new) for pc, old, new, _ in DECK_X_PATCHES]
-    out += [(DIGIT_FUNC + 4 * i, old, new)
-            for i, (old, new) in enumerate(zip(RETAIL_DIGIT_WORDS, small))]
+    if hook is not None:
+        out += list(_func_patches(hook))
     return out
+
+
+def installed_hook(exe: bytes) -> int | None:
+    word = _word(exe, SORT_CALL)
+    if word >> 26 != 3 or word == _jal(GS_SORT_FAST_SPRITE):
+        return None
+    return 0x80000000 | ((word & 0x03FFFFFF) << 2)
 
 
 def _word(data: bytes, pc: int) -> int:
@@ -144,6 +185,7 @@ def retail_words() -> dict[int, int]:
     """Palavras do SLUS retail que este patch confere (útil para fixtures)."""
     words = {pc: old for pc, old, _ in _all_patches()}
     words.update(dict(DECK_COUNT_WORDS))
+    words.update({DIGIT_FUNC + 4 * i: w for i, w in enumerate(RETAIL_DIGIT_WORDS)})
     return words
 
 
@@ -151,10 +193,12 @@ def _verified_layout(original: bytes, modified: bytes) -> bool:
     return (len(original) == len(modified) and
             hashlib.sha256(original).hexdigest() == SOURCE_SHA256 and
             all(_word(original, pc) == retail for pc, retail, _ in _all_patches()) and
+            all(_word(original, DIGIT_FUNC + 4 * i) == w for i, w in enumerate(RETAIL_DIGIT_WORDS)) and
             all(_word(original, pc) == retail for pc, retail in DECK_COUNT_WORDS))
 
 
-def patch_lp_hud(original: bytes, modified: bytes, *, initial_lp: int) -> tuple[bytes, dict]:
+def patch_lp_hud(original: bytes, modified: bytes, *, initial_lp: int,
+                 hook: int | None = None) -> tuple[bytes, dict]:
     """Aplicar contador de 5 dígitos se os LP globais ultrapassarem 9.999.
 
     O patch da inicialização de LP deve continuar sendo aplicado separadamente.
@@ -167,7 +211,18 @@ def patch_lp_hud(original: bytes, modified: bytes, *, initial_lp: int) -> tuple[
                           'lp_inicial': initial_lp, 'validado_epsxe': False}
     if not _verified_layout(original, modified):
         raise ModError('Contador de LP com cinco dígitos exige o SLUS original Drop x15 validado.')
-    for pc, retail, wide in _all_patches():
+    if hook is None:
+        raise ModError('Contador LP: sem bloco reservado para os dígitos reduzidos.')
+    block = quad_code(hook)
+    at = hook - EXE_DELTA
+    if (hook & 3 or at < 0 or at + len(block) > len(modified)
+            or (any(modified[at:at + len(block)]) and modified[at:at + len(block)] != block)):
+        raise ModError('Contador LP: a área reservada para os dígitos não está livre.')
+    for i, retail in enumerate(RETAIL_DIGIT_WORDS):
+        pc = DIGIT_FUNC + 4 * i
+        if pc not in (SORT_CALL, ADVANCE_PC) and _word(modified, pc) != retail:
+            raise ModError(f'Contador LP: rotina de dígitos alterada em 0x{pc:08X}.')
+    for pc, retail, wide in _all_patches(hook):
         if _word(modified, pc) not in (retail, wide, LEGACY_LP_WORDS.get(pc, wide)):
             raise ModError(f'Contador LP: conflito MIPS em 0x{pc:08X}.')
     for pc, retail in DECK_COUNT_WORDS:
@@ -175,7 +230,8 @@ def patch_lp_hud(original: bytes, modified: bytes, *, initial_lp: int) -> tuple[
             raise ModError(f'Contador LP: contador do deck alterado em 0x{pc:08X}.')
 
     out = bytearray(modified)
-    for pc, _, wide in _all_patches():
+    out[at:at + len(block)] = block
+    for pc, _, wide in _all_patches(hook):
         struct.pack_into('<I', out, pc - EXE_DELTA, wide)
     if not verify_lp_hud(original, bytes(out), initial_lp=initial_lp):
         raise ModError('Contador LP: verificação final de cinco dígitos falhou.')
@@ -183,8 +239,8 @@ def patch_lp_hud(original: bytes, modified: bytes, *, initial_lp: int) -> tuple[
         'status': 'aplicado', 'digitos': 5, 'lp_inicial': initial_lp,
         'jogador': True, 'adversario': True,
         'enderecos': [f'0x{pc:08X}' for pc, *_ in LP_HUD_PATCHES + DECK_X_PATCHES],
-        'rotina_digitos': f'0x{DIGIT_FUNC:08X}',
-        'digito_px': DIGIT_ADVANCE, 'escala': [SCALE_X / 0x1000, SCALE_Y / 0x1000],
+        'rotina_digitos': f'0x{hook:08X}',
+        'digito_px': [DIGIT_W, DIGIT_H], 'sem_gte': True,
         'deck_centralizado': True, 'deck_preservado': True, 'validado_epsxe': False,
         'aviso': ('Dígitos de LP reduzidos para caber 5 no quadro original; '
                   'conferir visualmente no ePSXe. LP acima de 32767 ainda exige avaliação do contador assinado.'
@@ -197,8 +253,14 @@ def verify_lp_hud(original: bytes, modified: bytes, *, initial_lp: int) -> bool:
     if initial_lp <= 9999:
         return True  # nenhum patch do HUD foi solicitado; outros patches são permitidos
     try:
+        hook = installed_hook(modified)
+        if hook is None:
+            return False
+        block = quad_code(hook)
+        at = hook - EXE_DELTA
         return (_verified_layout(original, modified) and
-                all(_word(modified, pc) == wide for pc, _, wide in _all_patches()) and
+                modified[at:at + len(block)] == block and
+                all(_word(modified, pc) == wide for pc, _, wide in _all_patches(hook)) and
                 all(_word(modified, pc) == retail for pc, retail in DECK_COUNT_WORDS))
     except (ModError, struct.error):
         return False

@@ -350,8 +350,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     descriptions_not_written=[]
     regions = None
     splash_requested = bool(native_profile) and splash_wanted
+    lp_hud_initial=mod_plan.player_lp if mod_plan.has_lp else 8000
+    lp_hud_wide = bool(native_profile) and lp_hud_initial > 9999
+    lp_hud_hook = None
     if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled
-                           or splash_requested):
+                           or splash_requested or lp_hud_wide):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     if quest_enabled:
@@ -371,6 +374,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if splash_requested:
         # Reserva agora (antes dos textos); instala depois do runtime, que cria o salto a trocar.
         splash_hook, regions = reserve_block(patched_exe, regions, splash_block_size())
+    if lp_hud_wide:
+        # Dígitos reduzidos de LP (POLY_FT4 sem GTE): bloco próprio, reservado antes dos textos.
+        from .ps1_lp_hud import block_size as lp_hud_block_size
+        lp_hud_hook, regions = reserve_block(patched_exe, regions, lp_hud_block_size())
     if texts:
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
         (patched_exe, written_descriptions, description_icons,
@@ -531,10 +538,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     from .ps1_lp_hud import patch_lp_hud, verify_lp_hud
     # O HUD é um patch separado da RAM: 20000 LP na memória requer também
     # cinco dígitos no painel para os dois lados.
-    lp_hud_initial=mod_plan.player_lp if mod_plan.has_lp else 8000
     if native_profile:
         patched_exe,lp_hud_report=patch_lp_hud(
-            original_exe,patched_exe,initial_lp=lp_hud_initial)
+            original_exe,patched_exe,initial_lp=lp_hud_initial,hook=lp_hud_hook)
     else:
         lp_hud_report={'status':'perfil_incompativel' if lp_hud_initial>9999 else 'original',
                        'digitos':4,'lp_inicial':lp_hud_initial,'validado_epsxe':False}
