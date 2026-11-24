@@ -159,7 +159,7 @@ def _normalize_deck(value, cards):
 def normalize_rules(data, cards):
     """Validate a settings snapshot without changing the project."""
     out = deepcopy(data)
-    if 'ia_ps1' in out and out['ia_ps1'] not in ('normal', 'dificil'):
+    if 'ia_ps1' in out and out['ia_ps1'] not in ('normal', 'dificil', 'agressiva', 'maxima'):
         raise ModError('IA PS1: escolha Normal ou Difícil.')
     if 'lp_inicial' in out:
         out['lp_inicial'] = positive_int(out['lp_inicial'], 'LP inicial para ambos')

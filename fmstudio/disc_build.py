@@ -625,7 +625,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if native_profile:
         patched_exe,ai_report=patch_hard_ai(original_exe,patched_exe,mode=ai_mode)
     else:
-        ai_report={'modo':ai_mode,'status':'perfil_incompativel' if ai_mode=='dificil'
+        ai_report={'modo':ai_mode,'status':'perfil_incompativel' if ai_mode!='normal'
                    else 'original', 'rotinas':[], 'validado_epsxe':False}
     if mod_plan.needs_wa:
         if original_wa is None or hashlib.sha256(original_wa).hexdigest()!=expected_wa:
@@ -814,7 +814,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                     text, _, _ = _description_bytes(reread_exe, cid)
                     if text:
                         raise ModError(f'Carta #{cid}: a descrição vazia diverge no BIN final.')
-            if native_profile and ai_mode=='dificil' and not verify_hard_ai(original_exe,reread_exe,mode=ai_mode):
+            if native_profile and ai_mode!='normal' and not verify_hard_ai(original_exe,reread_exe,mode=ai_mode):
                 raise ModError('IA PS1: patch incompleto após reempacotamento; BIN antigo preservado.')
             if native_profile and lp_hud_initial>9999 and not verify_lp_hud(
                     original_exe,reread_exe,initial_lp=lp_hud_initial):

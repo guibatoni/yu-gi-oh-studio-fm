@@ -847,7 +847,9 @@ class ModEditor(ttk.Frame):
         self.random_starter = tk.BooleanVar()
         self.mod_lp = tk.StringVar(value='8000')
         self.ps1_ai_modes = {'Normal — IA original': 'normal',
-                             'Difícil — IA aprimorada': 'dificil'}
+                             'Difícil — IA aprimorada': 'dificil',
+                             'Agressiva — mais fusões e ataques': 'agressiva',
+                             'Máxima — vê 20 cartas e funde sempre': 'maxima'}
         self.ps1_ai_choice = tk.StringVar(value='Normal — IA original')
         self.opponent_first = tk.BooleanVar()
         self.status = tk.StringVar(value='Abra um projeto para editar as tabelas.')
@@ -984,12 +986,15 @@ class ModEditor(ttk.Frame):
         ttk.Separator(lp_pane, orient='horizontal').pack(fill='x', pady=13)
         ttk.Label(lp_pane, text='Inteligência artificial dos oponentes — PlayStation 1',
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(4, 7))
-        ttk.Label(lp_pane, text='O modo Difícil modifica as decisões reais do BIN/CUE Drop x15: '
-                  'o oponente procura fusões, equipamentos, armadilhas e magias com mais frequência. '
-                  'Não aumenta atributos artificialmente.',
+        ttk.Label(lp_pane, text='Difícil: o oponente procura fusões, equipamentos, armadilhas e magias '
+                  'em todo turno (sem sorteio para tentar). Agressiva: além disso, monta fusões completas '
+                  '(até 3 níveis, inclusive só com cartas da mão), enxerga pelo menos 10 cartas '
+                  '(mão + próximas do deck), continua fundindo até o fim do deck e ataca cartas '
+                  'viradas com mais frequência. Máxima: enxerga 20 cartas e ataca cartas viradas na '
+                  'maioria das vezes. Nenhum modo aumenta atributos.',
                   wraplength=630, justify='left').pack(anchor='w', pady=(0, 9))
         ttk.Combobox(lp_pane, textvariable=self.ps1_ai_choice, state='readonly',
-                     values=list(self.ps1_ai_modes), width=29).pack(anchor='w')
+                     values=list(self.ps1_ai_modes), width=38).pack(anchor='w')
         ttk.Button(lp_pane, text='Salvar dificuldade da IA', style='Accent.TButton',
                    command=self.save_ps1_ai).pack(anchor='w', pady=9)
         ttk.Label(lp_pane, text='Disponível para a imagem Drop x15 validada. '
@@ -1705,11 +1710,11 @@ class ModEditor(ttk.Frame):
         try:
             value = self.ps1_ai_modes.get(self.ps1_ai_choice.get())
             if value is None:
-                raise ModError('Escolha Normal ou Difícil para a IA do PlayStation 1.')
+                raise ModError('Escolha um modo para a IA do PlayStation 1.')
             rules = self._edit()
             rules['ia_ps1'] = value
             self._commit(rules, 'IA PS1: ' +
-                         ('Difícil. Recrie o BIN/CUE para ativar.' if value == 'dificil'
+                         (f'{self.ps1_ai_choice.get()}. Recrie o BIN/CUE para ativar.' if value != 'normal'
                           else 'Normal. Recrie o BIN/CUE para restaurar.'))
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Config. MOD — IA PlayStation 1', str(exc), parent=self)

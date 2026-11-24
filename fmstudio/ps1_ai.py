@@ -20,7 +20,10 @@ from .core import ModError
 from .ps1_god24_chest import SOURCE_SHA256
 from .tables import EXE_DELTA
 
-AI_MODES = ('normal', 'dificil')
+AI_MODES = ('normal', 'dificil', 'agressiva', 'maxima')
+# Modos acima de 'dificil' usam as mesmas cinco instruções e ainda ajustam a
+# tabela de parâmetros por oponente (ps1_ai_tuning).
+HARD_MODES = ('dificil', 'agressiva', 'maxima')
 
 # (PC, instrução retail, instrução avançada, explicação)
 # Substituímos APENAS os branches que pulam uma tentativa por sorteio.
@@ -37,7 +40,7 @@ HARD_AI_PATCHES = (
 def mode_for(project):
     raw = (getattr(project, 'metadata', {}).get('edicao_mod') or {}).get('ia_ps1', 'normal')
     if raw not in AI_MODES:
-        raise ModError('IA do PS1: escolha Normal ou Difícil em Config. MOD.')
+        raise ModError('IA do PS1: escolha Normal, Difícil, Agressiva ou Máxima em Config. MOD.')
     return raw
 
 
@@ -49,7 +52,7 @@ def patch_hard_ai(original: bytes, modified: bytes, *, mode: str) -> tuple[bytes
                           'validado_epsxe': False}
     if (len(original) != len(modified) or
             hashlib.sha256(original).hexdigest() != SOURCE_SHA256):
-        raise ModError('IA Difícil exige a imagem Drop x15 com SLUS_014.11 validado.')
+        raise ModError('IA Difícil/Agressiva/Máxima exige a imagem Drop x15 com SLUS_014.11 validado.')
     changes = []
     # Verifique tudo antes de qualquer mutação. O BIN original é imutável.
     for pc, expected, patched, caption in HARD_AI_PATCHES:
@@ -63,10 +66,15 @@ def patch_hard_ai(original: bytes, modified: bytes, *, mode: str) -> tuple[bytes
     out = bytearray(modified)
     for pc, _, value, _ in HARD_AI_PATCHES:
         struct.pack_into('<I', out, pc - EXE_DELTA, value)
-    if not verify_hard_ai(original, out, mode='dificil'):
+    report = {}
+    if mode in ('agressiva', 'maxima'):
+        from .ps1_ai_tuning import apply as tune
+        tuned, report = tune(bytes(out), mode)
+        out = bytearray(tuned)
+    if not verify_hard_ai(original, out, mode=mode):
         raise ModError('IA PS1: divergência na verificação das cinco instruções.')
-    return bytes(out), {'modo': 'dificil', 'status': 'aplicado',
-                        'rotinas': changes, 'validado_epsxe': False}
+    return bytes(out), {'modo': mode, 'status': 'aplicado',
+                        'rotinas': changes, 'parametros_oponentes': report, 'validado_epsxe': False}
 
 
 def verify_hard_ai(original: bytes, modified: bytes, *, mode: str) -> bool:
@@ -74,7 +82,7 @@ def verify_hard_ai(original: bytes, modified: bytes, *, mode: str) -> bool:
         return False
     if hashlib.sha256(original).hexdigest() != SOURCE_SHA256:
         return False
-    expected_mode = (0x00000000 if mode == 'dificil' else None)
+    expected_mode = (0x00000000 if mode in HARD_MODES else None)
     for pc, stock, hard, _ in HARD_AI_PATCHES:
         offset = pc - EXE_DELTA
         if struct.unpack_from('<I', original, offset)[0] != stock:
