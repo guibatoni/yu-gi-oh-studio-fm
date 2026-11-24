@@ -965,6 +965,8 @@ class ModEditor(ttk.Frame):
                         variable=self.random_starter).pack(side='left', padx=5)
         ttk.Button(profiles, text='Gerar Deck Aleatório',
                    command=lambda: self.generate_deck(self.starter_deck)).pack(side='right')
+        ttk.Button(profiles, text='✦ Gerar deck temático…', style='Accent.TButton',
+                   command=self.generate_themed_starter).pack(side='right', padx=(0, 6))
         ttk.Button(starter_actions, text='Salvar deck inicial', style='Accent.TButton',
                    command=self.save_starter).pack(side='right')
 
@@ -1269,6 +1271,32 @@ class ModEditor(ttk.Frame):
             )
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Gerar Deck Aleatório', str(exc), parent=self)
+
+    def generate_themed_starter(self):
+        if self.project is None or self.studio._extract_running:
+            return
+        from .themed_deck_gui import ThemedDeckDialog
+        try:
+            self.refresh_catalog()
+            _, _, equips, rituals = base_tables(self.project)
+            fusions, equips, _ = match_recipes(self.project, equips, rituals)
+            copies = int(self.project.metadata.get('ps1_deck_global_limit', 3))
+            ThemedDeckDialog(self, self.cards, self.project.effects, fusions, equips,
+                             default_copies=copies, use_deck=self._save_themed_starter)
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Gerar deck temático', str(exc), parent=self)
+
+    def _save_themed_starter(self, ids, label):
+        rules = self._edit()
+        profiles = rules.setdefault('iniciais', {})
+        name, suffix = f'Deck {label}', 2
+        while name in profiles:
+            name = f'Deck {label} {suffix}'
+            suffix += 1
+        profiles[name] = {'peso': 1, 'cartas': list(ids), 'pools': []}
+        self._commit(rules, f'Perfil {name} salvo.')
+        self.starter.set(name)
+        self._refresh_profiles()
 
     def _use_generated_deck(self, editor, ids, stock):
         profile = {'cartas': list(ids), 'pools': []}

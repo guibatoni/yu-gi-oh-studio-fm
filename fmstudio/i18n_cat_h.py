@@ -116,4 +116,10 @@ ENTRIES = {
     'Tamanho do ladrilho (px):': ('Tile size (px):', 'Kachelgröße (px):', 'Dimensione piastrella (px):', 'タイルサイズ(px):', '平铺尺寸（像素）：', '타일 크기(px):'),
     'Importar imagem…': ('Import image…', 'Bild importieren…', 'Importa immagine…', '画像を読み込む…', '导入图片…', '이미지 가져오기…'),
     'Salvar fundo do menu': ('Save menu background', 'Menühintergrund speichern', 'Salva sfondo del menu', 'メニュー背景を保存', '保存菜单背景', '메뉴 배경 저장'),
+    '✦ Gerar deck temático…': ('✦ Generate themed deck…', '✦ Themendeck erzeugen…', '✦ Genera mazzo a tema…', '✦ テーマデッキを生成…', '✦ 生成主题卡组…', '✦ 테마 덱 생성…'),
+    'Gerar deck temático': ('Generate themed deck', 'Themendeck erzeugen', 'Genera mazzo a tema', 'テーマデッキを生成', '生成主题卡组', '테마 덱 생성'),
+    'Tipo principal': ('Main type', 'Haupttyp', 'Tipo principale', 'メインの種族', '主要种族', '주 종족'),
+    'Força': ('Strength', 'Stärke', 'Forza', '強さ', '强度', '강도'),
+    'Usar este deck': ('Use this deck', 'Dieses Deck verwenden', 'Usa questo mazzo', 'このデッキを使う', '使用此卡组', '이 덱 사용'),
+    'Gerar': ('Generate', 'Erzeugen', 'Genera', '生成', '生成', '생성'),
 }
