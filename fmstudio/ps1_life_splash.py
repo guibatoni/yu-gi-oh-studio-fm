@@ -329,7 +329,8 @@ def _assemble(base: int) -> Asm:
     a.jr('ra')
     a.addiu('sp', 'sp', 24)
 
-    a.align(8)
+    # Alinhamento a 4 (o código já termina assim): o tamanho não pode depender
+    # do endereço, pois block_size() é calculado antes da reserva.
     a.label('data')
     return a
 

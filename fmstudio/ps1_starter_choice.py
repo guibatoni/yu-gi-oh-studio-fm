@@ -294,7 +294,8 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.nop()
 
     # --- dados
-    a.align(8)
+    # Sem align(8): o tamanho do bloco não pode depender do endereço reservado
+    # (block_size é calculado antes). Código já termina alinhado a 4.
     a.label('state')
     a.word(0); a.word(0)                        # estado, página, escolhido, pad | caixa
     table = b''.join(struct.pack('<HBBB3x', text_id, first, count, int(more))

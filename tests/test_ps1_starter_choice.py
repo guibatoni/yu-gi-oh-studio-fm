@@ -136,3 +136,15 @@ class RoutineTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BlockSizeTests(unittest.TestCase):
+    def test_reserved_sizes_do_not_depend_on_address(self):
+        """block_size() é calculado antes da reserva: o bloco real não pode ser maior."""
+        from fmstudio import ps1_life_splash, ps1_lifelink, ps1_lp_hud
+        rows = [(0, 0, 0, False)] * 3
+        for base in range(0x801C0000, 0x801C0020, 4):
+            self.assertEqual(len(sc.code(base, rows, [[1] * 40] * 8)), sc.block_size(8))
+            self.assertEqual(len(ps1_life_splash.code(base)), ps1_life_splash.block_size())
+            self.assertEqual(len(ps1_lifelink.code(base, 722)), ps1_lifelink.block_size())
+            self.assertEqual(len(ps1_lp_hud.quad_code(base)), ps1_lp_hud.block_size())
