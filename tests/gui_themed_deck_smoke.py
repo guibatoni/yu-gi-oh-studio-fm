@@ -47,5 +47,16 @@ with TemporaryDirectory() as folder:
     root.update()
     assert project.metadata['ps1_papel_parede_menu']['ativado']
     assert (Path(folder) / 'menu' / 'papel_parede_menu.png').exists()
+from fmstudio.starter_choice_gui import StarterChoiceDialog
+project = Project(Path('.'))
+profiles = {'Fadas': {'cartas': [1] * 40, 'pools': []}, 'Dragões': {'cartas': [2] * 40, 'pools': []},
+            'Incompleto': {'cartas': [3] * 10, 'pools': []}}
+choice = StarterChoiceDialog(root, project, profiles)
+choice.enabled.set(True)
+choice.listbox.selection_set(0, 2)
+assert choice.selected() == ['Fadas', 'Dragões']
+choice.save()
+root.update()
+assert project.metadata['ps1_escolha_deck_inicial'] == {'ativado': True, 'decks': ['Fadas', 'Dragões']}
 root.destroy()
 print('gui_themed_deck_smoke ok')

@@ -67,6 +67,7 @@ class Asm:
     def addu(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x21)
     def subu(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x23)
     def slt(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x2A)
+    def sltu(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x2B)
     def sll(self, rd, rt, sa): self._r(0, rt, rd, sa, 0)
     def srl(self, rd, rt, sa): self._r(0, rt, rd, sa, 2)
     def and_(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x24)

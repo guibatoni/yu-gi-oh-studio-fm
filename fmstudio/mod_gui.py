@@ -969,6 +969,8 @@ class ModEditor(ttk.Frame):
                    command=self.generate_themed_starter).pack(side='right', padx=(0, 6))
         ttk.Button(starter_actions, text='Salvar deck inicial', style='Accent.TButton',
                    command=self.save_starter).pack(side='right')
+        ttk.Button(starter_actions, text='Escolha no New Game (PS1)…',
+                   command=self.open_starter_choice).pack(side='right', padx=(0, 6))
 
         ttk.Label(lp_pane, text='Life Points iniciais — jogador e TODOS os oponentes',
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(6, 7))
@@ -1281,6 +1283,12 @@ class ModEditor(ttk.Frame):
             )
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Gerar Deck Aleatório', str(exc), parent=self)
+
+    def open_starter_choice(self):
+        if not self._ready_for_generator('Escolha do deck inicial'):
+            return
+        from .starter_choice_gui import StarterChoiceDialog
+        StarterChoiceDialog(self, self.project, self.rules.get('iniciais', {}))
 
     def generate_themed_starter(self):
         if not self._ready_for_generator('Gerar deck temático'):
