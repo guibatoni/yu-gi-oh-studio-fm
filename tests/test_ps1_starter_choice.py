@@ -77,7 +77,8 @@ class RoutineTests(unittest.TestCase):
                 uc.mem_write((BOX + 0x30) & M, struct.pack('<I', 0x80123456))   # caixa montada
                 if self.done:
                     flags = struct.unpack('<H', uc.mem_read((BOX + 0x34) & M, 2))[0]
-                    uc.mem_write((BOX + 0x34) & M, struct.pack('<H', flags | 0x2000))
+                    # como o jogo: ao concluir, liga DONE e limpa o bit 8 (o retail espera 0x2008 == 0x2000)
+                    uc.mem_write((BOX + 0x34) & M, struct.pack('<H', (flags | 0x2000) & ~8))
             elif address == sc.TEXT_BOX_DESTROY:
                 self.calls.append(('destroy', uc.reg_read(UC_MIPS_REG_A0)))
             elif address == sc.UPDATE_DIALOG:
@@ -109,6 +110,8 @@ class RoutineTests(unittest.TestCase):
         self.assertEqual(self.frame(dialog=0x80F5), [('update',)])           # confirmação ainda aberta
         self.assertEqual(self.frame(), [('create', 2, 0xD3F0, 16, 176, 288, 48)])
         self.assertEqual(self.frame(), [])                                   # esperando o X
+        flags = struct.unpack('<H', self.cpu.mem_read((BOX + 0x34) & M, 2))[0]
+        self.assertTrue(flags & 8)                                           # modo do retail (0x8000)
         calls = self.frame(choice=3, done=True)                              # "Mais decks..."
         self.assertEqual(calls, [('destroy', BOX), ('create', 2, 0xD3F1, 16, 176, 288, 48)])
         calls = self.frame(choice=1, done=True)                              # 2º deck da página 2
