@@ -491,7 +491,7 @@ class EffectDialog(tk.Toplevel):
             self.specific_button.grid_remove()
         if action == 'vinculo_vida':
             self.labels['valor'].configure(text='Cura automática: ATK efetivo do atacante')
-            help_text='⚔ ♥ Ao declarar um ataque, restaura LP iguais ao ATK efetivo. Funciona mesmo se o alvo defender. Disponível no simulador; PS1 ainda não suporta.'
+            help_text='⚔ ♥ Quando este monstro ataca (monstro ou direto) ou é atacado, o dono recupera LP iguais ao ATK atual dele, no início da batalha. Funciona no simulador e no PS1.'
         elif action=='bonus_cemiterio_tipo':
             help_text='Recebe o bônus por carta correspondente no cemitério. Atualiza conforme as cartas entram ou saem.'
         elif action=='bonus_deck_tipo':
