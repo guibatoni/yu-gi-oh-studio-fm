@@ -282,6 +282,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                       or (native_profile and names)
                       or (native_profile and any('{icon:' in desc for desc in texts.values())))
             original_wa=b''.join(reader.read_entry(wa_entry)) if needs_wa and wa_entry else None
+            # Papel de parede do menu principal: só dados do SU.MRG (setores 80-97).
+            from .ps1_menu_wallpaper import SU_PATH, apply as apply_wallpaper, requested_wall
+            wallpaper = requested_wall(project)
+            su_entry = entries.get(SU_PATH) if wallpaper is not None else None
+            if wallpaper is not None and su_entry is None:
+                raise ModError('Papel de parede: DATA/SU.MRG não encontrado na imagem.')
+            original_su = b''.join(reader.read_entry(su_entry)) if su_entry else None
             if expansion.enabled:
                 if original_wa is None or source_digest != metadata.get('base_sha256', {}).get('slus'):
                     raise ModError('Expansão exige SLUS e WA_MRG da imagem vinculada.')
@@ -414,6 +421,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     written_arts=[]
     written_titles=[]
     patched_wa=None
+    patched_su, wallpaper_report = None, {'status': 'original'}
+    if wallpaper is not None:
+        patched_su, wallpaper_report = apply_wallpaper(original_su, wallpaper)
     if requested_art:
         if original_wa is None or wa_entry is None:
             raise ModError('DATA/WA_MRG.MRG não encontrado para aplicar artes.')
@@ -653,7 +663,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_exe, lifelink_report = apply_lifelink(patched_exe, lifelink_hook, native_plan.capacity)
 
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
-    if not native_profile and patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
+    if (not native_profile and patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa)
+            and patched_su is None):
         if audit_report is not None:
             from .ps1_compat import save_audit, explain_no_writable_changes
             dest = save_audit(project)
@@ -705,6 +716,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 else:
                     from .disc_append import append_iso_file
                     changed+=append_iso_file(out,wa_entry,original_wa,patched_wa)
+            if patched_su is not None and patched_su != original_su:
+                changed+=_write_file_patches(out,su_entry,original_su,patched_su)
 
         # A releitura confere o SLUS e, quando necessário, o arquivo WA gravado.
         with DiscReader(stage_bin) as verify:
@@ -757,6 +770,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 reread_wa = b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))
                 if reread_wa != patched_wa:
                     raise ModError('WA_MRG não corresponde após reempacotamento.')
+            if patched_su is not None:
+                if b''.join(verify.read_entry(files[SU_PATH])) != patched_su:
+                    raise ModError('SU.MRG (fundo do menu) não corresponde após reempacotamento.')
             quest_report = {'status': 'desativado'}
             if quest_enabled:
                 quest_report = inspect_quest_overlay(reread_exe, reread_wa, expanded=expansion.enabled)
@@ -810,6 +826,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'valores_magicas_ps1':magic_values_report,
                 'molduras_por_raridade_ps1':frames_report,
                 'animacao_lp_ao_entrar_ps1':splash_report,
+                'papel_parede_menu_ps1':wallpaper_report,
                 'vinculo_com_vida_ps1':lifelink_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,

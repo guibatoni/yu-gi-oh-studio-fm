@@ -57,7 +57,7 @@ class NavTests(unittest.TestCase):
         keys = [s.key for s in ui_nav.SECTIONS]
         self.assertEqual(len(keys), len(set(keys)))
         mods = sorted(s.mod for s in ui_nav.SECTIONS if s.tab == 'tab_mod')
-        self.assertEqual(mods, list(range(7)))      # as 7 sub-abas da Edição do Mod
+        self.assertEqual(mods, list(range(8)))      # as 8 sub-abas da Edição do Mod
         tabs = {s.tab for s in ui_nav.SECTIONS}
         self.assertEqual(tabs, {'tab_home', 'tab_cards', 'tab_effects', 'tab_fusions', 'tab_mod',
                                 'tab_proj', 'tab_extract'})

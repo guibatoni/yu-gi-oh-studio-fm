@@ -107,4 +107,13 @@ ENTRIES = {
     'Não bloqueável': ('Unblockable', 'Nicht blockierbar', 'Non bloccabile', 'ブロック不可', '不可阻挡', '막을 수 없음'),
     'Sem limite de cópias': ('No copy limit', 'Kein Kopienlimit', 'Nessun limite di copie', '枚数制限なし', '无张数限制', '장수 제한 없음'),
     'Ataca no 1º turno': ('Attacks on turn 1', 'Greift im 1. Zug an', 'Attacca al 1º turno', '1ターン目に攻撃可能', '第 1 回合可攻击', '1턴에 공격 가능'),
+    'Fundo do menu': ('Menu background', 'Menühintergrund', 'Sfondo del menu', 'メニュー背景', '菜单背景', '메뉴 배경'),
+    'Papel de parede do menu principal (imagem ou ladrilho)': ('Main menu wallpaper (image or tile)', 'Hintergrund des Hauptmenüs (Bild oder Kachel)', 'Sfondo del menu principale (immagine o piastrella)', 'メインメニューの壁紙(画像またはタイル)', '主菜单壁纸（图片或平铺）', '메인 메뉴 배경(이미지 또는 타일)'),
+    'Papel de parede do menu principal (PS1)': ('Main menu wallpaper (PS1)', 'Hintergrund des Hauptmenüs (PS1)', 'Sfondo del menu principale (PS1)', 'メインメニューの壁紙(PS1)', '主菜单壁纸（PS1）', '메인 메뉴 배경(PS1)'),
+    'Usar este papel de parede no BIN/CUE': ('Use this wallpaper in the BIN/CUE', 'Diesen Hintergrund im BIN/CUE verwenden', 'Usa questo sfondo nel BIN/CUE', 'この壁紙をBIN/CUEで使う', '在 BIN/CUE 中使用此壁纸', '이 배경을 BIN/CUE에 사용'),
+    'Imagem de tela inteira': ('Full-screen image', 'Vollbild', 'Immagine a schermo intero', '全画面画像', '全屏图片', '전체 화면 이미지'),
+    'Ladrilho repetido': ('Repeated tile', 'Wiederholte Kachel', 'Piastrella ripetuta', '繰り返しタイル', '重复平铺', '반복 타일'),
+    'Tamanho do ladrilho (px):': ('Tile size (px):', 'Kachelgröße (px):', 'Dimensione piastrella (px):', 'タイルサイズ(px):', '平铺尺寸（像素）：', '타일 크기(px):'),
+    'Importar imagem…': ('Import image…', 'Bild importieren…', 'Importa immagine…', '画像を読み込む…', '导入图片…', '이미지 가져오기…'),
+    'Salvar fundo do menu': ('Save menu background', 'Menühintergrund speichern', 'Salva sfondo del menu', 'メニュー背景を保存', '保存菜单背景', '메뉴 배경 저장'),
 }
