@@ -353,8 +353,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     lp_hud_initial=mod_plan.player_lp if mod_plan.has_lp else 8000
     lp_hud_wide = bool(native_profile) and lp_hud_initial > 9999
     lp_hud_hook = None
+    from .ps1_lifelink import (apply as apply_lifelink, block_size as lifelink_block_size,
+                               wants_lifelink)
+    lifelink_wanted = bool(native_profile) and wants_lifelink(native_plan)
+    lifelink_hook = None
+    lifelink_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
     if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled
-                           or splash_requested or lp_hud_wide):
+                           or splash_requested or lp_hud_wide or lifelink_wanted):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     if quest_enabled:
@@ -378,6 +383,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         # Dígitos reduzidos de LP (POLY_FT4 sem GTE): bloco próprio, reservado antes dos textos.
         from .ps1_lp_hud import block_size as lp_hud_block_size
         lp_hud_hook, regions = reserve_block(patched_exe, regions, lp_hud_block_size())
+    if lifelink_wanted:
+        # Vínculo com Vida: a cena de batalha passa por esta rotina (instalada após o runtime).
+        lifelink_hook, regions = reserve_block(patched_exe, regions, lifelink_block_size())
     if texts:
         catalog={i:project.get(i) for i in project.cards} if hasattr(project,'cards') else {}
         (patched_exe, written_descriptions, description_icons,
@@ -641,6 +649,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             patched_exe, splash_report = apply_life_splash(patched_exe, splash_hook)
         else:
             splash_report = {'status': 'sem_efeitos_no_runtime'}
+    if lifelink_hook is not None:
+        patched_exe, lifelink_report = apply_lifelink(patched_exe, lifelink_hook, native_plan.capacity)
 
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
     if not native_profile and patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa):
@@ -800,6 +810,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'valores_magicas_ps1':magic_values_report,
                 'molduras_por_raridade_ps1':frames_report,
                 'animacao_lp_ao_entrar_ps1':splash_report,
+                'vinculo_com_vida_ps1':lifelink_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
                                     'pendente':mod_plan.pending,

@@ -33,6 +33,8 @@ PROTECTIONS = {
     'nao_bloqueavel': 16, 'ataque_primeiro_turno': 32,
     'equip_imune_armadilha': 2, 'equip_imune_magia_armadilha': 3, 'equip_indestrutivel': 4,
     'equip_indestrutivel_batalha': 64,
+    # Bit livre no runtime; lido pela rotina de ps1_lifelink na cena de batalha.
+    'vinculo_vida': 128,
 }
 PLAY_ACTIONS = ((EFFECT_ACTIONS - {'bonus_mao_tipo'}) | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
                 set(ENTRY_EFFECTS) | {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp', 'cura_lp'})
@@ -447,7 +449,8 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     """Read the resident code, rules and hooks from the selected BIN/CUE."""
     # A animação de LP ao entrar em campo troca um salto dentro do runtime.
     from .ps1_life_splash import runtime_view
-    exe = runtime_view(exe)
+    from .ps1_lifelink import runtime_view as lifelink_view
+    exe = lifelink_view(runtime_view(exe))
     bundle = _runtime_bundle(plan)
     ENTRY_POINTS = bundle.ENTRY_POINTS
     RUNTIME = bundle.RUNTIME

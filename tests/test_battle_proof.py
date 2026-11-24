@@ -18,7 +18,7 @@ class BattleProofTests(unittest.TestCase):
         self.assertEqual(check_effect(effect('equip_indestrutivel_batalha', 'equipado', 'monstro_equipado'))['valor'], 0)
         self.assertEqual(PROTECTIONS['monstro_indestrutivel_batalha'], 64)
         self.assertEqual(PROTECTIONS['equip_indestrutivel_batalha'], 64)
-        self.assertFalse(set(PROTECTIONS.values()) - {1, 2, 3, 4, 8, 16, 32, 64})
+        self.assertFalse(set(PROTECTIONS.values()) - {1, 2, 3, 4, 8, 16, 32, 64, 128})
 
     def test_runtime_battle_checks_accept_new_bit(self):
         for bundle in (ps1_runtime_blob, ps1_expanded_runtime_blob):

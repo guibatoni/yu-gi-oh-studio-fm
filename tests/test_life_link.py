@@ -49,6 +49,34 @@ class LifeLinkTests(unittest.TestCase):
         self.assertEqual(result['cura_lp_vinculo'], 1500)
         self.assertEqual(lab.lp['jogador'], 5100)  # 1500 healed, 400 recoil
 
+    def test_attacked_lifelink_monster_heals_its_owner(self):
+        lab = DuelLab({1: creature(1, atk=1000), 2: creature(2, atk=1800)}, {2: [LIFE]})
+        lab.set_field([unit(1, 'jogador', 1, atk=1000), unit(2, 'adversario', 1, atk=1800)])
+        lab.lp['adversario'] = 4000
+        result = lab.attack('jogador', 1, target_slot=1, against='ataque')
+        self.assertEqual(result['cura_lp_vinculo'], 0)
+        self.assertEqual(result['cura_lp_vinculo_alvo'], 1800)
+        self.assertEqual(lab.lp['adversario'], 5800)
+        self.assertEqual(lab.lp['jogador'], 8000 - 800)
+
+    def test_both_lifelink_monsters_heal_both_owners(self):
+        lab = DuelLab({1: creature(1, atk=1500), 2: creature(2, atk=1500)}, {1: [LIFE], 2: [LIFE]})
+        lab.set_field([unit(1, 'jogador', 1), unit(2, 'adversario', 1)])
+        lab.lp = {'jogador': 1000, 'adversario': 1000}
+        lab.attack('jogador', 1, target_slot=1, against='ataque')
+        self.assertEqual(lab.lp, {'jogador': 2500, 'adversario': 2500})
+
+    def test_ps1_rule_bit_for_lifelink(self):
+        from fmstudio.ps1_runtime import PROTECTIONS, SUPPORTED
+        from fmstudio.ps1_lifelink import LIFELINK
+        self.assertIn('vinculo_vida', SUPPORTED)
+        self.assertEqual(PROTECTIONS['vinculo_vida'], LIFELINK)
+        others = 0
+        for key, value in PROTECTIONS.items():
+            if key != 'vinculo_vida':
+                others |= value
+        self.assertFalse(LIFELINK & others)
+
     def test_multiple_duplicates_do_not_multiply_heal(self):
         lab = DuelLab({1: creature(1)}, {1: [LIFE, LIFE]})
         lab.set_field([unit(1, 'jogador', 1)])

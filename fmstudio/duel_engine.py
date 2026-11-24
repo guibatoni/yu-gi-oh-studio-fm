@@ -280,17 +280,22 @@ class DuelLab:
                     destroyed.append((enemy,target['slot']))
                 if not battle_proof(attacker):
                     destroyed.append((side,attacker['slot']))
-        lifesteal = sum(1 for raw in card_effects(self.effects, int(source['card_id']))
-                        if raw.get('acao') == 'vinculo_vida' and raw.get('evento') == 'atacar'
-                        and check_effect(raw)['alvo'] == 'proprio')
-        # Cura por ataque DECLARADO, inclusive em defesa e sem dano de batalha.
-        # Múltiplos exemplares do mesmo efeito não acumulam cura duplicada.
-        healed = atk if lifesteal else 0
+        def lifelink(card):
+            return card is not None and any(
+                raw.get('acao') == 'vinculo_vida' and raw.get('evento') == 'atacar'
+                and check_effect(raw)['alvo'] == 'proprio'
+                for raw in card_effects(self.effects, int(card['card_id'])))
+        # Vínculo com Vida: ao atacar (monstro ou direto) ou ao ser atacado por
+        # um monstro, o dono ganha o ATK atual da carta (sem o bônus de
+        # Guardian Star, como no PS1). Vários exemplares não acumulam.
+        healed = max(0, attacker['ataque']) if lifelink(source) else 0
+        healed_target = max(0, target['ataque']) if lifelink(target) else 0
         return {'acao':'ataque','origem':(side,slot),
                 'alvo':('LP',enemy) if direct else (enemy,target_slot),
                 'posicao':against, 'ataques_usados':used+1,'ataques_max':maximum,
                 'custo_lp':min(cost,self.lp[side]),
                 'cura_lp_vinculo':healed,
+                'cura_lp_vinculo_alvo':healed_target,
                 'dano_lp_jogador':min(self.lp[side], cost+lost_attacker),
                 'dano_lp_oponente':min(self.lp[enemy], lost_defender),
                 'perfurante':attacker['perfurante'],
@@ -307,6 +312,7 @@ class DuelLab:
         self.lp[side] -= result['dano_lp_jogador']
         self.lp[side] += result['cura_lp_vinculo']
         self.lp[opposite(side)] -= result['dano_lp_oponente']
+        self.lp[opposite(side)] += result.get('cura_lp_vinculo_alvo', 0)
         for target_side, target_slot_to_destroy in result['destruidos']:
             self.remove(target_side, target_slot_to_destroy)
         self.logs.append(result)

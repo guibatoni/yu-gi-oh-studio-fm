@@ -41,7 +41,7 @@ ACTIONS = {
     'aumentar_atk':'Aumentar ATK', 'reduzir_atk':'Reduzir ATK',
     'aumentar_def':'Aumentar DEF', 'reduzir_def':'Reduzir DEF',
     'dano_lp':'Causar dano aos LP', 'cura_lp':'♥ Recuperar LP ao entrar / evento',
-    'vinculo_vida':'⚔♥ Vínculo com Vida (cura ao atacar)',
+    'vinculo_vida':'⚔♥ Vínculo com Vida (cura ao atacar ou ser atacado)',
     'aura_tipo':'Aura por tipo ou atributo',
     'bonus_por_tipo':'Recebe bônus por cartas no campo',
     'bonus_deck_tipo':'Recebe bônus por cartas no deck',
