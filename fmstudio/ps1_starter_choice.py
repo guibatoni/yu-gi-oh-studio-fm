@@ -71,11 +71,18 @@ MORE_LABEL = 'Mais decks...'
 def settings(project) -> dict:
     raw = (getattr(project, 'metadata', None) or {}).get(SETTINGS_KEY) or {}
     decks = [str(name) for name in raw.get('decks', []) if str(name).strip()][:MAX_DECKS]
-    return {'ativado': bool(raw.get('ativado')), 'decks': decks}
+    names = {str(k): str(v).strip()[:MAX_NAME] for k, v in (raw.get('nomes') or {}).items() if str(v).strip()}
+    return {'ativado': bool(raw.get('ativado')), 'decks': decks, 'nomes': names}
 
 
-def save_settings(project, *, enabled: bool, decks: list[str]) -> dict:
-    clean = {'ativado': bool(enabled), 'decks': [str(d) for d in decks][:MAX_DECKS]}
+def display_name(current: dict, profile: str) -> str:
+    """Nome mostrado no jogo: o nome personalizado ou o do perfil."""
+    return current.get('nomes', {}).get(profile) or profile
+
+
+def save_settings(project, *, enabled: bool, decks: list[str], names: dict | None = None) -> dict:
+    clean = {'ativado': bool(enabled), 'decks': [str(d) for d in decks][:MAX_DECKS],
+             'nomes': {str(k): str(v).strip()[:MAX_NAME] for k, v in (names or {}).items() if str(v).strip()}}
     if clean['ativado'] and len(clean['decks']) < 2:
         raise ModError('Escolha pelo menos 2 perfis para o jogador escolher.')
     before = project.metadata
@@ -102,7 +109,7 @@ def resolve_decks(project, profiles: dict) -> list[tuple[str, list[int]]]:
                            '(sem pools ponderados).')
         if any(not 1 <= cid <= CARD_COUNT for cid in cards):
             raise ModError(f'Escolha de deck: o perfil "{name}" usa cartas fora de #001–#{CARD_COUNT}.')
-        out.append((name, cards))
+        out.append((display_name(chosen, name), cards))
     if len(out) < 2:
         raise ModError('Escolha de deck: selecione pelo menos 2 perfis.')
     return out

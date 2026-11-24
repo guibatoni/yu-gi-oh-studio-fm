@@ -55,8 +55,13 @@ choice = StarterChoiceDialog(root, project, profiles)
 choice.enabled.set(True)
 choice.listbox.selection_set(0, 2)
 assert choice.selected() == ['Fadas', 'Dragões']
+choice.current_index = 0
+choice.display_entry.configure(state='normal')
+choice.display_var.set('Deck das Fadas')
+choice.apply_name()
 choice.save()
 root.update()
-assert project.metadata['ps1_escolha_deck_inicial'] == {'ativado': True, 'decks': ['Fadas', 'Dragões']}
+assert project.metadata['ps1_escolha_deck_inicial'] == {'ativado': True, 'decks': ['Fadas', 'Dragões'],
+                                                       'nomes': {'Fadas': 'Deck das Fadas'}}
 root.destroy()
 print('gui_themed_deck_smoke ok')

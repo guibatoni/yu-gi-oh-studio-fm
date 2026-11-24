@@ -99,3 +99,45 @@ class MatchesBonusMipsTests(unittest.TestCase):
         # filtro de atributo E tipo: sub-tipo bate, atributo também
         self.assertEqual(self.run_match(8, 5, scope=(3 << 2), card_type=0, level_attr=(2 << 4)), 1)
         self.assertEqual(self.run_match(8, 5, scope=(4 << 2), card_type=0, level_attr=(2 << 4)), 0)
+
+
+@unittest.skipIf(Uc is None, 'Unicorn não instalado')
+class HandBonusMipsTests(unittest.TestCase):
+    """Wrapper de count_bonus + matches_bonus real: conta a mão."""
+
+    def run_count(self, match, scope, side, hand):
+        import struct
+        from fmstudio import ps1_runtime_blob as rt, ps1_hand_bonus as hb
+        from unicorn import UC_HOOK_CODE
+        M = 0x1FFFFF
+        hook = 0x801C4400
+        cpu = Uc(UC_ARCH_MIPS, UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN)
+        cpu.mem_map(0, 0x200000)
+        cpu.mem_write(rt.RUNTIME_EXT_BASE & M, rt.RUNTIME_EXT)
+        cpu.mem_write(hook & M, hb.code(hook))
+        calls = []
+        cpu.hook_add(UC_HOOK_CODE, lambda uc, a, s, _: calls.append('original') if a == hb.COUNT_BONUS else None)
+        for slot, (cid, typ) in hand.items():
+            rec = hb.CARDS + slot * 28
+            cpu.mem_write((rec + 0x0C) & M, struct.pack('<h', cid))
+            cpu.mem_write((rec + 0x16) & M, struct.pack('<H', 0x8000))
+            cpu.mem_write((0x801D4244 + 4 * (cid - 1)) & M, struct.pack('<I', typ << 26))
+        bonus = 0x80100000
+        cpu.mem_write(bonus & M, struct.pack('<BBHHH', 3, scope, match, 100, 0))
+        cpu.reg_write(UC_MIPS_REG_A0, bonus)
+        cpu.reg_write(UC_MIPS_REG_A1, side)
+        cpu.reg_write(UC_MIPS_REG_SP, 0x80180000)
+        cpu.reg_write(UC_MIPS_REG_RA, 0x80000100)
+        cpu.mem_write(hb.COUNT_BONUS & M, struct.pack('<2I', 0x03E00008, 0x24020063))  # stub: v0 = 99
+        cpu.emu_start(hook, 0x80000100, timeout=2_000_000)
+        return cpu.reg_read(UC_MIPS_REG_V0), calls
+
+    def test_counts_hand_by_scope(self):
+        from fmstudio.ps1_hand_bonus import encode_match
+        hand = {0: (10, 8), 1: (11, 8), 3: (12, 0), 15: (13, 8), 16: (14, 8), 17: (15, 8)}
+        self.assertEqual(self.run_count(encode_match(8), 0, 0, hand)[0], 2)     # minhas fadas na mão
+        self.assertEqual(self.run_count(encode_match(8), 1, 0, hand)[0], 3)     # fadas do adversário
+        self.assertEqual(self.run_count(encode_match(8), 2, 0, hand)[0], 5)     # todos
+        self.assertEqual(self.run_count(encode_match(-1), 0, 0, hand)[0], 3)    # qualquer tipo
+        value, calls = self.run_count(8, 0, 0, hand)                             # bônus de deck normal
+        self.assertEqual((value, calls), (99, ['original']))

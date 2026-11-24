@@ -166,3 +166,13 @@ class BlockSizeTests(unittest.TestCase):
             self.assertEqual(len(ps1_life_splash.code(base)), ps1_life_splash.block_size())
             self.assertEqual(len(ps1_lifelink.code(base, 722)), ps1_lifelink.block_size())
             self.assertEqual(len(ps1_lp_hud.quad_code(base)), ps1_lp_hud.block_size())
+
+
+class DisplayNameTests(unittest.TestCase):
+    def test_custom_game_names(self):
+        class Project:
+            metadata = {sc.SETTINGS_KEY: {'ativado': True, 'decks': ['Deck Fada · Equilibrado', 'B'],
+                                          'nomes': {'Deck Fada · Equilibrado': 'Deck das Fadas'}}}
+        profiles = {'Deck Fada · Equilibrado': {'cartas': [1] * 40}, 'B': {'cartas': [2] * 40}}
+        decks = sc.resolve_decks(Project(), profiles)
+        self.assertEqual([name for name, _ in decks], ['Deck das Fadas', 'B'])

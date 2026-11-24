@@ -72,6 +72,7 @@ class Asm:
     def srl(self, rd, rt, sa): self._r(0, rt, rd, sa, 2)
     def and_(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x24)
     def or_(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x25)
+    def xor(self, rd, rs, rt): self._r(rs, rt, rd, 0, 0x26)
     def jr(self, rs): self._r(rs, 0, 0, 0, 8)
     def move(self, rd, rs): self.addu(rd, rs, 'zero')
     def li(self, rt, value):

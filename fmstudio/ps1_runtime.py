@@ -36,10 +36,12 @@ PROTECTIONS = {
     # Bit livre no runtime; lido pela rotina de ps1_lifelink na cena de batalha.
     'vinculo_vida': 128,
 }
-PLAY_ACTIONS = ((EFFECT_ACTIONS - {'bonus_mao_tipo'}) | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
+PLAY_ACTIONS = (EFFECT_ACTIONS | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
                 set(ENTRY_EFFECTS) | {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp', 'cura_lp'})
 SUPPORTED = PLAY_ACTIONS | COPY_ACTIONS
 BONUS_CODES = {'aura_tipo': 1, 'bonus_por_tipo': 2, 'bonus_deck_tipo': 3,
+               # mão: bônus de deck com o match marcado (ps1_hand_bonus conta a mão)
+               'bonus_mao_tipo': 3,
                'bonus_cemiterio_tipo': 6, ENTRY_GROW: 9, ENTRY_SHRINK: 10}
 SCOPES = {'aliados': 0, 'inimigos': 1, 'todos': 2}
 MATCH_EITHER = 0x80
@@ -252,6 +254,10 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                         pending.append(f'#{cid}: o bônus referencia carta #{match}, fora do catálogo PS1.')
                         continue
                     code = 4 if effect['origem_contagem'] == 'campo' else 5
+                elif action == 'bonus_mao_tipo':
+                    from .ps1_hand_bonus import encode_match
+                    match = encode_match(effect['tipo_id'])
+                    code = BONUS_CODES[action]
                 else:
                     match = effect['tipo_id'] & 0xFFFF
                     code = BONUS_CODES[action]
@@ -451,7 +457,8 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     from .ps1_life_splash import runtime_view
     from .ps1_lifelink import runtime_view as lifelink_view
     from .ps1_subtypes import runtime_view as subtype_view
-    exe = subtype_view(lifelink_view(runtime_view(exe)))
+    from .ps1_hand_bonus import runtime_view as hand_view
+    exe = hand_view(subtype_view(lifelink_view(runtime_view(exe))))
     bundle = _runtime_bundle(plan)
     ENTRY_POINTS = bundle.ENTRY_POINTS
     RUNTIME = bundle.RUNTIME

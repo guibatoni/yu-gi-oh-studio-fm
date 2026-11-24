@@ -390,6 +390,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                      if native_profile else [])
     subtype_wanted = bool(subtype_pairs) and any(action in BONUS_CODES for _, action in native_plan.accepted)
     subtype_hook = None
+    hand_bonus_wanted = bool(native_profile) and any(
+        action == 'bonus_mao_tipo' for _, action in native_plan.accepted)
+    hand_bonus_hook = None
+    hand_bonus_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
     subtype_report = ({'status': 'sem_subtipos'} if native_profile else {'status': 'perfil_incompativel'})
     starter_choice_hook, starter_choice_texts, starter_choice_decks = None, [], []
     starter_choice_report = ({'status': 'desativado'} if native_profile else {'status': 'perfil_incompativel'})
@@ -404,7 +408,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     lifelink_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
     if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled
                            or splash_requested or lp_hud_wide or lifelink_wanted or starter_choice_on
-                           or subtype_wanted):
+                           or subtype_wanted or hand_bonus_wanted):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     if quest_enabled:
@@ -431,6 +435,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if lifelink_wanted:
         # Vínculo com Vida: a cena de batalha passa por esta rotina (instalada após o runtime).
         lifelink_hook, regions = reserve_block(patched_exe, regions, lifelink_block_size())
+    if hand_bonus_wanted:
+        # Bônus por cartas na mão: desvio da chamada de count_bonus (após o runtime).
+        from .ps1_hand_bonus import block_size as hand_bonus_block_size
+        hand_bonus_hook, regions = reserve_block(patched_exe, regions, hand_bonus_block_size())
     if subtype_wanted:
         # Sub-tipo: trampolim em matches_bonus (instalado após o runtime).
         subtype_hook, regions = reserve_block(patched_exe, regions, subtype_block_size(len(subtype_pairs)))
@@ -710,6 +718,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_exe, lifelink_report = apply_lifelink(patched_exe, lifelink_hook, native_plan.capacity)
     if subtype_hook is not None:
         patched_exe, subtype_report = apply_subtypes(patched_exe, subtype_hook, subtype_pairs)
+    if hand_bonus_hook is not None:
+        from .ps1_hand_bonus import apply as apply_hand_bonus
+        patched_exe, hand_bonus_report = apply_hand_bonus(patched_exe, hand_bonus_hook)
 
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
     if starter_choice_hook is not None:
@@ -885,6 +896,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'papel_parede_menu_ps1':wallpaper_report,
                 'vinculo_com_vida_ps1':lifelink_report,
                 'subtipos_ps1':subtype_report,
+                'bonus_mao_ps1':hand_bonus_report,
                 'escolha_deck_inicial_ps1':starter_choice_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,

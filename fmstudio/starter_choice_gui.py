@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .core import ModError
-from .ps1_starter_choice import MAX_DECKS, MAX_NAME, resolve_decks, save_settings, settings
+from .ps1_starter_choice import MAX_DECKS, MAX_NAME, display_name, resolve_decks, save_settings, settings
 from .tables import DECK_SIZE
 from .ui_shell import pin_bottom
 
@@ -47,12 +47,53 @@ class StarterChoiceDialog(tk.Toplevel):
                 self.listbox.selection_set('end')
         if not self.names:
             self.listbox.insert('end', 'Nenhum perfil criado. Use "+ Perfil" ou "Gerar deck temático".')
+        self.display = dict(current.get('nomes', {}))
+        rename = ttk.Frame(body)
+        rename.pack(fill='x', pady=(4, 0))
+        ttk.Label(rename, text=f'Nome no jogo (até {MAX_NAME} letras):').pack(side='left')
+        self.display_var = tk.StringVar(self)
+        self.display_entry = ttk.Entry(rename, textvariable=self.display_var, width=MAX_NAME + 4,
+                                       state='disabled')
+        self.display_entry.pack(side='left', padx=6)
+        self.display_entry.bind('<Return>', lambda _e: self.apply_name())
+        ttk.Button(rename, text='Aplicar nome', command=self.apply_name).pack(side='left')
+        self.preview = tk.StringVar(self)
+        ttk.Label(body, textvariable=self.preview, foreground='#5a6b7d', wraplength=560).pack(anchor='w')
+        self.current_index = None
+        self.listbox.bind('<<ListboxSelect>>', self._on_select)
+        self._update_preview()
         self.status = tk.StringVar(self)
         ttk.Label(body, textvariable=self.status, foreground='#5a6b7d', wraplength=560).pack(anchor='w')
         footer = ttk.Frame(self, padding=(10, 0, 10, 10))
         ttk.Button(footer, text='Salvar', style='Accent.TButton', command=self.save).pack(side='right')
         ttk.Button(footer, text='Fechar', command=self.destroy).pack(side='right', padx=6)
         pin_bottom(footer)
+
+    def _on_select(self, _event=None):
+        index = self.listbox.index('active') if self.names else None      # último perfil clicado
+        if index is None or not 0 <= index < len(self.names):
+            return
+        self.current_index = index
+        name = self.names[index][0]
+        self.display_entry.configure(state='normal')
+        self.display_var.set(self.display.get(name, name)[:MAX_NAME])
+        self._update_preview()
+
+    def apply_name(self):
+        if self.current_index is None:
+            return
+        name = self.names[self.current_index][0]
+        value = self.display_var.get().strip()[:MAX_NAME]
+        if value and value != name:
+            self.display[name] = value
+        else:
+            self.display.pop(name, None)
+        self._update_preview()
+
+    def _update_preview(self):
+        chosen = self.selected()
+        shown = [display_name({'nomes': self.display}, name)[:MAX_NAME] for name in chosen]
+        self.preview.set('No jogo: ' + ' · '.join(shown) if shown else 'Nenhum perfil selecionado.')
 
     def selected(self):
         return [self.names[i][0] for i in self.listbox.curselection()
@@ -64,7 +105,8 @@ class StarterChoiceDialog(tk.Toplevel):
             messagebox.showerror('Escolha do deck inicial', f'Selecione no máximo {MAX_DECKS} perfis.', parent=self)
             return
         try:
-            saved = save_settings(self.project, enabled=self.enabled.get(), decks=chosen)
+            self.apply_name()
+            saved = save_settings(self.project, enabled=self.enabled.get(), decks=chosen, names=self.display)
             if saved['ativado']:
                 resolve_decks(self.project, self.profiles)
         except (ModError, OSError) as exc:
