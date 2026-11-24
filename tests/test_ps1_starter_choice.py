@@ -59,7 +59,7 @@ class RoutineTests(unittest.TestCase):
         cpu = Uc(UC_ARCH_MIPS, UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN)
         cpu.mem_map(0, 0x200000)
         cpu.mem_write(HOOK & M, sc.code(HOOK, rows, self.decks))
-        for stub in (sc.UPDATE_DIALOG, sc.TEXT_BOX_CREATE, sc.TEXT_BOX_DESTROY, sc.TEXT_UPDATE,
+        for stub in (sc.RANGE_LAYOUT, sc.UPDATE_DIALOG, sc.TEXT_BOX_CREATE, sc.TEXT_BOX_DESTROY, sc.TEXT_UPDATE,
                      sc.LIBRARY_SEEN, sc.BUILD_STARTER):
             cpu.mem_write(stub & M, struct.pack('<2I', 0x03E00008, 0))
         self.calls, self.done = [], False
@@ -79,6 +79,8 @@ class RoutineTests(unittest.TestCase):
                     flags = struct.unpack('<H', uc.mem_read((BOX + 0x34) & M, 2))[0]
                     # como o jogo: ao concluir, liga DONE e limpa o bit 8 (o retail espera 0x2008 == 0x2000)
                     uc.mem_write((BOX + 0x34) & M, struct.pack('<H', (flags | 0x2000) & ~8))
+            elif address == sc.RANGE_LAYOUT:
+                self.calls.append(('layout', uc.reg_read(UC_MIPS_REG_A0), uc.reg_read(UC_MIPS_REG_A1)))
             elif address == sc.TEXT_BOX_DESTROY:
                 self.calls.append(('destroy', uc.reg_read(UC_MIPS_REG_A0)))
             elif address == sc.UPDATE_DIALOG:
@@ -108,12 +110,12 @@ class RoutineTests(unittest.TestCase):
     def test_full_choice_flow_with_pages(self):
         self.assertEqual(self.frame(flags=0), [('update',)])                 # digitando o nome
         self.assertEqual(self.frame(dialog=0x80F5), [('update',)])           # confirmação ainda aberta
-        self.assertEqual(self.frame(), [('create', 2, 0xD3F0, 16, 176, 288, 48)])
+        self.assertEqual(self.frame(), [('layout', 2, 2), ('create', 2, 0xD3F0, 16, 176, 288, 48)])
         self.assertEqual(self.frame(), [])                                   # esperando o X
         flags = struct.unpack('<H', self.cpu.mem_read((BOX + 0x34) & M, 2))[0]
         self.assertTrue(flags & 8)                                           # modo do retail (0x8000)
         calls = self.frame(choice=3, done=True)                              # "Mais decks..."
-        self.assertEqual(calls, [('destroy', BOX), ('create', 2, 0xD3F1, 16, 176, 288, 48)])
+        self.assertEqual(calls, [('destroy', BOX), ('layout', 2, 2), ('create', 2, 0xD3F1, 16, 176, 288, 48)])
         calls = self.frame(choice=1, done=True)                              # 2º deck da página 2
         self.assertEqual(calls, [('destroy', BOX)])
         self.assertEqual(self.frame(), [('update',)])                        # o jogo escurece e conclui
@@ -131,7 +133,7 @@ class RoutineTests(unittest.TestCase):
         self.frame(choice=3, done=True)
         self.frame(choice=3, done=True)
         calls = self.frame(choice=2, done=True)                              # página 3: "Mais" é a opção 2
-        self.assertEqual(calls, [('destroy', BOX), ('create', 2, 0xD3F0, 16, 176, 288, 48)])
+        self.assertEqual(calls, [('destroy', BOX), ('layout', 2, 2), ('create', 2, 0xD3F0, 16, 176, 288, 48)])
 
 
 if __name__ == '__main__':

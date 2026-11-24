@@ -35,6 +35,9 @@ LEVELS = {
     'Equilibrado': (1400, (2000, 2500)),
     'Moderado': (1600, (2200, 2800)),
 }
+ENDGAME_EQUIPS = frozenset({657, 668})                # Megamorph, Bright Castle
+UNIVERSAL_EQUIP = 150                                  # equipa quase tudo: carta de fim de jogo
+THEME_SHARE = 0.75
 LIGHT_SPELLS = tuple(sorted(set(range(343, 346)) | set(range(338, 341))))  # dano 50-200, cura 200-1000
 
 
@@ -43,11 +46,12 @@ class ThemedDeck:
     cards: tuple[int, ...]
     theme: int
     level: str
-    key_fusion: tuple[int, tuple[tuple[int, int], ...]]      # resultado, pares no deck
+    key_fusion: tuple[int | None, tuple[tuple[int, int], ...]]   # resultado, pares no deck
     fusions: list[tuple[int, int, int]] = field(default_factory=list)  # (a, b, resultado)
     theme_share: float = 0.0
     average_atk: int = 0
     max_atk: int = 0
+    note: str = ''
 
     def report(self, cards) -> str:
         name = lambda cid: f"#{cid:03d} {cards[cid].get('nome', '?')}"
@@ -56,7 +60,12 @@ class ThemedDeck:
         lines = [f'Tema: {TYPE_NAMES[self.theme]} · nível {self.level}',
                  f'Monstros do tema: {self.theme_share:.0%} · ATK médio {self.average_atk} · '
                  f'maior ATK no deck {self.max_atk}',
-                 '', f'Fusão-chave: {name(result)} (ATK {atk(result)})']
+                 '']
+        if result is None:
+            lines.append('Fusão-chave: nenhuma — este tipo não tem fusões com materiais fracos neste projeto. '
+                         'O deck foi montado pelo tema; dê fusões ou efeitos a essas cartas para melhorar.')
+        else:
+            lines.append(f'Fusão-chave: {name(result)} (ATK {atk(result)}){self.note}')
         for a, b in pairs:
             lines.append(f'  {name(a)} + {name(b)}')
         others = [row for row in self.fusions if row[2] != result]
@@ -83,11 +92,18 @@ def design(cards, effects, fusions, equips, theme: int, *, level='Equilibrado',
     cards = {cid: card for cid, card in cards.items() if 1 <= cid <= CARD_COUNT and not card.get('virtual')}
     types = {cid: int(card['tipo_id']) for cid, card in cards.items()}
     limits = {cid: deck_copy_limit(effects, cid, default_copies) for cid in cards}
-    material = {cid for cid, typ in types.items()
+    def weak(limit):
+        return {cid for cid, typ in types.items()
                 if typ in MONSTER_TYPES and typ != 24 and limits[cid]
-                and _atk(cards, cid) <= cap and int(cards[cid]['defesa']) <= cap + 400}
-    if sum(1 for cid in material if types[cid] == theme) < 6:
-        raise ModError(f'Poucos monstros {TYPE_NAMES[theme]} fracos o bastante para um deck inicial.')
+                and _atk(cards, cid) <= limit and int(cards[cid]['defesa']) <= limit + 400}
+
+    material = weak(cap)
+    # tipos com poucos monstros fracos: sobe o teto aos poucos para ainda sair um deck
+    while sum(1 for cid in material if types[cid] == theme) < 8 and cap < 1800:
+        cap += 200
+        material = weak(cap)
+    if sum(1 for cid in material if types[cid] == theme) < 4:
+        raise ModError(f'Poucos monstros {TYPE_NAMES[theme]} no projeto para montar um deck inicial.')
 
     links = defaultdict(dict)       # material -> {parceiro: resultado}
     by_result = defaultdict(list)
@@ -98,31 +114,57 @@ def design(cards, effects, fusions, equips, theme: int, *, level='Equilibrado',
             links[a][b] = links[b][a] = result
             by_result[result].append((a, b))
 
-    # 1. fusão-chave
-    def relevance(result, pairs):
-        return 3 * (types[result] == theme) + max(
-            (types[a] == theme) + (types[b] == theme) for a, b in pairs)
+    # 1. fusão-chave: tenta faixas cada vez mais largas para sempre sair um deck
+    def theme_materials(pairs):
+        return [pair for pair in pairs if types[pair[0]] == theme or types[pair[1]] == theme]
 
-    candidates = []
-    for result, pairs in by_result.items():
-        value = _atk(cards, result)
-        if not band_low <= value <= band_high:
-            continue
-        rel = relevance(result, pairs)
-        if rel < 1:
-            continue
-        variety = len({cid for pair in pairs for cid in pair})
-        score = rel * 1000 + min(variety, 8) * 120 - abs(value - band_mid) // 2 + rng.randrange(250)
-        candidates.append((score, result))
-    if not candidates:
-        raise ModError(f'Nenhuma fusão com materiais fracos chega a ATK {band_low}-{band_high} '
-                       f'com o tema {TYPE_NAMES[theme]}. Tente outro nível ou tipo.')
-    candidates.sort(reverse=True)
-    key = rng.choice(candidates[:3])[1]
-    # pares da chave priorizando materiais do tema e reaproveitáveis
-    key_pairs = sorted(by_result[key], key=lambda pair: (
-        -((types[pair[0]] == theme) + (types[pair[1]] == theme)),
-        -(len(links[pair[0]]) + len(links[pair[1]])), rng.random()))[:3]
+    tiers = (
+        ('tema', lambda r: types[r] == theme, band_low, band_high),
+        ('tema_abaixo', lambda r: types[r] == theme, 1300, band_high),
+        ('materiais', lambda r: True, band_low, band_high),
+        ('materiais_abaixo', lambda r: True, 1300, band_high),
+    )
+    key, key_note, candidates = None, '', []
+    for tier, result_ok, low, high in tiers:
+        candidates = []
+        for result, pairs in by_result.items():
+            value = _atk(cards, result)
+            usable = theme_materials(pairs)
+            if not (low <= value <= high and result_ok(result) and usable):
+                continue
+            variety = len({cid for pair in usable for cid in pair})
+            both = max((types[a] == theme) + (types[b] == theme) for a, b in usable)
+            if low < band_low:      # faixa relaxada: a mais forte disponível manda
+                score = 2 * value + both * 300 + min(variety, 8) * 60 + rng.randrange(150)
+            else:
+                score = (both * 600 + min(variety, 8) * 120 - abs(value - band_mid) // 2
+                         + rng.randrange(250))
+            candidates.append((score, result))
+        if candidates:
+            candidates.sort(reverse=True)
+            best = candidates[0][0]
+            close = [row for row in candidates[:3] if row[0] >= best - 300]   # só variações equivalentes
+            key = rng.choice(close)[1]
+            key_note = {'tema': '', 'tema_abaixo': ' (mais fraca que a faixa: o tipo não tem fusão mais forte)',
+                        'materiais': ' (resultado de outro tipo, materiais do tema)',
+                        'materiais_abaixo': ' (fusão mais fraca disponível para este tipo)'}[tier]
+            break
+    key_pairs = []
+    if key is not None:
+        key_pairs = sorted(theme_materials(by_result[key]), key=lambda pair: (
+            -((types[pair[0]] == theme) + (types[pair[1]] == theme)),
+            -(len(links[pair[0]]) + len(links[pair[1]])), rng.random()))[:3]
+    # tipos de apoio permitidos: os dos materiais da chave + o tipo que mais funde com o tema
+    partner_types = {types[cid] for pair in key_pairs for cid in pair} - {theme}
+    affinity = Counter()
+    for cid in material:
+        if types[cid] == theme:
+            for other in links[cid]:
+                if types[other] != theme:
+                    affinity[types[other]] += 1
+    if affinity and len(partner_types) < 2:
+        partner_types.add(affinity.most_common(1)[0][0])
+    allowed_types = partner_types | {theme}
 
     held = Counter()
     deck = []
@@ -156,8 +198,8 @@ def design(cards, effects, fusions, equips, theme: int, *, level='Equilibrado',
 
     while len(deck) < monster_slots:
         theme_count = sum(1 for cid in deck if types[cid] == theme)
-        need_theme = theme_count < monster_slots * 0.6
-        pool = [cid for cid in material if held[cid] < limits[cid]]
+        need_theme = theme_count < monster_slots * THEME_SHARE
+        pool = [cid for cid in material if held[cid] < limits[cid] and types[cid] in allowed_types]
         themed = [cid for cid in pool if types[cid] == theme]
         if need_theme and themed:
             pool = themed
@@ -173,6 +215,7 @@ def design(cards, effects, fusions, equips, theme: int, *, level='Equilibrado',
     # 4. apoio: equipamentos que servem nos monstros do deck + magias leves
     monsters = set(deck)
     equip_pool = [cid for cid, typ in types.items() if typ == EQUIP and limits[cid]
+                  and cid not in ENDGAME_EQUIPS and len(set(equips.get(cid, ()))) < UNIVERSAL_EQUIP
                   and len(set(equips.get(cid, ())) & monsters) >= 3]
     equip_pool.sort(key=lambda cid: (-len(set(equips.get(cid, ())) & monsters), rng.random()))
     for cid in equip_pool[:3]:
@@ -182,7 +225,8 @@ def design(cards, effects, fusions, equips, theme: int, *, level='Equilibrado',
         if cid in cards and len(deck) < DECK_SIZE:
             take(cid)
     while len(deck) < DECK_SIZE:                  # completa com monstros do tema
-        pool = [cid for cid in material if held[cid] < limits[cid]]
+        pool = ([cid for cid in material if held[cid] < limits[cid] and types[cid] in allowed_types]
+                or [cid for cid in material if held[cid] < limits[cid]])
         if not pool:
             raise ModError('Não há cartas suficientes para completar 40.')
         take(max(pool, key=lambda cid: (types[cid] == theme, synergy(cid), -held[cid], rng.random())))
@@ -191,7 +235,7 @@ def design(cards, effects, fusions, equips, theme: int, *, level='Equilibrado',
     in_deck = [cid for cid in deck if types[cid] in MONSTER_TYPES]
     reachable = sorted({(min(a, b), max(a, b), r) for a in set(in_deck) for b, r in links[a].items()
                         if held[b] >= (2 if a == b else 1)})
-    present_pairs = tuple((a, b) for a, b in by_result[key] if held[a] and held[b] >= (2 if a == b else 1))
+    present_pairs = tuple((a, b) for a, b in by_result.get(key, ()) if held[a] and held[b] >= (2 if a == b else 1))
     rng.shuffle(deck)
     return ThemedDeck(
         cards=tuple(deck), theme=theme, level=level, key_fusion=(key, present_pairs[:6]),

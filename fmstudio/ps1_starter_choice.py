@@ -49,6 +49,7 @@ CHOICE = 0x8009B34D                    # gDialog_bChoice
 TEXT_BOX_CREATE = 0x80035BE4
 TEXT_BOX_DESTROY = 0x80035B7C
 TEXT_UPDATE = 0x80039794               # func_80039794: avança a caixa de texto
+RANGE_LAYOUT = 0x8003B6AC              # DuelEffect_SetEntryRangeLayout(2, 2): moldura/fundo da caixa
 LIBRARY_SEEN = 0x8002CCE4              # Library_UpdateCardUsedFlag
 PLAYER_DECK = 0x801D0200               # gDuel_awPlayerDeck
 FIRST_TEXT_ID = 0x3F0                  # índices livres da tabela (texto 0xD3F0+)
@@ -225,7 +226,13 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.nop()
     a.sll('t0', 't0', 3)
     a.addu('t0', 't0', 's0')
-    a.lhu('a1', 8, 't0')                        # id do texto da página
+    a.sw('s1', 0x18, 'sp')
+    a.lhu('s1', 8, 't0')                        # id do texto da página
+    # Igual ao overlay de nome antes de criar a caixa: liga o fundo/moldura do canal 2.
+    a.ori('a0', 'zero', BOX[0])
+    a.jal(RANGE_LAYOUT)
+    a.ori('a1', 'zero', 2)
+    a.move('a1', 's1')
     channel, x, y, w, h = BOX
     a.ori('t1', 'zero', w); a.sw('t1', 0x10, 'sp')
     a.ori('t1', 'zero', h); a.sw('t1', 0x14, 'sp')
@@ -254,6 +261,7 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.ori('t0', 'zero', 1)
     a.sb('t0', 0, 's0')                         # estado 1
     a.lw('ra', 0x1C, 'sp')
+    a.lw('s1', 0x18, 'sp')
     a.jr('ra')
     a.addiu('sp', 'sp', 0x20)
 

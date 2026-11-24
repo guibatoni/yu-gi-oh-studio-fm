@@ -10,9 +10,12 @@ Implementação sem recompilar o runtime:
 * a regra da carta recebe o bit 0x80 no byte ``protection`` (livre no runtime:
   ``protection()`` só testa bits específicos);
 * a entrada da cena de batalha (tabela 0x800909BC, hoje ``Battle`` do runtime)
-  passa por ``wrapper``: chama ``Battle`` e, se ``duel.battle_active`` passou
-  de 0 para 1 (início de uma batalha), confere atacante (``duel.battle[0]``) e
-  alvo (``duel.battle[1]``; -1 = ataque direto) e cura os donos.
+  passa por ``wrapper``: chama ``Battle`` e, se a cena estava na primeira
+  chamada da batalha (SCENE sem o bit 15, o mesmo teste com que ``Battle``
+  conta os ataques uma vez por batalha), confere atacante (``duel.battle[0]``)
+  e alvo (``duel.battle[1]``; -1 = ataque direto) e cura os donos.
+  (A 1ª versão usava a transição de ``battle_active`` 0→1, que pode ficar em 1
+  entre batalhas e não curava no jogo.)
 
 ``runtime_view`` devolve o SLUS como o runtime o deixa, para a conferência
 byte a byte do runtime (o mesmo cuidado de ps1_life_splash).
@@ -33,6 +36,7 @@ CARDS = 0x801A7AD8                  # Card[30], passo 28: id +0x0C, attack +0x0E
 CONFIG = 0x801CD7A0                 # Config: offsets[id] em +2 + 2*id
 SIDE_LP = 0x800E9FF0 + 0x14         # LP do lado 0; lado 1 em +32
 OCCUPIED = 0x8000
+SCENE = 0x8009B23A                  # u16; Battle só inicia a batalha com o bit 15 limpo
 
 
 def code(base: int, capacity: int) -> bytes:
@@ -43,12 +47,13 @@ def code(base: int, capacity: int) -> bytes:
     a.sw('ra', 0x1C, 'sp'); a.sw('s0', 0x18, 'sp'); a.sw('s1', 0x14, 'sp')
     high, low = hi_lo(DUEL_BATTLE)
     a.lui('s0', high); a.addiu('s0', 's0', low)
+    sh_, sl_ = hi_lo(SCENE)
+    a.lui('t0', sh_)
+    a.lhu('s1', sl_, 't0')                      # SCENE antes: bit 15 limpo = 1ª chamada da batalha
     a.jal(BATTLE)
-    a.lbu('s1', 2, 's0')                        # battle_active antes
-    a.bnez('s1', 'out')
-    a.lbu('t0', 2, 's0')                        # delay: battle_active depois
-    a.nop()                                     # load delay
-    a.beqz('t0', 'out')
+    a.nop()
+    a.andi('s1', 's1', 0x8000)
+    a.bnez('s1', 'out')                         # batalha já em andamento
     a.nop()
     a.jal('heal')
     a.lb('a0', 0, 's0')                         # atacante

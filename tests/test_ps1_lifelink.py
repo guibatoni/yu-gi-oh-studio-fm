@@ -25,7 +25,8 @@ class LifelinkMipsTests(unittest.TestCase):
         cpu.mem_write(HOOK & M, ll.code(HOOK, 722))
         # Battle falso: liga battle_active e grava os slots (como o runtime)
         cpu.mem_write(ll.BATTLE & M, struct.pack('<2I', 0x03E00008, 0))
-        cpu.mem_write((ll.DUEL_BATTLE + 2) & M, bytes([1 if already_active else 0]))
+        cpu.mem_write((ll.DUEL_BATTLE + 2) & M, bytes([1]))         # battle_active pode ficar em 1
+        cpu.mem_write(ll.SCENE & M, struct.pack('<H', 0x8003 if already_active else 0x0003))
 
         def battle(uc, address, size, _):
             if address == ll.BATTLE:
