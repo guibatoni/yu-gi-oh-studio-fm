@@ -420,15 +420,30 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                            or subtype_wanted or hand_bonus_wanted or fixed_drop_map):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
+    code_space = []
+    debug_space_report = {'status': 'nao_usado'}
+
+    def reserve_code(size):
+        """Rotinas do mod: primeiro na área do menu de debug, depois no banco de textos."""
+        nonlocal patched_exe, regions, code_space, debug_space_report
+        if native_profile and not code_space and debug_space_report['status'] == 'nao_usado':
+            from .ps1_debug_space import claim as claim_debug_space
+            patched_exe, code_space, debug_space_report = claim_debug_space(patched_exe)
+        try:
+            address, code_space = reserve_block(patched_exe, code_space, size)
+            return address
+        except ModError:
+            address, regions = reserve_block(patched_exe, regions, size)
+            return address
     if quest_enabled:
         quest_handlers, regions = reserve_quest_handlers(patched_exe, regions)
     equip_bonus_report = {'status': 'original'} if native_profile else {'status': 'perfil_incompativel'}
     if native_profile and equip_bonus_requested:
-        equip_hook, regions = reserve_block(patched_exe, regions, equip_bonus_size(equip_bonus_requested))
+        equip_hook = reserve_code(equip_bonus_size(equip_bonus_requested))
         patched_exe, equip_bonus_report = apply_equip_bonus(patched_exe, equip_bonus_requested, equip_hook)
     frames_report = {'status': 'desativado'} if native_profile else {'status': 'perfil_incompativel'}
     if native_profile and frames_enabled:
-        frame_hook, regions = reserve_block(patched_exe, regions, frame_block_size())
+        frame_hook = reserve_code(frame_block_size())
         cards_for_frames = {cid: project.get(cid) for cid in getattr(project, 'cards', {})}
         patched_exe, frames_report = apply_frame_colors(
             patched_exe, frames_requested['cores'], card_classes(cards_for_frames), frame_hook)
@@ -436,24 +451,24 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     splash_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
     if splash_requested:
         # Reserva agora (antes dos textos); instala depois do runtime, que cria o salto a trocar.
-        splash_hook, regions = reserve_block(patched_exe, regions, splash_block_size())
+        splash_hook = reserve_code(splash_block_size())
     if lp_hud_wide:
         # Dígitos reduzidos de LP (POLY_FT4 sem GTE): bloco próprio, reservado antes dos textos.
         from .ps1_lp_hud import block_size as lp_hud_block_size
-        lp_hud_hook, regions = reserve_block(patched_exe, regions, lp_hud_block_size())
+        lp_hud_hook = reserve_code(lp_hud_block_size())
     if lifelink_wanted:
         # Vínculo com Vida: a cena de batalha passa por esta rotina (instalada após o runtime).
-        lifelink_hook, regions = reserve_block(patched_exe, regions, lifelink_block_size())
+        lifelink_hook = reserve_code(lifelink_block_size())
     if hand_bonus_wanted:
         # Bônus por cartas na mão: desvio da chamada de count_bonus (após o runtime).
         from .ps1_hand_bonus import block_size as hand_bonus_block_size
-        hand_bonus_hook, regions = reserve_block(patched_exe, regions, hand_bonus_block_size())
+        hand_bonus_hook = reserve_code(hand_bonus_block_size())
     if fixed_drop_map:
         # Drop fixo por duelista: desvio na entrada de Duel_SelectCardDrop (após o runtime).
-        fixed_drop_hook, regions = reserve_block(patched_exe, regions, fixed_drop_block_size())
+        fixed_drop_hook = reserve_code(fixed_drop_block_size())
     if subtype_wanted:
         # Sub-tipo: trampolim em matches_bonus (instalado após o runtime).
-        subtype_hook, regions = reserve_block(patched_exe, regions, subtype_block_size(len(subtype_pairs)))
+        subtype_hook = reserve_code(subtype_block_size(len(subtype_pairs)))
     if starter_choice_on:
         # Escolha do deck inicial: rotina+dados e um texto por página no banco de descrições.
         starter_choice_hook = True        # rotina e decks vão no overlay de nome (sem espaço do SLUS)
@@ -910,6 +925,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'papel_parede_menu_ps1':wallpaper_report,
                 'vinculo_com_vida_ps1':lifelink_report,
                 'drop_fixo_ps1':fixed_drop_report,
+                'espaco_menu_debug_ps1':debug_space_report,
                 'subtipos_ps1':subtype_report,
                 'bonus_mao_ps1':hand_bonus_report,
                 'escolha_deck_inicial_ps1':starter_choice_report,

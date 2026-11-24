@@ -145,9 +145,10 @@ def reserve_block(exe: bytes, regions, size: int):
         free[index:index + 1] = [(start, end) for start, end in
                                  ((lo, address), (address + size, hi)) if start < end]
         return address, free
-    raise ModError(f'Sem espaço livre no SLUS ({size} bytes) para os recursos novos do mod '
-                   '(bônus de equipamento, molduras, animação de LP, HUD de LP, Vínculo com Vida, '
-                   'escolha de deck ou descrições maiores). Desative um deles ou encurte descrições.')
+    raise ModError(f'Sem espaço livre no SLUS ({size} bytes) para os recursos novos do mod. '
+                   'As rotinas já usam a área do menu de debug; o que sobra no banco de textos é '
+                   'dividido com as descrições maiores e os textos da escolha de deck. '
+                   'Encurte descrições ou desative um recurso.')
 
 
 def apply(exe: bytes, bonuses: dict[int, int], hook: int) -> tuple[bytes, dict]:
