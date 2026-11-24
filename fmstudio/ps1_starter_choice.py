@@ -16,10 +16,13 @@ residente (bloco reservado no SLUS):
   os do jogo). Com mais de 4 decks, cada página mostra 3 decks + "Mais
   decks…". A escolha é obrigatória (o diálogo do jogo não aceita cancelar).
   Escolhido o deck, devolve o controle ao jogo, que escurece e conclui.
-* ``build`` (no lugar do ``jal NameEntry_BuildStarterDeck`` de Main): se houve
-  escolha, copia as 40 cartas do deck escolhido e marca cada uma como vista
-  na Biblioteca (``Library_UpdateCardUsedFlag(id + 288)``, como o retail);
-  sem escolha, chama o gerador original.
+* ``build`` (no lugar do ``jal NameEntry_BuildStarterDeck`` de Main): copia
+  as 40 cartas do deck escolhido e marca cada uma como vista na Biblioteca
+  (``Library_UpdateCardUsedFlag(id + 288)``, como o retail).
+
+Rotina e decks ficam DENTRO do overlay de nome, no lugar dos sete pools de
+sorteio (0x8016ABD4, 10 KB), que não são usados com a escolha obrigatória: não
+gastam o espaço livre do SLUS. Só os textos das páginas vão para o SLUS.
 
 Os textos das páginas ficam no banco de descrições (IDs 0xD3F0..), cuja área
 livre o Studio já administra; a tabela de strings recebe os offsets.
@@ -52,6 +55,8 @@ TEXT_UPDATE = 0x80039794               # func_80039794: avança a caixa de texto
 RANGE_LAYOUT = 0x8003B6AC              # DuelEffect_SetEntryRangeLayout(2, 2): moldura/fundo da caixa
 LIBRARY_SEEN = 0x8002CCE4              # Library_UpdateCardUsedFlag
 PLAYER_DECK = 0x801D0200               # gDuel_awPlayerDeck
+OVERLAY_BLOCK = 0x8016ABD4             # gNameEntry_aStarterDeckPools: 7 pools sem uso com a escolha
+OVERLAY_BLOCK_SIZE = 7 * 0x5B8
 FIRST_TEXT_ID = 0x3F0                  # índices livres da tabela (texto 0xD3F0+)
 BOX = (2, 16, 176, 288, 48)            # canal e retângulo da caixa do overlay de nome
 DONE_MASK, DONE = 0x2008, 0x2000
@@ -270,8 +275,10 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.la('t0', 'state')
     a.lbu('t1', 0, 't0')
     a.ori('t2', 'zero', 2)
-    a.bne('t1', 't2', 'random')
+    a.beq('t1', 't2', 'chosen')
     a.nop()
+    a.sb('zero', 2, 't0')                       # sem escolha (não deveria ocorrer): 1º deck
+    a.label('chosen')
     a.addiu('sp', 'sp', -0x20)
     a.sw('ra', 0x1C, 'sp'); a.sw('s0', 0x18, 'sp'); a.sw('s1', 0x14, 'sp'); a.sw('s2', 0x10, 'sp')
     a.sb('zero', 0, 't0')                       # consome a escolha
@@ -297,9 +304,6 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.lw('ra', 0x1C, 'sp'); a.lw('s0', 0x18, 'sp'); a.lw('s1', 0x14, 'sp'); a.lw('s2', 0x10, 'sp')
     a.jr('ra')
     a.addiu('sp', 'sp', 0x20)
-    a.label('random')
-    a.j(BUILD_STARTER)
-    a.nop()
 
     # --- dados
     # Sem align(8): o tamanho do bloco não pode depender do endereço reservado
@@ -373,7 +377,8 @@ def encode_name(name: str, cmap: dict, cards: dict) -> bytes:
     return raw
 
 
-def apply(exe: bytes, wa: bytes, decks: list[tuple[str, list[int]]], *, hook: int, text_at: list[int],
+def apply(exe: bytes, wa: bytes, decks: list[tuple[str, list[int]]], *, text_at: list[int],
+          hook: int = OVERLAY_BLOCK,
           cmap: dict, cards: dict) -> tuple[bytes, bytes, dict]:
     """Grava rotina+dados em ``hook``, as páginas em ``text_at`` e liga o overlay."""
     layout = pages(len(decks))
@@ -398,11 +403,12 @@ def apply(exe: bytes, wa: bytes, decks: list[tuple[str, list[int]]], *, hook: in
         struct.pack_into('<H', out, exe_pos(STRING_TABLE + 2 * text_id, exe, 2), address - BANK_DESC)
         rows.append((0xD000 + text_id, first, count, has_more))
     block = code(hook, rows, [cards_ for _, cards_ in decks])
-    at = exe_pos(hook, exe, len(block))
-    if any(out[at:at + len(block)]):
-        raise ModError('Escolha de deck: a área reservada no SLUS não está livre.')
-    out[at:at + len(block)] = block
-    patched_wa = patch_overlay(wa, hook)
+    if len(block) > OVERLAY_BLOCK_SIZE:
+        raise ModError('Escolha de deck: rotina maior que a área dos pools do overlay.')
+    patched_wa = bytearray(patch_overlay(wa, hook))
+    at = _overlay_offset(hook)
+    patched_wa[at:at + OVERLAY_BLOCK_SIZE] = block + bytes(OVERLAY_BLOCK_SIZE - len(block))
+    patched_wa = bytes(patched_wa)
     return bytes(out), patched_wa, {
         'status': 'aplicado', 'decks': [name for name, _ in decks], 'paginas': len(layout),
         'rotina': f'0x{hook:08X}', 'textos': [f'0x{0xD000 + FIRST_TEXT_ID + i:04X}' for i in range(len(layout))],

@@ -145,7 +145,9 @@ def reserve_block(exe: bytes, regions, size: int):
         free[index:index + 1] = [(start, end) for start, end in
                                  ((lo, address), (address + size, hi)) if start < end]
         return address, free
-    raise ModError('Sem espaço livre no SLUS para os bônus de equipamento.')
+    raise ModError(f'Sem espaço livre no SLUS ({size} bytes) para os recursos novos do mod '
+                   '(bônus de equipamento, molduras, animação de LP, HUD de LP, Vínculo com Vida, '
+                   'escolha de deck ou descrições maiores). Desative um deles ou encurte descrições.')
 
 
 def apply(exe: bytes, bonuses: dict[int, int], hook: int) -> tuple[bytes, dict]:

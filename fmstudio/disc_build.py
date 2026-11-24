@@ -279,6 +279,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             native_terrain=metadata.get('ps1_terrain_boosts',{})
             from .ps1_starter_choice import settings as starter_choice_settings
             starter_choice_on = bool(native_profile) and starter_choice_settings(project)['ativado']
+            if starter_choice_on and mod_plan.starters:
+                # Os pools de sorteio dão lugar à rotina da escolha (mesma área do overlay).
+                mod_plan.starters = []
             needs_wa=(starter_choice_on or quest_enabled or expansion.enabled or requested_art or bool(prices_requested) or native_equips or replacements or native_rituals or mod_plan.needs_wa
                       or god_icon_card or god24_enabled or supreme_ids or native_plan.password_prefix is not None
                       or (native_profile and names)
@@ -407,9 +410,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         lifelink_hook, regions = reserve_block(patched_exe, regions, lifelink_block_size())
     if starter_choice_on:
         # Escolha do deck inicial: rotina+dados e um texto por página no banco de descrições.
-        from .ps1_starter_choice import block_size as starter_choice_block_size
-        starter_choice_hook, regions = reserve_block(
-            patched_exe, regions, starter_choice_block_size(len(starter_choice_decks)))
+        starter_choice_hook = True        # rotina e decks vão no overlay de nome (sem espaço do SLUS)
         for size in starter_choice_sizes:
             address, regions = reserve_block(patched_exe, regions, size)
             starter_choice_texts.append(address)
@@ -633,13 +634,6 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_exe, patched_wa, cards_per_win_report = apply_cards_per_win(
             patched_exe, patched_wa if patched_wa is not None else original_wa, cards_per_win_requested)
 
-    if starter_choice_hook is not None:
-        from .ps1_starter_choice import apply as apply_starter_choice
-        patched_exe, patched_wa, starter_choice_report = apply_starter_choice(
-            patched_exe, patched_wa if patched_wa is not None else original_wa, starter_choice_decks,
-            hook=starter_choice_hook, text_at=starter_choice_texts, cmap=starter_choice_cmap,
-            cards=project.cards)
-
     if quest_enabled:
         wa = patched_wa if patched_wa is not None else original_wa
         if len(wa) != len(original_wa) or len(wa) % PAYLOAD:
@@ -690,6 +684,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         patched_exe, lifelink_report = apply_lifelink(patched_exe, lifelink_hook, native_plan.capacity)
 
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
+    if starter_choice_hook is not None:
+        # Depois de quests/expansão: a área dos pools do overlay de nome recebe a rotina.
+        from .ps1_starter_choice import apply as apply_starter_choice
+        patched_exe, patched_wa, starter_choice_report = apply_starter_choice(
+            patched_exe, patched_wa if patched_wa is not None else original_wa, starter_choice_decks,
+            text_at=starter_choice_texts, cmap=starter_choice_cmap, cards=project.cards)
+
     if (not native_profile and patched_exe==original_exe and (patched_wa is None or patched_wa==original_wa)
             and patched_su is None):
         if audit_report is not None:

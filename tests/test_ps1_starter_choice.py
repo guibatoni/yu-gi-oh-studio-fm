@@ -125,8 +125,10 @@ class RoutineTests(unittest.TestCase):
         self.assertEqual(deck, tuple(self.decks[4]))
         self.assertEqual(self.calls, [('seen', 5 + 288)] * 40)
         self.calls.clear()
-        self.run_at(self.entries['build'])                                  # sem escolha: sorteio original
-        self.assertEqual(self.calls, [('random',)])
+        self.run_at(self.entries['build'])                                  # sem escolha: 1º deck (pools viraram código)
+        deck = struct.unpack('<40H', self.cpu.mem_read(sc.PLAYER_DECK & M, 80))
+        self.assertEqual(deck, tuple(self.decks[0]))
+        self.assertNotIn(('random',), self.calls)
 
     def test_more_wraps_to_first_page(self):
         self.frame()
@@ -138,6 +140,12 @@ class RoutineTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OverlayPlacementTests(unittest.TestCase):
+    def test_routine_fits_in_starter_pool_area(self):
+        self.assertLessEqual(sc.block_size(sc.MAX_DECKS), sc.OVERLAY_BLOCK_SIZE)
+        self.assertEqual(sc.OVERLAY_BLOCK % 4, 0)
 
 
 class BlockSizeTests(unittest.TestCase):
