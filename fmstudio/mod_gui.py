@@ -22,6 +22,8 @@ from .mod_data import (
     normalize_rules, save_rules, starting_life, validate_deck,
 )
 from .tables import CARD_COUNT, DUELIST_NAMES_REFERENCE, POOL_TOTAL, TYPE_NAMES
+from .card_search import ALL_STARS, STAR_FILTERS, has_star, star_label
+from .card_picker import FUSION_NONE, FusionFilter
 from .original_opponent_decks import (
     original_opponent_profile, original_deck_summary, is_original_deck, restored_rules,
 )
@@ -244,7 +246,11 @@ class WeightTable(ttk.Frame):
                 self.tree.selection_set([str(cid) for cid in ids if self.tree.exists(str(cid))])
             except (ModError, OSError, ValueError) as exc:
                 messagebox.showerror('Tabela de pesos', str(exc), parent=self)
-        CardPickerDialog(self, self.cards, picked, multiple=True,
+        context = getattr(self, 'picker_context', None)
+        fusions, deck = context() if context else (None, None)
+        if deck is not None:
+            deck = set(deck) | {cid for cid, weight in self.weights.items() if weight}
+        CardPickerDialog(self, self.cards, picked, multiple=True, fusions=fusions, deck_ids=deck,
                          title='Adicionar cartas à tabela', confirm=f'Adicionar com o peso digitado')
 
     def _context_menu(self, event):
@@ -375,6 +381,8 @@ class DeckProfileEditor(ttk.Frame):
 
         self.query = tk.StringVar()
         self.kind = tk.StringVar(value='Todos os tipos')
+        self.star = tk.StringVar(value=ALL_STARS)
+        self._fusion_cache = None
         self.add_quantity = tk.StringVar(value='1')
         self.quantity = tk.StringVar(value='1')
         self.total = tk.StringVar()
@@ -403,6 +411,14 @@ class DeckProfileEditor(ttk.Frame):
         kind = ttk.Combobox(filters, textvariable=self.kind, width=14, state='readonly',
                             values=['Todos os tipos', 'Monstros', *TYPE_NAMES])
         kind.pack(side='left', padx=(5, 0))
+        star = ttk.Combobox(filters, textvariable=self.star, width=15, state='readonly',
+                            values=list(STAR_FILTERS))
+        star.pack(side='left', padx=(5, 0))
+        for combo in (kind, star):
+            combo.bind('<MouseWheel>', lambda _e: 'break')
+        self.fusion_filter = FusionFilter(self, self.cards, {}, self._deck_ids, self._render_catalog)
+        fusion_row = self.fusion_filter.build(self.fixed_pane)
+        fusion_row.pack(fill='x', pady=(4, 0))
 
         lists = ttk.Frame(self.fixed_pane)
         lists.pack(fill='both', expand=True, pady=(5, 2))
@@ -416,7 +432,8 @@ class DeckProfileEditor(ttk.Frame):
         from .mod_tools_gui import _tree
         self.catalog = _tree(catalog, [('id', 'ID', 50), ('nome', 'Carta', 135),
                                        ('tipo', 'Tipo', 76), ('atk', 'ATK', 78),
-                                       ('def', 'DEF', 78)], height=5, raw_values=self._catalog_sort_value,
+                                       ('def', 'DEF', 78), ('estrelas', 'Estrelas', 96),
+                                       ('fusao', 'Fusão', 210)], height=5, raw_values=self._catalog_sort_value,
                              selectmode='extended', horizontal=True)
         self.deck = _tree(fixed, [('id', 'ID', 50), ('nome', 'Carta', 135),
                                   ('atk', 'ATK', 78), ('def', 'DEF', 78),
@@ -480,23 +497,62 @@ class DeckProfileEditor(ttk.Frame):
         self.table = WeightTable(self.pool_pane)
         self.table.pack(fill='both', expand=True)
 
-        for variable in (self.kind, self.query):
+        for variable in (self.kind, self.query, self.star):
             variable.trace_add('write', lambda *_: self._render_catalog())
         self.fixed.trace_add('write', lambda *_: self._render_deck())
+        self.fixed.trace_add('write', lambda *_: self._refresh_fusion_view())
+        self.table.picker_context = lambda: (self._fusion_map(), self._deck_ids())
+        self.tabs.bind('<<NotebookTabChanged>>', lambda _e: self._refresh_fusion_view())
         self.draws.trace_add('write', lambda *_: self._render_deck())
         self._render_deck()
 
     def refresh_catalog(self, cards, project):
         self.cards, self.project = cards, project
+        self._fusion_cache = None
+        self.fusion_filter.set_data(cards, self._fusion_map())
         self.table.refresh_catalog(cards)
         self._render_catalog()
         self._render_deck()
 
+    def _fusion_map(self):
+        """{(a, b): resultado} do projeto (receitas originais + alterações), em cache."""
+        if self._fusion_cache is None:
+            self._fusion_cache = {}
+            if self.project is not None:
+                try:
+                    _, _, equips, rituals = base_tables(self.project)
+                    self._fusion_cache, _, _ = match_recipes(self.project, equips, rituals)
+                except (ModError, OSError, ValueError, KeyError):
+                    self._fusion_cache = {}
+        return self._fusion_cache
+
+    def _deck_ids(self):
+        """Cartas do deck em edição: fixas + todas as cartas com peso nos pools."""
+        try:
+            ids = set(parse_card_ids(self.fixed.get(), maximum=MAX_DECK))
+        except (ModError, ValueError):
+            ids = set()
+        for index, row in enumerate(self.rows):
+            weights = self.table.weights if index == self.current else row.get('pesos', {})
+            ids.update(int(cid) for cid, weight in weights.items() if int(weight))
+        return ids
+
+    def _refresh_fusion_view(self):
+        if self.fusion_filter.mode.get() != FUSION_NONE and not self.loading:
+            self._render_catalog()
+
     def _render_catalog(self):
         query = search_text(self.query.get())
         kind = self.kind.get()
+        star = self.star.get()
+        self.fusion_filter.cards = self.cards
+        notes = self.fusion_filter.notes()
         rows = []
         for cid in sorted(self.cards):
+            if not has_star(self.cards[cid], star):
+                continue
+            if notes is not None and cid not in notes:
+                continue
             typ = int(self.cards[cid]['tipo_id'])
             label = ('Deus' if typ == 24 else TYPE_NAMES[typ]
                      if 0 <= typ < len(TYPE_NAMES) else str(typ))
@@ -509,7 +565,8 @@ class DeckProfileEditor(ttk.Frame):
                 rows.append((cid, (
                     compact_number(cid), name, label,
                     _monster_stat(self.cards[cid], 'ataque'),
-                    _monster_stat(self.cards[cid], 'defesa'))))
+                    _monster_stat(self.cards[cid], 'defesa'),
+                    star_label(self.cards[cid]), (notes or {}).get(cid, ''))))
         self._render_rows(self.catalog, rows)
         self._render_deck()
         self._update_buttons()
