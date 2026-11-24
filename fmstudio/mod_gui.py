@@ -1246,8 +1246,18 @@ class ModEditor(ttk.Frame):
         editor.catalog.selection_set(available)
         editor.change_card('add', copies=1)
 
+    def _ready_for_generator(self, title):
+        if self.project is None:
+            messagebox.showinfo(title, 'Abra ou crie um projeto primeiro (menu Projeto). '
+                                'O gerador usa as cartas e fusões do projeto.', parent=self)
+            return False
+        if self.studio._extract_running:
+            messagebox.showinfo(title, 'Aguarde a extração terminar.', parent=self)
+            return False
+        return True
+
     def generate_deck(self, editor):
-        if self.project is None or self.studio._extract_running:
+        if not self._ready_for_generator('Gerar Deck Aleatório'):
             return
         from .mod_tools_gui import DeckGeneratorDialog
         try:
@@ -1273,7 +1283,7 @@ class ModEditor(ttk.Frame):
             messagebox.showerror('Gerar Deck Aleatório', str(exc), parent=self)
 
     def generate_themed_starter(self):
-        if self.project is None or self.studio._extract_running:
+        if not self._ready_for_generator('Gerar deck temático'):
             return
         from .themed_deck_gui import ThemedDeckDialog
         try:
