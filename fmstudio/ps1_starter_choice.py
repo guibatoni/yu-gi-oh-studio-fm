@@ -52,6 +52,11 @@ CHOICE = 0x8009B34D                    # gDialog_bChoice
 TEXT_BOX_CREATE = 0x80035BE4
 TEXT_BOX_DESTROY = 0x80035B7C
 TEXT_UPDATE = 0x80039794               # func_80039794: avança a caixa de texto
+FIND_FREE_SLOT = 0x8004002C             # DisplayObject_FindFreeGeneralSlot
+ACQUIRE_SLOT = 0x800400AC               # DisplayObject_AcquireSlot(slot, 2)
+CONFIGURE_SPRITE = 0x800404CC           # DisplayObject_ConfigureSpriteAtPosition
+SELECT_OT1 = 0x80042918                 # DisplayObject_SelectOrderingTable1
+SET_DEPTH = 0x800428EC                  # DisplayObject_SetDepthOffset
 RANGE_LAYOUT = 0x8003B6AC              # DuelEffect_SetEntryRangeLayout(2, 2): moldura/fundo da caixa
 LIBRARY_SEEN = 0x8002CCE4              # Library_UpdateCardUsedFlag
 PLAYER_DECK = 0x801D0200               # gDuel_awPlayerDeck
@@ -116,7 +121,9 @@ def pages(count: int) -> list[tuple[int, int, bool]]:
 def page_text(lines: list[bytes], terminator_offset: int) -> bytes:
     """FB 44 + linhas (FE) + FB 80 com saltos para o FF final + FF."""
     count = len(lines)
-    body = bytes((0xFB, 0x40 | count)) + b''.join(line + b'\xfe' for line in lines)
+    # Sem o bit 0x40: ao confirmar, o jogo solta o destaque da opção e encerra
+    # a caixa (com 0x40 o destaque ficava na tela ao trocar de página).
+    body = bytes((0xFB, count)) + b''.join(line + b'\xfe' for line in lines)
     jumps = struct.pack(f'<{count}H', *([terminator_offset] * count))
     return body + b'\xfb\x80' + jumps + b'\xff'
 
@@ -225,15 +232,15 @@ def _assemble(base: int, page_rows, decks) -> Asm:
 
     # --- open_page(s0 = estado): cria a caixa e espera o layout das opções
     a.label('open_page')
-    a.addiu('sp', 'sp', -0x20)
-    a.sw('ra', 0x1C, 'sp')
+    a.addiu('sp', 'sp', -0x28)
+    a.sw('ra', 0x24, 'sp')
+    a.sw('s1', 0x20, 'sp')
     a.lbu('t0', 1, 's0')
     a.nop()
     a.sll('t0', 't0', 3)
     a.addu('t0', 't0', 's0')
-    a.sw('s1', 0x18, 'sp')
     a.lhu('s1', 8, 't0')                        # id do texto da página
-    # Igual ao overlay de nome antes de criar a caixa: liga o fundo/moldura do canal 2.
+    # Igual ao overlay de nome antes de criar a caixa: layout do canal 2.
     a.ori('a0', 'zero', BOX[0])
     a.jal(RANGE_LAYOUT)
     a.ori('a1', 'zero', 2)
@@ -254,6 +261,34 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.nop()
     a.ori('t0', 't0', 8)
     a.sh('t0', 0x34, 'v0')
+    # Moldura/fundo: o overlay de nome cria um sprite (tipo 23, 257) atrás da
+    # caixa e o guarda em box->field_2C (TextBox_Destroy o libera).
+    a.jal(FIND_FREE_SLOT)
+    a.nop()
+    a.move('a0', 'v0')
+    a.jal(ACQUIRE_SLOT)
+    a.ori('a1', 'zero', 2)
+    a.lw('t0', 4, 's0')
+    a.move('s1', 'v0')                          # moldura
+    a.sw('v0', 0x2C, 't0')
+    a.sw('zero', 0x10, 'sp')
+    a.sw('zero', 0x14, 'sp')
+    a.ori('t1', 'zero', 23); a.sw('t1', 0x18, 'sp')
+    a.ori('t1', 'zero', 257); a.sw('t1', 0x1C, 'sp')
+    a.move('a0', 's1')
+    a.ori('a1', 'zero', x)
+    a.ori('a2', 'zero', y)
+    a.jal(CONFIGURE_SPRITE)
+    a.move('a3', 'zero')
+    a.jal(SELECT_OT1)
+    a.move('a0', 's1')
+    a.move('a0', 's1')
+    a.jal(SET_DEPTH)
+    a.ori('a1', 'zero', 19)
+    a.lhu('t0', 8, 's1')
+    a.nop()
+    a.ori('t0', 't0', 8)                        # DISPLAY_OBJECT_FLAG_SCREEN_SPACE
+    a.sh('t0', 8, 's1')
     a.label('layout')
     a.jal(TEXT_UPDATE)
     a.nop()
@@ -265,10 +300,10 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.nop()
     a.ori('t0', 'zero', 1)
     a.sb('t0', 0, 's0')                         # estado 1
-    a.lw('ra', 0x1C, 'sp')
-    a.lw('s1', 0x18, 'sp')
+    a.lw('ra', 0x24, 'sp')
+    a.lw('s1', 0x20, 'sp')
     a.jr('ra')
-    a.addiu('sp', 'sp', 0x20)
+    a.addiu('sp', 'sp', 0x28)
 
     # --- build: no lugar de NameEntry_BuildStarterDeck
     a.label('build')
