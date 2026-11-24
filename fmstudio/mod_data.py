@@ -11,6 +11,13 @@ from .tables import CARD_COUNT, DECK_SIZE, DUELIST_NAMES_REFERENCE
 CONFIG_KEY = 'edicao_mod'
 DROP_FROM_DECK = 'drops_do_deck'
 DECK_DROP_WEIGHTS = 'pesos_drops_do_deck'
+FIXED_DROP = 'drop_fixo'          # carta entregue só na 1ª vitória contra o duelista
+
+
+def fixed_drop(config, opponent):
+    """ID da carta de drop fixo do duelista, ou None."""
+    value = config.get('duelistas', {}).get(str(opponent), {}).get(FIXED_DROP)
+    return int(value) if value else None
 STOCK_STARTER = 'Original do disco'
 RANK_GROUPS = {
     **dict.fromkeys(('Z-POW', 'S-POW', 'A-POW'), 'pow'),
@@ -172,6 +179,14 @@ def normalize_rules(data, cards):
             duelist['lp'] = positive_int(duelist['lp'], 'LP do oponente')
         if 'deck' in duelist:
             duelist['deck'] = _normalize_deck(duelist['deck'], cards)
+        if FIXED_DROP in duelist:
+            if duelist[FIXED_DROP] in (None, 0, ''):
+                duelist.pop(FIXED_DROP)
+            else:
+                card = simulation_nonnegative_int(duelist[FIXED_DROP], 'Carta do drop fixo')
+                if cards and card not in cards:
+                    raise ModError(f'Drop fixo: carta #{card} não existe no projeto.')
+                duelist[FIXED_DROP] = card
         if DROP_FROM_DECK in duelist and not isinstance(duelist[DROP_FROM_DECK], bool):
             raise ModError('Escolha se os drops do duelista vêm do próprio deck.')
         for rank, weights in duelist.get(DECK_DROP_WEIGHTS, {}).items():

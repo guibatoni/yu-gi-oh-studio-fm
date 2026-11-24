@@ -67,6 +67,7 @@ class DuelMatch(DuelLab):
         self.deck_out = None
         self.reward_card = None
         self._pending_reward = None
+        self.fixed_reward = False
         rng = rng or SystemRandom()
         for side in SIDES:
             self.set_deck(side, decks[side])
@@ -84,11 +85,22 @@ class DuelMatch(DuelLab):
         alive = [side for side in SIDES if self.lp[side] > 0]
         return 'empate' if not alive else alive[0] if len(alive) == 1 else None
 
-    def claim_reward(self, config, pools, opponent, rank, grant, *, rng=None):
+    def claim_reward(self, config, pools, opponent, rank, grant, *, rng=None, fixed_given=None):
+        """Sorteia a recompensa; ``fixed_given`` = duelistas cujo drop fixo já saiu.
+
+        Com ``fixed_given`` informado, o drop fixo do duelista (1ª vitória) vem
+        antes do sorteio, como no PS1; o chamador registra a entrega.
+        """
         if self.winner != 'jogador':
             raise ModError('Vença o duelo para receber uma recompensa.')
         if self.reward_card is not None:
             return self.reward_card
+        if self._pending_reward is None and fixed_given is not None:
+            from .mod_data import fixed_drop
+            card = fixed_drop(config, opponent)
+            if card and int(opponent) not in fixed_given:
+                self._pending_reward = card
+                self.fixed_reward = True
         if self._pending_reward is None:
             weights = drop_weights(config, pools, opponent, rank, effects=self.effects)
             self._pending_reward = weighted_choice(weights, rng or SystemRandom())

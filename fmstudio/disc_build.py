@@ -408,9 +408,16 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         starter_choice_cmap, _ = glyph_map(original_exe)
         starter_choice_sizes = text_sizes(starter_choice_decks, starter_choice_cmap, project.cards)
     lifelink_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
+    from .mod_data import CONFIG_KEY as _MOD_CONFIG_KEY
+    from .ps1_fixed_drop import (apply as apply_fixed_drop, block_size as fixed_drop_block_size,
+                                 fixed_drops)
+    fixed_drop_map = (fixed_drops(project.metadata.get(_MOD_CONFIG_KEY) or {}, native_plan.capacity)
+                      if native_profile else {})
+    fixed_drop_hook = None
+    fixed_drop_report = ({'status': 'sem_drops_fixos'} if native_profile else {'status': 'perfil_incompativel'})
     if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled
                            or splash_requested or lp_hud_wide or lifelink_wanted or starter_choice_on
-                           or subtype_wanted or hand_bonus_wanted):
+                           or subtype_wanted or hand_bonus_wanted or fixed_drop_map):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     if quest_enabled:
@@ -441,6 +448,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         # Bônus por cartas na mão: desvio da chamada de count_bonus (após o runtime).
         from .ps1_hand_bonus import block_size as hand_bonus_block_size
         hand_bonus_hook, regions = reserve_block(patched_exe, regions, hand_bonus_block_size())
+    if fixed_drop_map:
+        # Drop fixo por duelista: desvio na entrada de Duel_SelectCardDrop (após o runtime).
+        fixed_drop_hook, regions = reserve_block(patched_exe, regions, fixed_drop_block_size())
     if subtype_wanted:
         # Sub-tipo: trampolim em matches_bonus (instalado após o runtime).
         subtype_hook, regions = reserve_block(patched_exe, regions, subtype_block_size(len(subtype_pairs)))
@@ -718,6 +728,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             splash_report = {'status': 'sem_efeitos_no_runtime'}
     if lifelink_hook is not None:
         patched_exe, lifelink_report = apply_lifelink(patched_exe, lifelink_hook, native_plan.capacity)
+    if fixed_drop_hook is not None:
+        patched_exe, fixed_drop_report = apply_fixed_drop(patched_exe, fixed_drop_hook, fixed_drop_map)
     if subtype_hook is not None:
         patched_exe, subtype_report = apply_subtypes(patched_exe, subtype_hook, subtype_pairs)
     if hand_bonus_hook is not None:
@@ -897,6 +909,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'animacao_lp_ao_entrar_ps1':splash_report,
                 'papel_parede_menu_ps1':wallpaper_report,
                 'vinculo_com_vida_ps1':lifelink_report,
+                'drop_fixo_ps1':fixed_drop_report,
                 'subtipos_ps1':subtype_report,
                 'bonus_mao_ps1':hand_bonus_report,
                 'escolha_deck_inicial_ps1':starter_choice_report,

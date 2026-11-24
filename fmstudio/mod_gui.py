@@ -18,6 +18,7 @@ from .mod_data import (
     CONFIG_KEY, DROP_FROM_DECK, DECK_DROP_WEIGHTS, DROP_GROUPS, MONSTER_TYPES,
     RANK_GROUPS, STOCK_STARTER, base_tables, deal_deck, deck_drop_candidates,
     deck_drop_weights, drop_weights, drops_from_deck, duelist_profile, match_recipes,
+    FIXED_DROP, fixed_drop,
     normalize_rules, save_rules, starting_life, validate_deck,
 )
 from .tables import CARD_COUNT, DUELIST_NAMES_REFERENCE, POOL_TOTAL, TYPE_NAMES
@@ -25,6 +26,7 @@ from .original_opponent_decks import (
     original_opponent_profile, original_deck_summary, is_original_deck, restored_rules,
 )
 
+FIXED_DROP_NONE = '— nenhum —'
 WEIGHT_COLUMNS = ('carta', 'nome', 'atk', 'def', 'peso', 'chance', 'chance_ps1')
 
 
@@ -896,6 +898,20 @@ class ModEditor(ttk.Frame):
         self.frame_editor = FrameColorEditor(frame_pane, studio)
         from .wallpaper_gui import MenuWallpaperEditor
         self.wallpaper_editor = MenuWallpaperEditor(wall_pane, studio)
+        fixed_row = ttk.Frame(drop_pane)
+        fixed_row.pack(fill='x', pady=(0, 4))
+        ttk.Label(fixed_row, text='Drop fixo (só na 1ª vitória):').pack(side='left', padx=(0, 6))
+        self.fixed_drop_var = tk.StringVar(value=FIXED_DROP_NONE)
+        self.fixed_drop_box = ttk.Combobox(fixed_row, textvariable=self.fixed_drop_var, width=38)
+        self.fixed_drop_box.pack(side='left')
+        self.fixed_drop_box.bind('<KeyRelease>', self._filter_fixed_drop)
+        self.fixed_drop_box.bind('<<ComboboxSelected>>', lambda _e: self._save_fixed_drop())
+        self.fixed_drop_box.bind('<Return>', lambda _e: self._save_fixed_drop())
+        ttk.Button(fixed_row, text='Remover', command=self._clear_fixed_drop).pack(side='left', padx=(6, 0))
+        ttk.Label(drop_pane, foreground=MUTED, wraplength=630, text=(
+            'A primeira vitória contra este duelista entrega esta carta no SPOILS; '
+            'o save guarda que ela já saiu e as vitórias seguintes usam o sorteio normal. '
+            'Digite parte do nome ou o número para filtrar.')).pack(anchor='w', pady=(0, 6))
         self.drop_toggle = ttk.Checkbutton(drop_pane, text='Drops ponderados do próprio deck',
                                            variable=self.use_deck_drops, command=self._toggle_deck_drops)
         self.drop_toggle.pack(anchor='w', pady=(0, 6))
@@ -1079,7 +1095,58 @@ class ModEditor(ttk.Frame):
         self._refresh_campaign_badge()
         self._load_drop()
  
+    def _fixed_drop_values(self):
+        return [FIXED_DROP_NONE] + [f'#{cid:03d} {self.cards[cid].get("nome") or "?"}'
+                                    for cid in sorted(self.cards)]
+
+    def _filter_fixed_drop(self, event=None):
+        if event is not None and event.keysym in ('Return', 'Up', 'Down', 'Escape'):
+            return
+        text = self.fixed_drop_var.get().strip().lower()
+        values = self._fixed_drop_values()
+        if text and text != FIXED_DROP_NONE.lower():
+            values = [v for v in values if text in v.lower()][:200] or values
+        self.fixed_drop_box.configure(values=values)
+
+    def _load_fixed_drop(self):
+        card = fixed_drop(self.rules, self._duel_id()) if self.project else None
+        self.fixed_drop_box.configure(values=self._fixed_drop_values())
+        if card and card in self.cards:
+            self.fixed_drop_var.set(f'#{card:03d} {self.cards[card].get("nome") or "?"}')
+        else:
+            self.fixed_drop_var.set(FIXED_DROP_NONE)
+
+    def _save_fixed_drop(self):
+        text = self.fixed_drop_var.get().strip()
+        try:
+            if not text or text == FIXED_DROP_NONE:
+                card = None
+            else:
+                digits = text.lstrip('#').split()[0]
+                if not digits.isdigit():
+                    raise ModError('Escolha a carta do drop fixo na lista (ex.: #001 Blue-Eyes...).')
+                card = int(digits)
+                if card not in self.cards:
+                    raise ModError(f'Drop fixo: carta #{card} não existe no projeto.')
+            rules = self._edit()
+            duel = self._selected_duelist(rules)
+            if card is None:
+                duel.pop(FIXED_DROP, None)
+                caption = 'Drop fixo removido.'
+            else:
+                duel[FIXED_DROP] = card
+                caption = f'Drop fixo salvo: #{card:03d} na 1ª vitória.'
+            self._commit(rules, caption)
+        except (ModError, ValueError, OSError) as exc:
+            self.status.set(str(exc))
+        self._load_fixed_drop()
+
+    def _clear_fixed_drop(self):
+        self.fixed_drop_var.set(FIXED_DROP_NONE)
+        self._save_fixed_drop()
+
     def _load_drop(self):
+        self._load_fixed_drop()
         active = drops_from_deck(self.rules, self._duel_id())
         self.use_deck_drops.set(active)
         if active:

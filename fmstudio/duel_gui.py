@@ -13,6 +13,8 @@ from .expanded import display_name
 from .guardian import guardian_name
 from .gui import ACCENT, BORDER, ROW_ALT, SURFACE, TEXT, card_row_tags, compact_number, sortable_columns
 from .mod_data import drops_from_deck
+
+FIXED_GIVEN_KEY = 'simulador_drops_fixos_entregues'  # duelistas cujo drop fixo já saiu no simulador
 from .passwords import grant_card, original_passwords
 from .tables import DUELIST_NAMES_REFERENCE
 
@@ -381,8 +383,13 @@ class MatchDialog(tk.Toplevel):
     def _roll_drop(self):
         try:
             self._check_project()
+            given = set(map(int, self.project.metadata.get(FIXED_GIVEN_KEY, [])))
             cid = self.game.claim_reward(self.rules, self.pools, self.opponent, project_rank(self.game).grade,
-                                         lambda card: grant_card(self.project, card))
+                                         lambda card: grant_card(self.project, card), fixed_given=given)
+            if getattr(self.game, 'fixed_reward', False) and int(self.opponent) not in given:
+                self.project.metadata = {**self.project.metadata,
+                                         FIXED_GIVEN_KEY: sorted(given | {int(self.opponent)})}
+                self.project.save()
         except (ModError, ValueError, OSError) as exc:
             self.reward.configure(text=str(exc))
             return

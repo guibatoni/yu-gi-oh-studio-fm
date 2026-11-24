@@ -461,7 +461,8 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     from .ps1_lifelink import runtime_view as lifelink_view
     from .ps1_subtypes import runtime_view as subtype_view
     from .ps1_hand_bonus import runtime_view as hand_view
-    exe = hand_view(subtype_view(lifelink_view(runtime_view(exe))))
+    from .ps1_fixed_drop import runtime_view as fixed_drop_view
+    exe = fixed_drop_view(hand_view(subtype_view(lifelink_view(runtime_view(exe)))))
     bundle = _runtime_bundle(plan)
     ENTRY_POINTS = bundle.ENTRY_POINTS
     RUNTIME = bundle.RUNTIME
