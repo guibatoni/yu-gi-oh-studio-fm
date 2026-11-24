@@ -297,6 +297,11 @@ def match_recipes(project, equips, rituals):
                 targets.discard(int(old))
                 targets.add(int(new))
     equips.update({int(cid): set(targets) for cid, targets in custom.get('equipamentos', {}).items()})
+    # Sub-tipo: o monstro recebe os equipamentos que servem no seu 2º tipo.
+    from .card_subtypes import equip_additions
+    catalog = {cid: project.get(cid) for cid in getattr(project, 'cards', {})}
+    for cid, targets in equip_additions(catalog, equips).items():
+        equips.setdefault(cid, set()).update(targets)
     if project.metadata.get('ps1_rituals_enabled'):
         for cid, recipe in project.metadata.get('ps1_ritual_recipes', {}).items():
             if isinstance(recipe, dict):

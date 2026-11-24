@@ -27,7 +27,9 @@ def matches_filter(card, effect, cid=None):
         return cid == effect['carta_referencia_id']
     type_id = effect.get('tipo_id', -1)
     attribute = effect.get('atributo_id', -1)
-    type_matches = type_id == -1 or int(card['tipo_id']) == type_id
+    subtype = card.get('subtipo_id', -1)
+    type_matches = (type_id == -1 or int(card['tipo_id']) == type_id
+                    or (subtype not in (None, '', -1) and int(subtype) == type_id))
     attribute_matches = attribute == -1 or int(card.get('atributo_id', -1)) == attribute
     if type_id != -1 and attribute != -1 and effect.get('combinar_filtros') == 'ou':
         return type_matches or attribute_matches
@@ -106,6 +108,7 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             raise ModError('Campo: face_up deve ser verdadeiro ou falso')
         occupied.add((side, slot))
         field.append({'lado':side, 'slot':slot, 'card_id':cid, 'tipo_id':typ,
+            'subtipo_id':int(raw.get('subtipo_id', (catalog or {}).get(cid, {}).get('subtipo_id', -1))),
             'atributo_id':int(raw.get('atributo_id', -1)),
             'ataque_base':attack, 'defesa_base':defense,
             'ataque':attack + int(raw.get('modificador_atk', 0)),

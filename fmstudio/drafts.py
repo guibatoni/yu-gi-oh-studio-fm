@@ -16,6 +16,11 @@ def same_card(a: dict, b: dict) -> bool:
     Um campo temporariamente inválido (ex.: ATK vazio durante digitação)
     fica pendente e só é validado ao clicar Salvar projeto.
     """
+    def subtype(card):
+        value = card.get('subtipo_id', -1)
+        return -1 if value in (None, '') else int(value)
+    if subtype(a) != subtype(b):
+        return False
     for k in FIELDS:
         x, y = a.get(k, ''), b.get(k, '')
         if k in NUMERIC:

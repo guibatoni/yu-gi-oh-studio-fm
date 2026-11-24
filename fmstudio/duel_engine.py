@@ -118,12 +118,16 @@ class DuelLab:
         hand.extend(drawn)
         return drawn
 
+    def _types(self, cid):
+        from .card_subtypes import types_of
+        return types_of(self.card(cid))
+
     def graveyard_type_counts(self):
-        return {side: Counter(int(self.card(cid)['tipo_id']) for cid in ids)
+        return {side: Counter(kind for cid in ids for kind in self._types(cid))
                 for side, ids in self.graveyards.items()}
 
     def type_counts(self):
-        return {side: Counter(int(self.card(cid)['tipo_id']) for cid in ids)
+        return {side: Counter(kind for cid in ids for kind in self._types(cid))
                 for side, ids in self.decks.items()}
 
     def set_field(self, monsters: list[dict], equipments: list[dict] | None = None):
@@ -146,7 +150,11 @@ class DuelLab:
             for unit in self.monsters:
                 key = (unit['lado'], int(unit['slot']), int(unit['card_id']))
                 atk, defense = self.stat_markers.get(key, (0, 0))
-                terrain = terrain_bonuses.get(int(unit['tipo_id']), 0) if terrain_bonuses else 0
+                kinds = {int(unit['tipo_id'])}
+                if int(unit['card_id']) in self.cards:
+                    kinds |= self._types(int(unit['card_id']))
+                terrain = max((terrain_bonuses.get(kind, 0) for kind in kinds),
+                              key=abs, default=0) if terrain_bonuses else 0
                 board.append({**unit, 'modificador_atk': int(unit.get('modificador_atk', 0)) + atk + terrain,
                               'modificador_def': int(unit.get('modificador_def', 0)) + defense + terrain})
         return resolve_field(board,self.effects,equipments=self.equipments,

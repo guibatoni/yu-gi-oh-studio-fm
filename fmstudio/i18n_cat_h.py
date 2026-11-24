@@ -122,4 +122,6 @@ ENTRIES = {
     'Força': ('Strength', 'Stärke', 'Forza', '強さ', '强度', '강도'),
     'Usar este deck': ('Use this deck', 'Dieses Deck verwenden', 'Usa questo mazzo', 'このデッキを使う', '使用此卡组', '이 덱 사용'),
     'Gerar': ('Generate', 'Erzeugen', 'Genera', '生成', '生成', '생성'),
+    'Sub-tipo (2º tipo para bônus e equipamentos)': ('Sub-type (2nd type for bonuses and equips)', 'Untertyp (2. Typ für Boni und Ausrüstung)', 'Sottotipo (2º tipo per bonus ed equipaggiamenti)', 'サブ種族(ボーナスと装備用の第2種族)', '副种族（用于加成和装备的第二种族）', '보조 종족(보너스·장착용 2번째 종족)'),
+    '— Nenhum': ('— None', '— Keiner', '— Nessuno', '— なし', '— 无', '— 없음'),
 }

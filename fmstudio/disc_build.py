@@ -269,6 +269,20 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 raise ModError('Modo de equipamento inválido no projeto.')
             native_equips=(metadata.get('ps1_equip_additions',{})
                            if equip_mode=='adicionar' else {})
+            if equip_mode=='adicionar' and native_profile:
+                # Sub-tipo: acrescenta a carta aos equipamentos que servem no 2º tipo.
+                from .card_subtypes import equip_additions
+                from .mod_data import base_tables
+                _, _, stock_equips, _ = base_tables(project)
+                merged = {int(k): set(map(int, v)) for k, v in stock_equips.items()}
+                for k, v in native_equips.items():
+                    merged.setdefault(int(k), set()).update(map(int, v))
+                extra = equip_additions({cid: project.get(cid) for cid in getattr(project, 'cards', {})}, merged)
+                if extra:
+                    combined = {int(k): set(map(int, v)) for k, v in native_equips.items()}
+                    for equip, targets in extra.items():
+                        combined.setdefault(equip, set()).update(targets)
+                    native_equips = {str(k): sorted(v) for k, v in combined.items()}
             replacements=(metadata.get('ps1_equip_replacements',{})
                           if equip_mode=='substituir' else {})
             # Rituais em pausa a pedido do usuário. Guardamos planos anteriores
@@ -369,6 +383,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                                wants_lifelink)
     lifelink_wanted = bool(native_profile) and wants_lifelink(native_plan)
     lifelink_hook = None
+    from .ps1_runtime import BONUS_CODES
+    from .ps1_subtypes import apply as apply_subtypes, block_size as subtype_block_size, pairs_for
+    subtype_pairs = (pairs_for({cid: project.get(cid) for cid in getattr(project, 'cards', {})},
+                               native_plan.capacity)
+                     if native_profile else [])
+    subtype_wanted = bool(subtype_pairs) and any(action in BONUS_CODES for _, action in native_plan.accepted)
+    subtype_hook = None
+    subtype_report = ({'status': 'sem_subtipos'} if native_profile else {'status': 'perfil_incompativel'})
     starter_choice_hook, starter_choice_texts, starter_choice_decks = None, [], []
     starter_choice_report = ({'status': 'desativado'} if native_profile else {'status': 'perfil_incompativel'})
     if starter_choice_on:
@@ -381,7 +403,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         starter_choice_sizes = text_sizes(starter_choice_decks, starter_choice_cmap, project.cards)
     lifelink_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
     if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled
-                           or splash_requested or lp_hud_wide or lifelink_wanted or starter_choice_on):
+                           or splash_requested or lp_hud_wide or lifelink_wanted or starter_choice_on
+                           or subtype_wanted):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     if quest_enabled:
@@ -408,6 +431,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if lifelink_wanted:
         # Vínculo com Vida: a cena de batalha passa por esta rotina (instalada após o runtime).
         lifelink_hook, regions = reserve_block(patched_exe, regions, lifelink_block_size())
+    if subtype_wanted:
+        # Sub-tipo: trampolim em matches_bonus (instalado após o runtime).
+        subtype_hook, regions = reserve_block(patched_exe, regions, subtype_block_size(len(subtype_pairs)))
     if starter_choice_on:
         # Escolha do deck inicial: rotina+dados e um texto por página no banco de descrições.
         starter_choice_hook = True        # rotina e decks vão no overlay de nome (sem espaço do SLUS)
@@ -682,6 +708,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             splash_report = {'status': 'sem_efeitos_no_runtime'}
     if lifelink_hook is not None:
         patched_exe, lifelink_report = apply_lifelink(patched_exe, lifelink_hook, native_plan.capacity)
+    if subtype_hook is not None:
+        patched_exe, subtype_report = apply_subtypes(patched_exe, subtype_hook, subtype_pairs)
 
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
     if starter_choice_hook is not None:
@@ -856,6 +884,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'animacao_lp_ao_entrar_ps1':splash_report,
                 'papel_parede_menu_ps1':wallpaper_report,
                 'vinculo_com_vida_ps1':lifelink_report,
+                'subtipos_ps1':subtype_report,
                 'escolha_deck_inicial_ps1':starter_choice_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,

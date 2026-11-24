@@ -240,11 +240,17 @@ def ps1_unwritable_numeric_edits(project) -> list[str]:
 
 def check_card_edit(row: dict):
     cleaned = {}
-    for key in (*FIELDS, 'modelo_ps1_id'):
+    for key in (*FIELDS, 'modelo_ps1_id', 'subtipo_id'):
         if key not in row:
             continue
         val = row[key]
-        if key == 'cor_nome':
+        if key == 'subtipo_id':
+            # Sub-tipo: o monstro também conta como este tipo para bônus e equipamentos.
+            value = -1 if val in (None, '') else _bounded_int(val, 'Sub-tipo', -1, 24)
+            if value in (20, 21, 22, 23):
+                raise ModError('Sub-tipo: escolha um tipo de monstro (ou Nenhum).')
+            cleaned[key] = value
+        elif key == 'cor_nome':
             color = str(val).strip().upper()
             if not re.fullmatch(r'#[0-9A-F]{6}', color):
                 raise ModError('cor_nome: escolha uma cor RGB válida (#RRGGBB)')
@@ -821,7 +827,8 @@ class Project:
             base.setdefault('raridade', DEFAULT_RARITY)
             diff = staged_edits.get(str(cid), {})
             for key, value in cleaned.items():
-                baseline = int(base[key]) if key in NUMERIC else base.get(key, '')
+                baseline = (int(base.get(key, -1)) if key == 'subtipo_id'
+                            else int(base[key]) if key in NUMERIC else base.get(key, ''))
                 if baseline == value:
                     diff.pop(key, None)
                 else:

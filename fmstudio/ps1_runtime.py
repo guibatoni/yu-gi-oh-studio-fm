@@ -450,7 +450,8 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     # A animação de LP ao entrar em campo troca um salto dentro do runtime.
     from .ps1_life_splash import runtime_view
     from .ps1_lifelink import runtime_view as lifelink_view
-    exe = lifelink_view(runtime_view(exe))
+    from .ps1_subtypes import runtime_view as subtype_view
+    exe = subtype_view(lifelink_view(runtime_view(exe)))
     bundle = _runtime_bundle(plan)
     ENTRY_POINTS = bundle.ENTRY_POINTS
     RUNTIME = bundle.RUNTIME

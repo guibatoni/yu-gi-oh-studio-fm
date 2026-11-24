@@ -1515,6 +1515,15 @@ class Studio(tk.Tk):
             section.columnconfigure(0,weight=1)
         self._form_entry(basic,'Nome','nome',0,width=15)
         self._form_entry(basic,'Tipo','tipo_id',1,width=15,kind='type')
+        ttk.Label(basic,text='Sub-tipo (2º tipo para bônus e equipamentos)').grid(
+            row=4,column=0,sticky='w',padx=(0,12),pady=(9,2))
+        subtype_values=['— Nenhum']+[f'{i:02d} — {TYPE_NAMES[i]}' for i in range(20)]
+        self.vars['subtipo_id']=tk.StringVar(value='— Nenhum')
+        subtype_box=ttk.Combobox(basic,values=subtype_values,state='readonly',width=15,
+                                 textvariable=self.vars['subtipo_id'])
+        subtype_box.grid(row=5,column=0,sticky='ew',padx=(0,12))
+        for seq in ('<MouseWheel>','<Button-4>','<Button-5>'):
+            subtype_box.bind(seq,lambda _event:'break')
         self._form_entry(combat,'ATK','ataque',0,width=15)
         self._form_entry(combat,'DEF','defesa',1,width=15)
         self._form_entry(stars,'Atributo','atributo_id',0,width=15,kind='attr')
@@ -2187,6 +2196,8 @@ class Studio(tk.Tk):
                 data[key]=self.vars[key].get().split(' — ',1)[0]
             else:
                 data[key]=self.vars[key].get()
+        sub=self.vars['subtipo_id'].get().split(' — ',1)[0].strip()
+        data['subtipo_id']=int(sub) if sub.isdigit() else -1
         return data
 
     def _card_sort_value(self, item, field):
@@ -2277,6 +2288,8 @@ class Studio(tk.Tk):
                 self.vars[key].set(f'{n:02d} — {label}')
             else:
                 self.vars[key].set(str(c.get(key,'')))
+        sub=int(c.get('subtipo_id',-1) if c.get('subtipo_id',-1) not in (None,'') else -1)
+        self.vars['subtipo_id'].set(f'{sub:02d} — {TYPE_NAMES[sub]}' if 0<=sub<len(TYPE_NAMES) else '— Nenhum')
         self.description.edit_modified(False)
         self._loading=False
         self._update_card_type_warning()
