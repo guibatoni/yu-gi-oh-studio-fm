@@ -1,8 +1,9 @@
-"""Bônus por cartas na mão (``bonus_mao_tipo``) no PS1.
+"""Bônus por cartas na mão no PS1 (por tipo e por carta específica).
 
-O runtime conta campo, deck e cemitério, mas não a mão. A regra é compilada
-como um bônus de deck (código 3) com o ``match`` marcado: ``0x4000 | tipo``
-(ou ``0x7FFF`` para qualquer tipo). Sozinho isso conta 0 (nenhum tipo é
+O runtime conta campo, deck e cemitério, mas não a mão. ``bonus_mao_tipo`` é
+compilado como bônus de deck por tipo (código 3) e ``bonus_por_carta_id`` com
+origem mão como bônus de deck por ID (código 5), com o ``match`` marcado:
+``0x4000 | tipo/ID`` (ou ``0x7FFF`` para qualquer tipo). Sozinho isso conta 0 (nenhum tipo é
 0x4000+), então é inofensivo se o desvio abaixo não existir.
 
 A única chamada de ``count_bonus`` (0x800FE984, dentro de CalculateStats,
@@ -24,6 +25,7 @@ COUNT_BONUS = 0x801CFBBC
 MATCHES_BONUS = 0x801CFB14
 CARDS = 0x801A7AD8
 DECK_TYPE = 3
+DECK_ID = 5
 HAND_FLAG = 0x4000
 ANY_HAND = 0x7FFF
 OCCUPIED = 0x8000
@@ -42,14 +44,20 @@ def code(base: int) -> bytes:
     a.lbu('t0', 0, 'a0')                        # ação
     a.lhu('t2', 2, 'a0')                        # match
     a.ori('t1', 'zero', DECK_TYPE)
+    a.beq('t0', 't1', 'is_deck')
+    a.move('t8', 'zero')                        # delay: por tipo
+    a.ori('t1', 'zero', DECK_ID)
     a.bne('t0', 't1', 'original')
-    a.andi('t3', 't2', 0xC000)                  # delay
+    a.ori('t8', 'zero', 1)                      # delay: por carta específica
+    a.label('is_deck')
+    a.andi('t3', 't2', 0xC000)
     a.ori('t1', 'zero', HAND_FLAG)
     a.bne('t3', 't1', 'original')
     a.nop()
     a.addiu('sp', 'sp', -0x40)
     a.sw('ra', 0x3C, 'sp'); a.sw('s0', 0x38, 'sp'); a.sw('s1', 0x34, 'sp')
     a.sw('s2', 0x30, 'sp'); a.sw('s3', 0x2C, 'sp'); a.sw('s4', 0x28, 'sp')
+    a.sw('t8', 0x24, 'sp')                      # by_id para matches_bonus
     # cópia do bônus com o tipo real (sem a marca) em sp+0x18
     a.lw('t4', 0, 'a0')
     a.lw('t5', 4, 'a0')
@@ -91,7 +99,7 @@ def code(base: int) -> bytes:
     a.beqz('t0', 'next_card')
     a.addiu('a0', 'sp', 0x18)                   # delay: bônus sem a marca
     a.jal(MATCHES_BONUS)
-    a.move('a2', 'zero')
+    a.lw('a2', 0x24, 'sp')                      # delay: 0 tipo / 1 carta específica
     a.addu('s0', 's0', 'v0')
     a.label('next_card')
     a.lw('t9', 0x20, 'sp')

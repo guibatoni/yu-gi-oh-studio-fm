@@ -234,7 +234,7 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                                    'somente dano_lp ao próprio controlador é aceito ao atacar.')
                     continue
             attribute = effect.get('atributo_id', -1)
-            if effect.get('origem_contagem') in ('mao', 'cemiterio'):
+            if effect.get('origem_contagem') == 'cemiterio':
                 pending.append(f'#{cid}: {action} com essa zona funciona no Studio.')
                 continue
             if max(effect['valor'], effect.get('valor_def', 0)) > 9999:
@@ -254,6 +254,9 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                         pending.append(f'#{cid}: o bônus referencia carta #{match}, fora do catálogo PS1.')
                         continue
                     code = 4 if effect['origem_contagem'] == 'campo' else 5
+                    if effect['origem_contagem'] == 'mao':
+                        from .ps1_hand_bonus import encode_match
+                        match = encode_match(match)     # ID marcado: ps1_hand_bonus conta a mão
                 elif action == 'bonus_mao_tipo':
                     from .ps1_hand_bonus import encode_match
                     match = encode_match(effect['tipo_id'])

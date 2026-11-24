@@ -390,8 +390,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                      if native_profile else [])
     subtype_wanted = bool(subtype_pairs) and any(action in BONUS_CODES for _, action in native_plan.accepted)
     subtype_hook = None
-    hand_bonus_wanted = bool(native_profile) and any(
-        action == 'bonus_mao_tipo' for _, action in native_plan.accepted)
+    hand_bonus_wanted = bool(native_profile) and (
+        any(action == 'bonus_mao_tipo' for _, action in native_plan.accepted)
+        or any(raw.get('acao') == 'bonus_por_carta_id' and raw.get('origem_contagem') == 'mao'
+               for effects in getattr(project, 'effects', {}).values() for raw in effects))
     hand_bonus_hook = None
     hand_bonus_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
     subtype_report = ({'status': 'sem_subtipos'} if native_profile else {'status': 'perfil_incompativel'})

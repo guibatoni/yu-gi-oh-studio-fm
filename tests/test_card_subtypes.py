@@ -105,7 +105,7 @@ class MatchesBonusMipsTests(unittest.TestCase):
 class HandBonusMipsTests(unittest.TestCase):
     """Wrapper de count_bonus + matches_bonus real: conta a mão."""
 
-    def run_count(self, match, scope, side, hand):
+    def run_count(self, match, scope, side, hand, action=3):
         import struct
         from fmstudio import ps1_runtime_blob as rt, ps1_hand_bonus as hb
         from unicorn import UC_HOOK_CODE
@@ -123,7 +123,7 @@ class HandBonusMipsTests(unittest.TestCase):
             cpu.mem_write((rec + 0x16) & M, struct.pack('<H', 0x8000))
             cpu.mem_write((0x801D4244 + 4 * (cid - 1)) & M, struct.pack('<I', typ << 26))
         bonus = 0x80100000
-        cpu.mem_write(bonus & M, struct.pack('<BBHHH', 3, scope, match, 100, 0))
+        cpu.mem_write(bonus & M, struct.pack('<BBHHH', action, scope, match, 100, 0))
         cpu.reg_write(UC_MIPS_REG_A0, bonus)
         cpu.reg_write(UC_MIPS_REG_A1, side)
         cpu.reg_write(UC_MIPS_REG_SP, 0x80180000)
@@ -141,3 +141,6 @@ class HandBonusMipsTests(unittest.TestCase):
         self.assertEqual(self.run_count(encode_match(-1), 0, 0, hand)[0], 3)    # qualquer tipo
         value, calls = self.run_count(8, 0, 0, hand)                             # bônus de deck normal
         self.assertEqual((value, calls), (99, ['original']))
+        self.assertEqual(self.run_count(encode_match(11), 0, 0, hand, action=5)[0], 1)   # carta #11 na mão
+        self.assertEqual(self.run_count(encode_match(14), 2, 0, hand, action=5)[0], 1)
+        self.assertEqual(self.run_count(11, 0, 0, hand, action=5), (99, ['original']))  # deck por ID normal
