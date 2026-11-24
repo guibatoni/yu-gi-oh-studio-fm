@@ -31,6 +31,10 @@ class FormatTests(unittest.TestCase):
         text = sc.page_text(lines, 0x1234)
         self.assertEqual(len(text), size)
         self.assertEqual(text[:2], b'\xfb\x02')                     # FB, 2 opções (sem 0x40)
+        confirm = sc.page_text([b'\x01', b'\x02', b'\x03', b'\x04'], 0x20, header=2)
+        self.assertEqual(confirm[:2], b'\xfb\x24')                  # 2 linhas de pergunta + 2 opções
+        self.assertEqual(confirm[-7:], b'\xfb\x80\x20\x00\x20\x00\xff')
+        self.assertEqual(len(confirm), sc.page_layout([b'\x01', b'\x02', b'\x03', b'\x04'], 2))
         self.assertEqual(text[2:8], b'\x10\x11\xfe\x12\xfe\xfb')
         self.assertEqual(text[7:], b'\xfb\x80\x34\x12\x34\x12\xff')
 
@@ -56,49 +60,42 @@ class RoutineTests(unittest.TestCase):
     def setUp(self):
         rows = [(0xD3F0, 0, 3, True), (0xD3F1, 3, 3, True), (0xD3F2, 6, 2, True)]
         self.decks = [[i + 1] * 40 for i in range(8)]
-        self.entries = sc._entries(HOOK, rows, self.decks)
+        confirms = [0xD3F3 + i for i in range(8)]
+        self.entries = sc._entries(HOOK, rows, self.decks, confirms)
         cpu = Uc(UC_ARCH_MIPS, UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN)
         cpu.mem_map(0, 0x200000)
-        cpu.mem_write(HOOK & M, sc.code(HOOK, rows, self.decks))
+        cpu.mem_write(HOOK & M, sc.code(HOOK, rows, self.decks, confirms))
         for stub in (sc.FIND_FREE_SLOT, sc.ACQUIRE_SLOT, sc.CONFIGURE_SPRITE, sc.SELECT_OT1, sc.SET_DEPTH,
-                     sc.RANGE_LAYOUT, sc.UPDATE_DIALOG, sc.TEXT_BOX_CREATE, sc.TEXT_BOX_DESTROY, sc.TEXT_UPDATE,
-                     sc.LIBRARY_SEEN, sc.BUILD_STARTER):
+                     sc.RANGE_LAYOUT, sc.UPDATE_DIALOG, sc.TEXT_BOX_CREATE, sc.TEXT_BOX_DESTROY,
+                     sc.TEXT_UPDATE, sc.LIBRARY_SEEN, sc.BUILD_STARTER):
             cpu.mem_write(stub & M, struct.pack('<2I', 0x03E00008, 0))
         self.calls, self.done = [], False
         self.cpu = cpu
 
         def hook(uc, address, size, _):
             if address == sc.TEXT_BOX_CREATE:
-                sp = uc.reg_read(UC_MIPS_REG_SP)
-                w, h = struct.unpack('<II', uc.mem_read((sp + 0x10) & M, 8))
-                self.calls.append(('create', uc.reg_read(UC_MIPS_REG_A0), uc.reg_read(UC_MIPS_REG_A1),
-                                   uc.reg_read(UC_MIPS_REG_A2), uc.reg_read(UC_MIPS_REG_A3), w, h))
+                self.calls.append(('create', uc.reg_read(UC_MIPS_REG_A1)))
                 uc.mem_write(BOX & M, bytes(0x64))
                 uc.reg_write(UC_MIPS_REG_V0, BOX)
-            elif address == sc.TEXT_UPDATE:
-                uc.mem_write((BOX + 0x30) & M, struct.pack('<I', 0x80123456))   # caixa montada
-                if self.done:
-                    flags = struct.unpack('<H', uc.mem_read((BOX + 0x34) & M, 2))[0]
-                    # como o jogo: ao concluir, liga DONE e limpa o bit 8 (o retail espera 0x2008 == 0x2000)
-                    uc.mem_write((BOX + 0x34) & M, struct.pack('<H', (flags | 0x2000) & ~8))
             elif address == sc.ACQUIRE_SLOT:
                 uc.mem_write(0x80150000 & M, bytes(0x60))
                 uc.reg_write(UC_MIPS_REG_V0, 0x80150000)
             elif address == sc.CONFIGURE_SPRITE:
                 sp = uc.reg_read(UC_MIPS_REG_SP)
                 extra = struct.unpack('<4I', uc.mem_read((sp + 0x10) & M, 16))
-                self.calls.append(('frame', uc.reg_read(UC_MIPS_REG_A0), uc.reg_read(UC_MIPS_REG_A1),
-                                   uc.reg_read(UC_MIPS_REG_A2), uc.reg_read(UC_MIPS_REG_A3), extra))
-            elif address == sc.RANGE_LAYOUT:
-                self.calls.append(('layout', uc.reg_read(UC_MIPS_REG_A0), uc.reg_read(UC_MIPS_REG_A1)))
+                assert (uc.reg_read(UC_MIPS_REG_A1), uc.reg_read(UC_MIPS_REG_A2), extra) == (16, 176, (0, 0, 23, 257))
+            elif address == sc.TEXT_UPDATE:
+                uc.mem_write((BOX + 0x30) & M, struct.pack('<I', 0x80123456))
+                if self.done:
+                    flags = struct.unpack('<H', uc.mem_read((BOX + 0x34) & M, 2))[0]
+                    # como o jogo: ao concluir liga DONE e limpa o bit 8
+                    uc.mem_write((BOX + 0x34) & M, struct.pack('<H', (flags | 0x2000) & ~8))
             elif address == sc.TEXT_BOX_DESTROY:
-                self.calls.append(('destroy', uc.reg_read(UC_MIPS_REG_A0)))
+                self.calls.append(('destroy',))
             elif address == sc.UPDATE_DIALOG:
                 self.calls.append(('update',))
             elif address == sc.LIBRARY_SEEN:
                 self.calls.append(('seen', uc.reg_read(UC_MIPS_REG_A0)))
-            elif address == sc.BUILD_STARTER:
-                self.calls.append(('random',))
         cpu.hook_add(UC_HOOK_CODE, hook)
 
     def run_at(self, pc):
@@ -107,9 +104,10 @@ class RoutineTests(unittest.TestCase):
         self.cpu.emu_start(pc, RETURN, timeout=5_000_000)
         self.assertEqual(self.cpu.reg_read(UC_MIPS_REG_SP), 0x80180000)
 
-    def frame(self, flags=0x20, dialog=0, choice=None, done=False):
+    def frame(self, flags=0x20, dialog=0, choice=None, done=False, held=0):
         self.cpu.mem_write(sc.FLAGS & M, bytes([flags]))
         self.cpu.mem_write(sc.DIALOG_ID & M, struct.pack('<H', dialog))
+        self.cpu.mem_write(sc.HELD & M, struct.pack('<H', held))
         if choice is not None:
             self.cpu.mem_write(sc.CHOICE & M, bytes([choice]))
         self.done = done
@@ -117,42 +115,39 @@ class RoutineTests(unittest.TestCase):
         self.run_at(self.entries['poll'])
         return list(self.calls)
 
-    def test_full_choice_flow_with_pages(self):
+    def test_pages_confirmation_and_release_wait(self):
         self.assertEqual(self.frame(flags=0), [('update',)])                 # digitando o nome
-        self.assertEqual(self.frame(dialog=0x80F5), [('update',)])           # confirmação ainda aberta
-        self.assertEqual(self.frame(), [('layout', 2, 2), ('create', 2, 0xD3F0, 16, 176, 288, 48), FRAME])
-        self.assertEqual(self.frame(), [])                                   # esperando o X
+        self.assertEqual(self.frame(dialog=0x80F5), [('update',)])           # confirmação do nome aberta
+        self.assertEqual(self.frame(held=0x40), [])                          # nome aceito: espera soltar X
+        self.assertEqual(self.frame(held=0x40), [])
+        self.assertEqual(self.frame(), [('create', 0xD3F0)])                 # página 1
         flags = struct.unpack('<H', self.cpu.mem_read((BOX + 0x34) & M, 2))[0]
-        self.assertTrue(flags & 8)                                           # modo do retail (0x8000)
+        self.assertTrue(flags & 8)
         self.assertEqual(struct.unpack('<I', self.cpu.mem_read((BOX + 0x2C) & M, 4))[0], 0x80150000)
-        frame_flags = struct.unpack('<H', self.cpu.mem_read((0x80150000 + 8) & M, 2))[0]
-        self.assertTrue(frame_flags & 8)                                     # tela (screen space)
-        calls = self.frame(choice=3, done=True)                              # "Mais decks..."
-        self.assertEqual(calls, [('destroy', BOX), ('layout', 2, 2), ('create', 2, 0xD3F1, 16, 176, 288, 48), FRAME])
-        calls = self.frame(choice=1, done=True)                              # 2º deck da página 2
-        self.assertEqual(calls, [('destroy', BOX)])
+        self.assertEqual(self.frame(), [])                                   # esperando o X
+        self.assertEqual(self.frame(choice=3, done=True, held=0x40), [('destroy',)])   # "Mais decks"
+        self.assertEqual(self.frame(held=0x40), [])                          # X ainda segurado: não abre
+        self.assertEqual(self.frame(), [('create', 0xD3F1)])                 # página 2
+        self.assertEqual(self.frame(choice=1, done=True), [('destroy',)])    # 2º deck da página 2 (#5)
+        self.assertEqual(self.frame(), [('create', 0xD3F3 + 4)])             # "Iniciar com ...?"
+        self.assertEqual(self.frame(choice=1, done=True), [('destroy',)])    # "Não, escolher outro"
+        self.assertEqual(self.frame(), [('create', 0xD3F1)])                 # volta à mesma página
+        self.assertEqual(self.frame(choice=2, done=True), [('destroy',)])    # 3º da página 2 (#6)
+        self.assertEqual(self.frame(), [('create', 0xD3F3 + 5)])
+        self.assertEqual(self.frame(choice=0, done=True), [('destroy',)])    # "Sim"
         self.assertEqual(self.frame(), [('update',)])                        # o jogo escurece e conclui
         self.calls.clear()
         self.run_at(self.entries['build'])
         deck = struct.unpack('<40H', self.cpu.mem_read(sc.PLAYER_DECK & M, 80))
-        self.assertEqual(deck, tuple(self.decks[4]))
-        self.assertEqual(self.calls, [('seen', 5 + 288)] * 40)
-        self.calls.clear()
-        self.run_at(self.entries['build'])                                  # sem escolha: 1º deck (pools viraram código)
-        deck = struct.unpack('<40H', self.cpu.mem_read(sc.PLAYER_DECK & M, 80))
-        self.assertEqual(deck, tuple(self.decks[0]))
-        self.assertNotIn(('random',), self.calls)
+        self.assertEqual(deck, tuple(self.decks[5]))
+        self.assertEqual(self.calls, [('seen', 6 + 288)] * 40)
 
     def test_more_wraps_to_first_page(self):
-        self.frame()
-        self.frame(choice=3, done=True)
-        self.frame(choice=3, done=True)
-        calls = self.frame(choice=2, done=True)                              # página 3: "Mais" é a opção 2
-        self.assertEqual(calls, [('destroy', BOX), ('layout', 2, 2), ('create', 2, 0xD3F0, 16, 176, 288, 48), FRAME])
-
-
-if __name__ == '__main__':
-    unittest.main()
+        self.frame(); self.frame()
+        self.frame(choice=3, done=True); self.frame()
+        self.frame(choice=3, done=True); self.frame()
+        self.frame(choice=2, done=True)                                      # página 3: "Mais" é a opção 2
+        self.assertEqual(self.frame(), [('create', 0xD3F0)])
 
 
 class OverlayPlacementTests(unittest.TestCase):

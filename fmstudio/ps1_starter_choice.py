@@ -118,19 +118,32 @@ def pages(count: int) -> list[tuple[int, int, bool]]:
     return out
 
 
-def page_text(lines: list[bytes], terminator_offset: int) -> bytes:
-    """FB 44 + linhas (FE) + FB 80 com saltos para o FF final + FF."""
+def page_text(lines: list[bytes], terminator_offset: int, header: int = 0) -> bytes:
+    """FB (cabeçalho<<4 | linhas) + linhas (FE) + FB 80 com saltos para o FF final + FF.
+
+    Sem o bit 0x40: ao confirmar, o jogo solta o destaque e encerra a caixa.
+    Com cabeçalho (1-3 linhas antes das opções) o jogo usa exatamente 2 opções.
+    """
     count = len(lines)
-    # Sem o bit 0x40: ao confirmar, o jogo solta o destaque da opção e encerra
-    # a caixa (com 0x40 o destaque ficava na tela ao trocar de página).
-    body = bytes((0xFB, count)) + b''.join(line + b'\xfe' for line in lines)
-    jumps = struct.pack(f'<{count}H', *([terminator_offset] * count))
+    choices = count - header
+    body = bytes((0xFB, (header << 4) | count)) + b''.join(line + b'\xfe' for line in lines)
+    jumps = struct.pack(f'<{choices}H', *([terminator_offset] * choices))
     return body + b'\xfb\x80' + jumps + b'\xff'
 
 
-def page_layout(raw_lines: list[bytes]) -> int:
+def page_layout(raw_lines: list[bytes], header: int = 0) -> int:
     """Tamanho em bytes de uma página (para reservar antes de saber o offset)."""
-    return 2 + sum(len(line) + 1 for line in raw_lines) + 2 + 2 * len(raw_lines) + 1
+    return 2 + sum(len(line) + 1 for line in raw_lines) + 2 + 2 * (len(raw_lines) - header) + 1
+
+
+CONFIRM_LINES = ('Iniciar o jogo com', '{deck}?', 'Sim', 'Nao, escolher outro')
+
+
+def confirm_lines(name: bytes, cmap: dict, cards: dict) -> list[bytes]:
+    first, _, yes, no = (encode_name(text, cmap, cards) for text in
+                         (CONFIRM_LINES[0], 'x', CONFIRM_LINES[2], CONFIRM_LINES[3]))
+    question = encode_name('?', cmap, cards)
+    return [first, name + question, yes, no]
 
 
 def _data_words(data: bytes) -> list[int]:
@@ -138,10 +151,21 @@ def _data_words(data: bytes) -> list[int]:
     return list(struct.unpack(f'<{len(data) // 4}I', data))
 
 
-def _assemble(base: int, page_rows, decks) -> Asm:
-    """poll / open_page / build + dados (estado, páginas, decks)."""
+HELD = 0x8009B3A4                      # botões segurados (pad 1)
+STATE_PAGE, STATE_CHOSEN, STATE_CONFIRM, STATE_PENDING = 1, 2, 4, 5
+
+
+def _assemble(base: int, page_rows, decks, confirm_ids=None) -> Asm:
+    """poll / open_box / build + dados (estado, páginas, confirmações, decks).
+
+    Estado (+0): 0 parado, 1 página aberta, 4 confirmação aberta, 5 esperando
+    soltar os botões para abrir a próxima caixa (tipo em +3), 2 escolhido.
+    +1 página, +2 deck escolhido, +3 próxima caixa, +4 ponteiro da caixa.
+    """
     n_pages = len(page_rows)
+    confirm_ids = list(confirm_ids or [0] * len(decks))
     a = Asm(base)
+    ch, cl = hi_lo(CHOICE)
     # --- poll: no lugar do jal NameEntry_UpdateDialog em PollCompletion
     a.label('poll')
     a.addiu('sp', 'sp', -0x28)
@@ -152,24 +176,54 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.lui('t2', fh)
     a.lbu('t3', fl, 't2')
     a.lhu('t4', fl + (DIALOG_ID - FLAGS), 't2')
-    a.ori('t1', 'zero', 1)
+    a.andi('t3', 't3', 0x20)                    # nome aceito?
+    a.ori('t1', 'zero', STATE_PAGE)
     a.beq('t0', 't1', 'showing')
-    a.andi('t3', 't3', 0x20)                    # delay: nome aceito?
-    a.ori('t1', 'zero', 2)
+    a.ori('t1', 'zero', STATE_CONFIRM)
+    a.beq('t0', 't1', 'showing')
+    a.ori('t1', 'zero', STATE_PENDING)
+    a.beq('t0', 't1', 'pending')
+    a.ori('t1', 'zero', STATE_CHOSEN)
     a.bne('t0', 't1', 'idle')
     a.nop()
-    a.bnez('t3', 'orig')                        # já escolhido: o jogo segue
+    a.bnez('t3', 'orig')                        # escolhido: o jogo escurece e conclui
     a.nop()
     a.b('orig')
-    a.sb('zero', 0, 's0')                       # resto antigo sem nome aceito: zera
+    a.sb('zero', 0, 's0')
     a.label('idle')
     a.beqz('t3', 'orig')
     a.nop()
-    a.bnez('t4', 'orig')                        # ainda há caixa do jogo aberta
+    a.bnez('t4', 'orig')                        # caixa do jogo ainda aberta
     a.nop()
     a.sb('zero', 1, 's0')                       # página 0
-    a.jal('open_page')
+    a.b('go_page')
     a.nop()
+
+    a.label('pending')                          # espera soltar o X que fechou a caixa anterior
+    hh, hl = hi_lo(HELD)
+    a.lui('t0', hh)
+    a.lhu('t0', hl, 't0')
+    a.nop()
+    a.bnez('t0', 'out')
+    a.lbu('a1', 3, 's0')                        # delay: tipo da próxima caixa
+    a.ori('t1', 'zero', STATE_CONFIRM)
+    a.beq('a1', 't1', 'open_confirm')
+    a.nop()
+    a.lbu('t0', 1, 's0')                        # página
+    a.nop()
+    a.sll('t0', 't0', 3)
+    a.addu('t0', 't0', 's0')
+    a.jal('open_box')
+    a.lhu('a0', 8, 't0')                        # delay: id do texto da página
+    a.b('out')
+    a.nop()
+    a.label('open_confirm')
+    a.lbu('t0', 2, 's0')                        # deck escolhido
+    a.la('t1', 'confirms')
+    a.sll('t0', 't0', 1)
+    a.addu('t0', 't0', 't1')
+    a.jal('open_box')
+    a.lhu('a0', 0, 't0')                        # delay: id do texto de confirmação
     a.b('out')
     a.nop()
 
@@ -184,12 +238,20 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.ori('t1', 'zero', DONE)
     a.bne('t0', 't1', 'out')
     a.nop()
-    ch, cl = hi_lo(CHOICE)
     a.lui('t0', ch)
     a.lb('s1', cl, 't0')                        # opção escolhida
     a.jal(TEXT_BOX_DESTROY)
     a.lw('a0', 4, 's0')
-    a.lbu('t0', 1, 's0')                        # página
+    a.lbu('t0', 0, 's0')
+    a.ori('t1', 'zero', STATE_CONFIRM)
+    a.bne('t0', 't1', 'page_answer')
+    a.nop()
+    a.bnez('s1', 'go_page')                     # "Não": volta para a mesma página
+    a.ori('t1', 'zero', STATE_CHOSEN)
+    a.b('out')
+    a.sb('t1', 0, 's0')                         # "Sim": escolhido
+    a.label('page_answer')
+    a.lbu('t0', 1, 's0')
     a.nop()
     a.sll('t0', 't0', 3)
     a.addu('t0', 't0', 's0')
@@ -199,14 +261,14 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.sltu('t4', 's1', 't2')
     a.beqz('t4', 'not_deck')
     a.addu('t1', 't1', 's1')
-    a.sb('t1', 2, 's0')                         # escolhido
-    a.ori('t1', 'zero', 2)
-    a.b('out')
-    a.sb('t1', 0, 's0')                         # estado 2
-    a.label('not_deck')
-    a.beqz('t3', 'reopen')                      # resposta inválida: mostra de novo
+    a.sb('t1', 2, 's0')                         # deck escolhido: pede confirmação
+    a.ori('t1', 'zero', STATE_CONFIRM)
+    a.b('set_pending')
     a.nop()
-    a.bne('s1', 't2', 'reopen')
+    a.label('not_deck')
+    a.beqz('t3', 'go_page')                     # resposta inválida: mostra de novo
+    a.nop()
+    a.bne('s1', 't2', 'go_page')
     a.nop()
     a.lbu('t0', 1, 's0')                        # "Mais decks": próxima página (circular)
     a.nop()
@@ -217,11 +279,13 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.move('t0', 'zero')
     a.label('set_page')
     a.sb('t0', 1, 's0')
-    a.label('reopen')
-    a.jal('open_page')
-    a.nop()
+    a.label('go_page')
+    a.ori('t1', 'zero', STATE_PAGE)
+    a.label('set_pending')
+    a.sb('t1', 3, 's0')
+    a.ori('t1', 'zero', STATE_PENDING)
     a.b('out')
-    a.nop()
+    a.sb('t1', 0, 's0')
     a.label('orig')
     a.jal(UPDATE_DIALOG)
     a.nop()
@@ -230,18 +294,15 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.jr('ra')
     a.addiu('sp', 'sp', 0x28)
 
-    # --- open_page(s0 = estado): cria a caixa e espera o layout das opções
-    a.label('open_page')
-    a.addiu('sp', 'sp', -0x28)
-    a.sw('ra', 0x24, 'sp')
-    a.sw('s1', 0x20, 'sp')
-    a.lbu('t0', 1, 's0')
-    a.nop()
-    a.sll('t0', 't0', 3)
-    a.addu('t0', 't0', 's0')
-    a.lhu('s1', 8, 't0')                        # id do texto da página
-    # Igual ao overlay de nome antes de criar a caixa: layout do canal 2.
-    a.ori('a0', 'zero', BOX[0])
+    # --- open_box(a0 = id do texto, a1 = estado) com s0 = estado
+    a.label('open_box')
+    a.addiu('sp', 'sp', -0x30)
+    a.sw('ra', 0x2C, 'sp')
+    a.sw('s1', 0x28, 'sp')
+    a.sw('s2', 0x24, 'sp')
+    a.move('s1', 'a0')
+    a.move('s2', 'a1')
+    a.ori('a0', 'zero', BOX[0])                 # layout do canal 2, como o overlay de nome
     a.jal(RANGE_LAYOUT)
     a.ori('a1', 'zero', 2)
     a.move('a1', 's1')
@@ -254,22 +315,21 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.ori('a3', 'zero', y)
     a.sw('v0', 4, 's0')
     a.ori('t0', 'zero', 20)
-    a.sb('t0', 0x59, 'v0')                      # como a caixa do overlay de nome
+    a.sb('t0', 0x59, 'v0')
     a.lui('t1', ch)
     a.sb('zero', cl, 't1')                      # gDialog_bChoice = 0
     a.lhu('t0', 0x34, 'v0')
     a.nop()
     a.ori('t0', 't0', 8)
     a.sh('t0', 0x34, 'v0')
-    # Moldura/fundo: o overlay de nome cria um sprite (tipo 23, 257) atrás da
-    # caixa e o guarda em box->field_2C (TextBox_Destroy o libera).
+    # Moldura/fundo (sprite 23, 257) em box->field_2C, como o overlay de nome.
     a.jal(FIND_FREE_SLOT)
     a.nop()
     a.move('a0', 'v0')
     a.jal(ACQUIRE_SLOT)
     a.ori('a1', 'zero', 2)
     a.lw('t0', 4, 's0')
-    a.move('s1', 'v0')                          # moldura
+    a.move('s1', 'v0')
     a.sw('v0', 0x2C, 't0')
     a.sw('zero', 0x10, 'sp')
     a.sw('zero', 0x14, 'sp')
@@ -298,12 +358,12 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     a.nop()
     a.beqz('t0', 'layout')
     a.nop()
-    a.ori('t0', 'zero', 1)
-    a.sb('t0', 0, 's0')                         # estado 1
-    a.lw('ra', 0x24, 'sp')
-    a.lw('s1', 0x20, 'sp')
+    a.sb('s2', 0, 's0')                         # estado = página ou confirmação
+    a.lw('ra', 0x2C, 'sp')
+    a.lw('s1', 0x28, 'sp')
+    a.lw('s2', 0x24, 'sp')
     a.jr('ra')
-    a.addiu('sp', 'sp', 0x28)
+    a.addiu('sp', 'sp', 0x30)
 
     # --- build: no lugar de NameEntry_BuildStarterDeck
     a.label('build')
@@ -349,6 +409,9 @@ def _assemble(base: int, page_rows, decks) -> Asm:
                      for text_id, first, count, more in page_rows)
     for value in _data_words(table):
         a.word(value)
+    a.label('confirms')
+    for value in _data_words(struct.pack(f'<{len(confirm_ids)}H', *confirm_ids)):
+        a.word(value)
     a.label('decks')
     for deck in decks:
         for value in _data_words(struct.pack(f'<{DECK_SIZE}H', *deck)):
@@ -356,14 +419,14 @@ def _assemble(base: int, page_rows, decks) -> Asm:
     return a
 
 
-def code(base: int, page_rows, decks) -> bytes:
-    return _assemble(base, page_rows, decks).bytes()
+def code(base: int, page_rows, decks, confirm_ids=None) -> bytes:
+    return _assemble(base, page_rows, decks, confirm_ids).bytes()
 
 
-def _entries(base: int, page_rows=None, decks=None) -> dict:
+def _entries(base: int, page_rows=None, decks=None, confirm_ids=None) -> dict:
     page_rows = page_rows or [(0xD3F0, 0, 2, False)]
     decks = decks or [[1] * DECK_SIZE] * 2
-    asm = _assemble(base, page_rows, decks)
+    asm = _assemble(base, page_rows, decks, confirm_ids)
     asm.bytes()
     return {'poll': asm.labels['poll'], 'build': asm.labels['build']}
 
@@ -412,46 +475,50 @@ def encode_name(name: str, cmap: dict, cards: dict) -> bytes:
     return raw
 
 
+def _texts(decks, cmap, cards):
+    """[(linhas, cabeçalho)] das páginas e depois das confirmações (uma por deck)."""
+    names = [encode_name(name, cmap, cards) for name, _ in decks]
+    more = encode_name(MORE_LABEL, cmap, cards)
+    out = [(names[first:first + count] + ([more] if has_more else []), 0)
+           for first, count, has_more in pages(len(decks))]
+    out += [(confirm_lines(name, cmap, cards), 2) for name in names]
+    return out
+
+
 def apply(exe: bytes, wa: bytes, decks: list[tuple[str, list[int]]], *, text_at: list[int],
           hook: int = OVERLAY_BLOCK,
           cmap: dict, cards: dict) -> tuple[bytes, bytes, dict]:
-    """Grava rotina+dados em ``hook``, as páginas em ``text_at`` e liga o overlay."""
+    """Grava rotina+dados no overlay, os textos em ``text_at`` e liga o overlay."""
     layout = pages(len(decks))
-    if len(text_at) != len(layout):
+    texts = _texts(decks, cmap, cards)
+    if len(text_at) != len(texts):
         raise ModError('Escolha de deck: espaço de texto reservado incorreto.')
-    names = [encode_name(name, cmap, cards) for name, _ in decks]
-    more = encode_name(MORE_LABEL, cmap, cards)
     out = bytearray(exe)
-    rows = []
-    for page, ((first, count, has_more), address) in enumerate(zip(layout, text_at)):
-        lines = names[first:first + count] + ([more] if has_more else [])
-        size = page_layout(lines)
-        if not BANK_DESC <= address and address + size <= BANK_DESC + 0x10000:
+    ids = []
+    for index, ((lines, header), address) in enumerate(zip(texts, text_at)):
+        size = page_layout(lines, header)
+        if not (BANK_DESC <= address and address + size <= BANK_DESC + 0x10000):
             raise ModError('Escolha de deck: texto fora do banco de descrições.')
-        terminator = address + size - 1 - BANK_DESC
-        text = page_text(lines, terminator)
+        text = page_text(lines, address + size - 1 - BANK_DESC, header)
         at = exe_pos(address, exe, len(text))
         if any(out[at:at + len(text)]):
             raise ModError('Escolha de deck: a área de texto reservada não está livre.')
         out[at:at + len(text)] = text
-        text_id = FIRST_TEXT_ID + page
+        text_id = FIRST_TEXT_ID + index
         struct.pack_into('<H', out, exe_pos(STRING_TABLE + 2 * text_id, exe, 2), address - BANK_DESC)
-        rows.append((0xD000 + text_id, first, count, has_more))
-    block = code(hook, rows, [cards_ for _, cards_ in decks])
+        ids.append(0xD000 + text_id)
+    rows = [(ids[page], first, count, has_more) for page, (first, count, has_more) in enumerate(layout)]
+    block = code(hook, rows, [cards_ for _, cards_ in decks], ids[len(layout):])
     if len(block) > OVERLAY_BLOCK_SIZE:
         raise ModError('Escolha de deck: rotina maior que a área dos pools do overlay.')
     patched_wa = bytearray(patch_overlay(wa, hook))
     at = _overlay_offset(hook)
     patched_wa[at:at + OVERLAY_BLOCK_SIZE] = block + bytes(OVERLAY_BLOCK_SIZE - len(block))
-    patched_wa = bytes(patched_wa)
-    return bytes(out), patched_wa, {
+    return bytes(out), bytes(patched_wa), {
         'status': 'aplicado', 'decks': [name for name, _ in decks], 'paginas': len(layout),
-        'rotina': f'0x{hook:08X}', 'textos': [f'0x{0xD000 + FIRST_TEXT_ID + i:04X}' for i in range(len(layout))],
+        'confirmacao': True, 'rotina': f'0x{hook:08X}', 'textos': [f'0x{i:04X}' for i in ids],
         'validado_epsxe': False}
 
 
 def text_sizes(decks: list[tuple[str, list[int]]], cmap: dict, cards: dict) -> list[int]:
-    names = [encode_name(name, cmap, cards) for name, _ in decks]
-    more = encode_name(MORE_LABEL, cmap, cards)
-    return [page_layout(names[first:first + count] + ([more] if has_more else []))
-            for first, count, has_more in pages(len(decks))]
+    return [page_layout(lines, header) for lines, header in _texts(decks, cmap, cards)]
