@@ -78,10 +78,11 @@ def code(base: int, capacity: int) -> bytes:
     a.sll('t0', 'a0', 3); a.subu('t0', 't0', 'a0'); a.sll('t0', 't0', 2)  # slot * 28
     ch, cl = hi_lo(CARDS)
     a.lui('t1', ch); a.addiu('t1', 't1', cl); a.addu('t1', 't1', 't0')
-    a.lhu('t2', 0x16, 't1')                     # flags
+    # Sem testar OCCUPIED: ao iniciar a batalha o jogo tira as duas cartas do
+    # campo (DuelCard_DeactivateRecord limpa o bit), mas id e ATK continuam no
+    # registro; o slot vem de duel.battle, como em field_monster do runtime.
     a.lh('t3', 0x0C, 't1')                      # id
-    a.andi('t2', 't2', OCCUPIED)
-    a.beqz('t2', 'ret')
+    a.nop()
     a.addiu('t4', 't3', -1)
     a.sltiu('t4', 't4', capacity)
     a.beqz('t4', 'ret')

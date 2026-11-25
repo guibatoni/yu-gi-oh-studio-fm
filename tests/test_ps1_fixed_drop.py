@@ -9,77 +9,11 @@ import unittest
 from fmstudio import ps1_fixed_drop as fd
 from fmstudio.mod_data import FIXED_DROP, fixed_drop, normalize_rules
 from fmstudio.core import ModError
+from tests.mini_mips import M, MiniCpu
 
-M = 0x1FFFFF
 HOOK = 0x801CE000
 RETURN = 0x80000100
 ORIGINAL = (0x27BDFFE8, 0xAFB00010)      # addiu sp,-0x18 ; sw s0,0x10(sp)
-
-
-def s16(v):
-    return v - 0x10000 if v & 0x8000 else v
-
-
-class MiniCpu:
-    def __init__(self):
-        self.mem = bytearray(0x200000)
-        self.r = [0] * 32
-
-    def load(self, address, data):
-        self.mem[address & M:(address & M) + len(data)] = data
-
-    def word(self, address):
-        return struct.unpack_from('<I', self.mem, address & M)[0]
-
-    def run(self, pc, *, stop, limit=500):
-        r, delay = self.r, None
-        for _ in range(limit):
-            if pc in stop:
-                return pc
-            ins = self.word(pc)
-            nxt = delay if delay is not None else pc + 4
-            delay = None
-            op, rs, rt = ins >> 26, ins >> 21 & 31, ins >> 16 & 31
-            rd, sa, fn, imm = ins >> 11 & 31, ins >> 6 & 31, ins & 63, ins & 0xFFFF
-            target = None
-            if op == 0:
-                if fn == 0: val = r[rt] << sa & 0xFFFFFFFF
-                elif fn == 2: val = r[rt] >> sa
-                elif fn == 6: val = r[rt] >> (r[rs] & 31)
-                elif fn == 8: target, val = r[rs], None
-                elif fn == 0x21: val = (r[rs] + r[rt]) & 0xFFFFFFFF
-                elif fn == 0x24: val = r[rs] & r[rt]
-                elif fn == 0x25: val = r[rs] | r[rt]
-                else: raise AssertionError(f'R {fn:#x} em {pc:#x}')
-                if val is not None and rd:
-                    r[rd] = val
-            elif op == 2:
-                target = (pc & 0xF0000000) | (ins & 0x03FFFFFF) << 2
-            elif op in (4, 5):
-                taken = (r[rs] == r[rt]) if op == 4 else (r[rs] != r[rt])
-                if taken:
-                    target = (pc + 4 + (s16(imm) << 2)) & 0xFFFFFFFF
-            elif op == 9:
-                r[rt] = (r[rs] + s16(imm)) & 0xFFFFFFFF
-            elif op == 11:
-                r[rt] = int(r[rs] < (s16(imm) & 0xFFFFFFFF))
-            elif op == 12:
-                r[rt] = r[rs] & imm
-            elif op == 15:
-                r[rt] = imm << 16
-            elif op in (36, 37, 40, 43):
-                addr = (r[rs] + s16(imm)) & 0xFFFFFFFF
-                if op == 36: r[rt] = self.mem[addr & M]
-                elif op == 37: r[rt] = struct.unpack_from('<H', self.mem, addr & M)[0]
-                elif op == 40: self.mem[addr & M] = r[rt] & 0xFF
-                else: struct.pack_into('<I', self.mem, addr & M, r[rt])
-            else:
-                raise AssertionError(f'op {op} em {pc:#x}')
-            r[0] = 0
-            if target is not None:
-                delay = target
-            pc = nxt
-        raise AssertionError('rotina não terminou')
 
 
 class FixedDropMipsTests(unittest.TestCase):

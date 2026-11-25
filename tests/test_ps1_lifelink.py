@@ -43,7 +43,7 @@ class LifelinkMipsTests(unittest.TestCase):
             if slot >= 0:
                 card = ll.CARDS + slot * 28
                 cpu.mem_write((card + 0x0C) & M, struct.pack('<hh', cid, atk))
-                cpu.mem_write((card + 0x16) & M, struct.pack('<H', 0x8000))
+                cpu.mem_write((card + 0x16) & M, struct.pack('<H', 0))   # o jogo limpa OCCUPIED na batalha
         for side, value in enumerate(lp):
             cpu.mem_write((ll.SIDE_LP + 32 * side) & M, struct.pack('<H', value))
         cpu.reg_write(UC_MIPS_REG_SP, 0x80180000)
