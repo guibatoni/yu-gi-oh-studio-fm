@@ -337,7 +337,7 @@ class CampaignQuestEditor(ttk.Frame):
             self.status.set('Confira a imagem de origem e os requisitos importados.')
             messagebox.showerror('Prévia das quests', str(exc), parent=self)
             return
-        ranks = {'pow': 'S/A-POW', 'bcd': 'B/C/D', 'tec': 'S/A-TEC'}
+        ranks = {'pow': 'S/A-POW', 'bcd': 'B/C/D', 'tec': 'S/A-TEC', 'fixo': 'drop fixo (1ª vitória)'}
         for quest in config['quests']:
             self.preview_requirements[str(quest['oponente_id'])] = quest['criterios']
             for requirement in quest['criterios']:
@@ -345,7 +345,8 @@ class CampaignQuestEditor(ttk.Frame):
                 origin = f"{DUELIST_NAMES_REFERENCE[proof['duelista_id']]} · {ranks[proof['grupo']]}"
                 label = f"{requirement['rotulo']} ×{requirement['quantidade']}"
                 self.table.insert('', 'end', values=(quest['oponente'], label, origin,
-                                                     f"{proof['peso']} / {proof['denominador']}"))
+                                                     'garantido' if proof['grupo'] == 'fixo'
+                                                     else f"{proof['peso']} / {proof['denominador']}"))
         self.status.set(f"{len(config['quests'])} duelistas conferidos para a seed {seed}. "
                         'Salve a configuração e use Gerar jogo BIN/CUE.')
 

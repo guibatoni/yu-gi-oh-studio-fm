@@ -126,7 +126,10 @@ def project_quest_catalog(project, wa, *, exe=None, level_address=LEVEL_ADDR, su
                              'raridade': cards[row['id']].get('raridade')}
                  for row in values if row['id'] in cards}
     drops, _, _ = decode_pools(wa)
-    return QuestCatalog.from_rows(cards.values(), drops, decode_starters(wa))
+    from .mod_data import CONFIG_KEY
+    from .ps1_fixed_drop import fixed_drops
+    fixed = fixed_drops(getattr(project, 'metadata', {}).get(CONFIG_KEY) or {}, CARD_COUNT)
+    return QuestCatalog.from_rows(cards.values(), drops, decode_starters(wa), fixed)
 
 
 def preview_project_quests(project, source: Path, seed: str, requirements: dict):

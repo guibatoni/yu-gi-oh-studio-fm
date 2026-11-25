@@ -16,6 +16,10 @@ RETURN = 0x80000100
 ORIGINAL = (0x27BDFFE8, 0xAFB00010)      # addiu sp,-0x18 ; sw s0,0x10(sp)
 
 
+DECK_DROP = 0x800FF000
+NORMAL = 0x2AA            # carta do sorteio normal (simulado)
+
+
 class FixedDropMipsTests(unittest.TestCase):
     def call(self, opponent, drops, *, flags=b'', displaced=ORIGINAL):
         cpu = MiniCpu()
@@ -23,15 +27,28 @@ class FixedDropMipsTests(unittest.TestCase):
         cpu.load(fd.OPPONENT, bytes([opponent]))
         cpu.load(fd.FLAG_BANK + (fd.FLAG_BASE >> 3), flags.ljust(8, b'\0'))
         cpu.r[31] = RETURN
-        cpu.r[2] = 0xDEAD
         cpu.r[29] = 0x801FFF00
-        end = cpu.run(HOOK, stop={RETURN, fd.RESUME, 0x800FF000})
+        cpu.r[4] = 2                      # rank
+        rolled = []
+
+        def retail_rest(c):               # resto de Duel_SelectCardDrop: desfaz o prólogo e sorteia
+            rolled.append(c.r[4])
+            c.r[29] = (c.r[29] + 0x18) & 0xFFFFFFFF
+            c.r[2] = NORMAL
+
+        def deck_drop(c):                 # SelectDeckDrop do runtime (função C comum)
+            rolled.append(c.r[4])
+            c.r[2] = NORMAL
+        end = cpu.run(HOOK, stop={RETURN}, calls={fd.RESUME: retail_rest, DECK_DROP: deck_drop})
+        self.assertEqual(end, RETURN)
+        self.assertEqual(cpu.r[29], 0x801FFF00)
+        self.assertEqual(rolled, [2])     # o sorteio original sempre roda (tabela das extras)
         bank = bytes(cpu.mem[(fd.FLAG_BANK + (fd.FLAG_BASE >> 3)) & M:][:8])
-        return end, cpu.r[2], bank, cpu
+        return cpu.r[2], bank
 
     def test_first_win_gives_card_and_sets_flag(self):
-        end, card, bank, _ = self.call(5, {5: 123})
-        self.assertEqual((end, card), (RETURN, 123))
+        card, bank = self.call(5, {5: 123})
+        self.assertEqual(card, 123)
         flag = fd.FLAG_BASE + 5
         self.assertEqual(bank[(flag >> 3) - (fd.FLAG_BASE >> 3)], 0x80 >> (flag & 7))
 
@@ -39,28 +56,24 @@ class FixedDropMipsTests(unittest.TestCase):
         flag = fd.FLAG_BASE + 5
         flags = bytearray(8)
         flags[(flag >> 3) - (fd.FLAG_BASE >> 3)] = 0x80 >> (flag & 7)
-        end, value, bank, cpu = self.call(5, {5: 123}, flags=bytes(flags))
-        self.assertEqual(end, fd.RESUME)          # seguiu para o sorteio original
-        self.assertEqual(value, 0xDEAD)
-        self.assertEqual(bank, bytes(flags))
-        self.assertEqual(cpu.r[29], 0x801FFF00 - 0x18)   # executou as palavras deslocadas
+        card, bank = self.call(5, {5: 123}, flags=bytes(flags))
+        self.assertEqual((card, bank), (NORMAL, bytes(flags)))
 
     def test_other_duelist_and_out_of_range(self):
         for opponent in (6, 0, 39, 200):
-            end, value, bank, _ = self.call(opponent, {5: 123})
-            self.assertEqual((end, value, bank), (fd.RESUME, 0xDEAD, bytes(8)), opponent)
+            self.assertEqual(self.call(opponent, {5: 123}), (NORMAL, bytes(8)), opponent)
 
     def test_each_duelist_has_own_flag(self):
         drops = {1: 10, 2: 20, 38: 380, 39: 390}
         for opponent, card in drops.items():
-            end, value, bank, _ = self.call(opponent, drops)
-            self.assertEqual((end, value), (RETURN, card))
+            got, bank = self.call(opponent, drops)
+            self.assertEqual(got, card)
             self.assertEqual(sum(bin(b).count('1') for b in bank), 1)
 
     def test_deck_drop_jump_is_kept(self):
-        jump = 0x08000000 | (0x800FF000 >> 2) & 0x03FFFFFF
-        end, value, _, _ = self.call(7, {5: 1}, displaced=(jump, 0))
-        self.assertEqual(end, 0x800FF000)         # SelectDeckDrop do runtime
+        jump = 0x08000000 | (DECK_DROP >> 2) & 0x03FFFFFF
+        self.assertEqual(self.call(7, {5: 1}, displaced=(jump, 0))[0], NORMAL)
+        self.assertEqual(self.call(5, {5: 1}, displaced=(jump, 0))[0], 1)
 
 
 class FixedDropPatchTests(unittest.TestCase):

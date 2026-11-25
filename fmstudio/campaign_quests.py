@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import json
 from pathlib import Path
@@ -81,9 +81,10 @@ class QuestCatalog:
     cards: dict[int, dict]
     drops: dict[tuple[int, str], dict[int, int]]
     starters: dict[int, tuple[int, dict[int, int]]]
+    fixed: dict[int, int] = field(default_factory=dict)   # drop fixo: duelista -> carta (1 cópia)
 
     @classmethod
-    def from_rows(cls, cards, drops, starters):
+    def from_rows(cls, cards, drops, starters, fixed=None):
         catalog = {}
         for row in cards:
             card = _integer(row.get('id'), 'Carta', 1, 65535)
@@ -124,7 +125,9 @@ class QuestCatalog:
         if (sum(draws for draws, _ in initial.values()) != DECK_SIZE
                 or any(draws and sum(pool.values()) != POOL_TOTAL for draws, pool in initial.values())):
             raise ModError('O deck inicial precisa comprovar as 40 compras ponderadas.')
-        return cls(catalog, pools, initial)
+        fixed = {int(op): int(card) for op, card in (fixed or {}).items()
+                 if 0 <= int(op) <= 39 and int(card) in catalog}
+        return cls(catalog, pools, initial, fixed)
 
     @classmethod
     def read_csv(cls, directory: Path):
@@ -145,6 +148,8 @@ class QuestCatalog:
                   [(op, rank, sorted(pool.items())) for (op, rank), pool in sorted(self.drops.items()) if pool],
                   [(group, draws, sorted(pool.items()))
                    for group, (draws, pool) in sorted(self.starters.items()) if draws]]
+        if self.fixed:
+            source.append(sorted(self.fixed.items()))
         return hashlib.sha256(json.dumps(source, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -247,8 +252,12 @@ def _requirements(cards):
     return choices
 
 
-def _source(catalog, earlier, eligible):
-    """Find the best rank among opponents available to farm before the quest."""
+def _source(catalog, earlier, eligible, *, fixed=False):
+    """Find the best rank among opponents available to farm before the quest.
+
+    Com ``fixed``, o drop fixo de um antecessor (1 cópia, na 1ª vitória) também
+    serve de fonte quando nenhum pool dá a carta.
+    """
     best = None
     for opponent in earlier:
         for rank in DROP_RANKS:
@@ -259,6 +268,13 @@ def _source(catalog, earlier, eligible):
                 if best is None or weight > best['peso']:
                     best = {'origem': 'drop', 'duelista_id': opponent, 'grupo': rank, 'peso': weight,
                             'carta_fonte': max(available, key=pool.get), 'denominador': POOL_TOTAL}
+    if best is None and fixed:
+        for opponent in earlier:
+            card = catalog.fixed.get(opponent)
+            if card in eligible:
+                return {'origem': 'drop_fixo', 'duelista_id': opponent, 'grupo': 'fixo', 'peso': 0,
+                        'carta_fonte': card, 'denominador': 1,
+                        'copias': sum(1 for prior in earlier if catalog.fixed.get(prior) in eligible)}
     return best
 
 
@@ -282,9 +298,9 @@ def generate_quests(catalog: QuestCatalog, seed: str, overrides=None):
     for opponent in STORY_DUELISTS:
         earlier = guaranteed_predecessors(opponent)
 
-        def candidate(kind, target, quantity=None):
+        def candidate(kind, target, quantity=None, fixed=False):
             label, eligible = choices[kind].get(target, ('', set()))
-            proof = _source(catalog, earlier, eligible)
+            proof = _source(catalog, earlier, eligible, fixed=fixed)
             if proof is None:
                 return None
             row = {'tipo': kind, 'alvo': target, 'rotulo': label, 'prova': proof}
@@ -295,10 +311,14 @@ def generate_quests(catalog: QuestCatalog, seed: str, overrides=None):
         criteria = []
         if str(opponent) in manual:
             for row in manual[str(opponent)]:
-                match = candidate(row['tipo'], row['alvo'], row['quantidade'])
+                match = candidate(row['tipo'], row['alvo'], row['quantidade'], fixed=True)
                 if match is None:
                     raise ModError(f'Duelista #{opponent}: {row["tipo"]} {row["alvo"]} deve estar '
-                                   'nos drops de Simon ou de um antecessor garantido.')
+                                   'nos drops (ou no drop fixo) de Simon ou de um antecessor garantido.')
+                if match['prova']['origem'] == 'drop_fixo' and row['quantidade'] > match['prova']['copias']:
+                    raise ModError(f'Duelista #{opponent}: {match["rotulo"]} só sai como drop fixo '
+                                   f'({match["prova"]["copias"]} cópia); peça no máximo '
+                                   f'{match["prova"]["copias"]}.')
                 criteria.append(match)
         else:
             rng = Random(f'{seed}:{opponent}')
@@ -317,6 +337,7 @@ def generate_quests(catalog: QuestCatalog, seed: str, overrides=None):
         criteria.sort(key=lambda row: row['tipo'] != 'carta')
         obtainable = set().union(*(catalog.drops.get((prior, rank), {})
                                    for prior in earlier for rank in DROP_RANKS))
+        obtainable |= {catalog.fixed[prior] for prior in earlier if prior in catalog.fixed}
         _validate_inventory_capacity(opponent, criteria, choices, obtainable)
         quests.append({'oponente_id': opponent, 'oponente': DUELIST_NAMES_REFERENCE[opponent],
                        'antecessores': list(earlier), 'criterios': criteria,

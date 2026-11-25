@@ -151,6 +151,25 @@ class CampaignQuestsTests(unittest.TestCase):
         self.assertEqual(actual['quests'][20]['criterios'][0]['prova']['duelista_id'], 21)
         self.assertEqual(generate_quests(catalog, 'seed', MANUAL)['quests'][1:], config['quests'][1:])
 
+    def test_fixed_drop_of_a_predecessor_is_accepted_once(self):
+        base = sample_quests()
+        with self.assertRaisesRegex(ModError, 'antecessor'):
+            generate_quests(base, 'seed', {22: [{'tipo': 'carta', 'alvo': 300, 'quantidade': 1}]})
+        catalog = QuestCatalog(base.cards, base.drops, base.starters, {21: 300})
+        config = generate_quests(catalog, 'seed', {22: [{'tipo': 'carta', 'alvo': 300, 'quantidade': 1}]})
+        proof = config['quests'][20]['criterios'][0]['prova']
+        self.assertEqual((proof['origem'], proof['duelista_id'], proof['grupo']), ('drop_fixo', 21, 'fixo'))
+        with self.assertRaisesRegex(ModError, 'drop fixo'):
+            generate_quests(catalog, 'seed', {22: [{'tipo': 'carta', 'alvo': 300, 'quantidade': 2}]})
+        # o próprio duelista não conta: o drop fixo dele só sai depois do duelo
+        with self.assertRaisesRegex(ModError, 'antecessor'):
+            generate_quests(catalog, 'seed', {21: [{'tipo': 'carta', 'alvo': 300, 'quantidade': 1}]})
+        # sem drop fixo o fingerprint não muda (configurações antigas continuam válidas)
+        self.assertEqual(QuestCatalog(base.cards, base.drops, base.starters, {}).fingerprint(), base.fingerprint())
+        self.assertNotEqual(catalog.fingerprint(), base.fingerprint())
+        table = compile_table(config, catalog, GLYPHS)
+        self.assertTrue(table)
+
     def test_migrating_previous_requirements_leaves_simon_out(self):
         previous = {'formato': LEGACY_FORMAT, 'quests': [
             {'oponente_id': 1, 'criterios': [{'tipo': 'carta', 'alvo': 9, 'quantidade': 20}]},

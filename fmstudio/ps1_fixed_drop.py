@@ -13,10 +13,11 @@ Implementação sem recompilar o runtime:
   ``j rotina; nop``; as duas palavras deslocadas (as originais ou o
   ``j SelectDeckDrop; nop`` dos drops do deck) são executadas no fim da
   rotina, seguidas de ``j 0x80021818``.
-* a rotina lê o duelista (``gDuel_bOpponentID`` 0x8009B361), procura a carta
+* a rotina chama o sorteio original (no Drop x15 ele também prepara a tabela
+  das cartas extras) e só depois decide; ela lê o duelista (``gDuel_bOpponentID`` 0x8009B361), procura a carta
   na tabela (40 halfwords) e testa a bandeira de campanha ``0x708 + id``
   (bandeiras de 0x708 a 0x72F: livres; 0x6E0..0x707 são o desbloqueio do
-  Free Duel). Sem a bandeira: liga a bandeira e devolve a carta.
+  Free Duel). Sem a bandeira: liga a bandeira e troca a carta sorteada pela fixa.
 * as bandeiras ficam no bloco do save (0x801D0618, MSB primeiro, como
   ``Library_UpdateCardUsedFlag``), então valem por save e o NEW GAME limpa.
 
@@ -54,20 +55,29 @@ def fixed_drops(config, capacity: int) -> dict[int, int]:
 
 
 def code(base: int, drops: dict[int, int], displaced: tuple[int, int]) -> bytes:
+    """Chama o sorteio original e, na 1ª vitória, troca a carta devolvida pela fixa.
+
+    O sorteio original precisa rodar sempre: no Drop x15 ele guarda o ponteiro
+    da tabela de drop (0x801AAE50) que o código das cartas extras usa depois.
+    """
     a = Asm(base)
     oh, ol = hi_lo(OPPONENT)
     fh, fl = hi_lo(FLAG_BANK)
+    a.addiu('sp', 'sp', -0x18)
+    a.sw('ra', 0x14, 'sp')
+    a.jal('original')                 # a0 (rank) segue intacto
+    a.nop()
     a.lui('t0', oh)
     a.lbu('t0', ol, 't0')
     a.nop()
     a.sltiu('t1', 't0', DUELIST_COUNT)
-    a.beqz('t1', 'fallback')
+    a.beqz('t1', 'done')
     a.sll('t1', 't0', 1)
     a.la('t2', 'table')
     a.addu('t2', 't2', 't1')
     a.lhu('t2', 0, 't2')
     a.nop()
-    a.beqz('t2', 'fallback')
+    a.beqz('t2', 'done')
     a.addiu('t3', 't0', FLAG_BASE)
     a.srl('t4', 't3', 3)
     a.lui('t5', fh)
@@ -77,12 +87,16 @@ def code(base: int, drops: dict[int, int], displaced: tuple[int, int]) -> bytes:
     a.li('t7', 0x80)
     a.srlv('t7', 't7', 't3')
     a.and_('t8', 't6', 't7')
-    a.bnez('t8', 'fallback')
+    a.bnez('t8', 'done')
     a.or_('t6', 't6', 't7')
     a.sb('t6', fl, 't5')
-    a.jr('ra')
     a.move('v0', 't2')
-    a.label('fallback')
+    a.label('done')
+    a.lw('ra', 0x14, 'sp')
+    a.nop()
+    a.jr('ra')
+    a.addiu('sp', 'sp', 0x18)
+    a.label('original')               # entrada original de Duel_SelectCardDrop
     a.word(displaced[0])
     a.word(displaced[1])
     a.j(RESUME)
