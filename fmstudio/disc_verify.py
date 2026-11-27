@@ -62,6 +62,7 @@ def verify_image_stats(project, source):
     profile=ps1_supports_god24(project)
     mod_plan=compile_mod(project,profile=profile,
                          wa_verified=bool(config.get('edicao_mod') and wa_sha(project)))
+    drop_replaced_starters(project, mod_plan, profile)
     wa=b''
     try:
         with DiscReader(Path(source)) as image:
@@ -317,3 +318,14 @@ def describe(result):
         text.append(f'\n... mais {len(result["cartas"])-10} cartas no relatório.')
     text.append('\nA conferência só valida o arquivo selecionado; não identifica o que o ePSXe executou.')
     return '\n'.join(text)
+
+
+def drop_replaced_starters(project, mod_plan, profile):
+    """Igual ao build: com a escolha de deck inicial ativa, os pools de sorteio dão
+    lugar à rotina da escolha (mesma área do WA), então não são conferidos."""
+    if not profile or not mod_plan.starters:
+        return mod_plan
+    from .ps1_starter_choice import settings as starter_choice_settings
+    if starter_choice_settings(project)['ativado']:
+        mod_plan.starters = []
+    return mod_plan
