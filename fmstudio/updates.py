@@ -59,6 +59,7 @@ SOURCE_FILES = frozenset({
     'INICIAR.bat', 'INICIAR_FM_MOD_STUDIO.bat', 'CRIAR_EXE_WINDOWS.bat',
     'PUBLICAR_GITHUB.bat', 'PUBLICAR_GITHUB.ps1', 'LEIA-ME.txt',
     'docs/EXPANSAO_PS1_740.md', 'tools/verify_expanded_bau_mips.py',
+    'fmstudio/mod_pack.py', 'tools/aplicar_mod.py', 'mods/eclipse_do_farao/mod.json', 'docs/MOD_ECLIPSE_DO_FARAO.md',
     'README.md', 'docs/HISTORICO.md', 'docs/CORRECAO_DOACAO_QUESTS_PS1.md', 'docs/CORRECAO_QUESTS_DOAR_E_DUELAR_QOV5.md', 'docs/CORRECAO_QUESTS_QOV7_DROP_X15.md', 'docs/ATUALIZACOES_GITHUB.md',
     'docs/ORIGEM_E_VALIDACAO.md', 'docs/ROADMAP_EFEITOS.md',
     'docs/MIGRACAO_REPOSITORIO.md', 'docs/COMPAT_PS1.md', 'docs/EXPANSAO_722_GOD_TEXTO.md', 'docs/CLASSES_E_CORES.md', 'docs/EFEITOS_EXEMPLOS.md', 'docs/HABILIDADES_RAPIDAS.md', 'docs/OTIMIZACAO_PS1_PILLOW.md', 'docs/ECONOMIA_PS1.md', 'docs/EDITOR_MULTIPLO_PS1.md',
@@ -199,7 +200,8 @@ def allowed_source_member(name: str) -> bool:
     return bool(re.fullmatch(r'(?:fmstudio/[a-z][a-z0-9_]{0,63}\.py|'
                              r'assets/icons/[a-z0-9_-]{1,64}\.png|'
                              r'docs/[A-Za-z0-9_-]{1,80}\.md|'
-                             r'tools/[a-z][a-z0-9_]{0,63}\.py)', name))
+                             r'tools/[a-z][a-z0-9_]{0,63}\.py|'
+                             r'mods/[a-z0-9_]{1,64}/mod\.json)', name))
 
 
 def validate_archive(archive: Path, kind: str = 'windows') -> set[str]:
