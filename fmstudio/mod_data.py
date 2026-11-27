@@ -168,6 +168,12 @@ def normalize_rules(data, cards):
     out = deepcopy(data)
     if 'hud_ps1' in out and out['hud_ps1'] not in ('original', 'novo'):
         raise ModError('HUD de duelo PS1: use original ou novo.')
+    if 'retrato_jogador_ps1' in out:
+        value = out['retrato_jogador_ps1']
+        if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 39:
+            raise ModError('Retrato do jogador no HUD: escolha um retrato do Free Duel de 0 a 39.')
+    if 'retratos_hud_ps1' in out and not isinstance(out['retratos_hud_ps1'], bool):
+        raise ModError('Retratos no HUD: valor inválido.')
     if 'ia_ps1' in out and out['ia_ps1'] not in ('normal', 'dificil', 'agressiva', 'maxima'):
         raise ModError('IA PS1: escolha Normal ou Difícil.')
     if 'lp_inicial' in out:

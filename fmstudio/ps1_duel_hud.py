@@ -19,8 +19,16 @@ nop`` e a rotina:
 Na mesma entrada da OT a última primitiva enfileirada é a primeira desenhada,
 então o texto e a barra são enfileirados antes das faixas.
 
-Etapa 1: o losango é preenchido com o tom escuro da cor do lado (os retratos
-entram numa etapa seguinte). Visual a conferir no ePSXe (validado_epsxe=False).
+Retratos (opcional): ``Duel_InitScene`` chama ``File_WaitForTransfers`` logo
+depois de carregar o terreno; essa chamada passa a ir para ``loader``, que
+espera o terreno, lê do disco (``File_RequestAsyncTransfer`` direto para o
+buffer de transferência) o retrato do rival (índice = id do duelista) e o do
+jogador (índice escolhido no Studio) do banco do Free Duel e os envia para a
+VRAM com ``LoadImage``. A inicialização roda de novo depois de cada batalha
+animada, então os retratos são recarregados se algo os sobrescrever. O
+losango recebe um POLY_FT4 texturizado (8 bpp, CLUT de 64 cores). Sem retrato
+carregado, fica o tom escuro da cor do lado. Visual a conferir no ePSXe
+(validado_epsxe=False).
 """
 from __future__ import annotations
 
@@ -43,6 +51,24 @@ DECK_SIZE = 40
 RENDERABLE = 0x40                        # DisplayObject.flags: sem ele a lista não desenha o objeto
 X_BIAS = 160                             # vértices guardados como (x - 160, y) em bytes
 RANK_X, RANK_Y = 150, 36                 # canto do "C-POW 62" no layout novo
+
+# Retratos (etapa 2): banco de 40 retratos do Free Duel no WA_MRG (48x48 8 bpp +
+# CLUT de 64 cores, 0x980 bytes cada; índice = id do duelista, 0 = casa "Deck Build").
+INIT_CALL = 0x80017A6C                   # Duel_InitScene: jal File_WaitForTransfers após o terreno
+INIT_CALL_WORD = 0x0C004DF9
+WAIT_TRANSFERS = 0x800137E4              # File_WaitForTransfers
+REQUEST_TRANSFER = 0x80014E1C            # File_RequestAsyncTransfer
+LOAD_IMAGE = 0x8007F978                  # LoadImage(RECT *, u32 *)
+DRAW_SYNC = 0x8007F6CC                   # DrawSync(0)
+STAGING = 0x8009B118                     # ponteiro do buffer de transferência (0x801DC000)
+OPPONENT = 0x8009B361                    # gDuel_bOpponentID (s8)
+PORTRAIT_BANK = 0xF55000                 # bytes no WA_MRG (setor 0x1EAA)
+PORTRAIT_RECORD = 0x980
+PORTRAIT_COUNT = 40
+# Área de VRAM vazia nos save states de duelo (x 832..895, y 128..255): os dois
+# retratos lado a lado (24 palavras = 48 px a 8 bpp) e as duas CLUTs abaixo.
+VRAM_X, VRAM_Y, CLUT_Y = 832, 128, 176
+TPAGE = (VRAM_X // 64) | 1 << 7          # página 13, 8 bpp
 GLYPH_ORDER = '0123456789LP:'
 
 
@@ -99,8 +125,18 @@ def _tile(a, xy, wh, color):
     _link(a, 3)
 
 
-def code(base: int, rank_entry: int | None = None) -> bytes:
+def code(base: int, rank_entry: int | None = None, player_portrait: int | None = None) -> bytes:
+    """``player_portrait``: índice do retrato do jogador (0-39) ou None sem retratos."""
+    return _build(base, rank_entry, player_portrait).bytes()
+
+
+def loader_address(base: int, rank_entry: int | None, player_portrait: int) -> int:
+    return _build(base, rank_entry, player_portrait).labels['loader']
+
+
+def _build(base, rank_entry, player_portrait):
     a = Asm(base)
+    portraits = player_portrait is not None
     quads = _quad_table()
     header, offsets, rects = _glyph_data()
     sh, sl = hi_lo(SIDE_STATES)
@@ -212,6 +248,35 @@ def code(base: int, rank_entry: int | None = None) -> bytes:
         a.lui('t6', dim >> 16)
         a.ori('t6', 't6', dim & 0xFFFF)
         _tile(a, 't5', 't4', 't6')
+
+    if portraits:
+        # retratos (enfileirados antes da tabela: ficam por cima do losango escuro)
+        for index, which in ((1, 0), (0, 1)):
+            side = SIDES[index]
+            cx, cy, h = side.diamond
+            d = h - 1
+            u0, v0 = which * 48, VRAM_Y - 0
+            clut = (VRAM_X >> 4) | (CLUT_Y + which) << 6
+            words = (
+                0x2D808080,
+                (cy - d) << 16 | cx, (v0 << 8 | (u0 + 24)) | clut << 16,
+                cy << 16 | (cx + d), ((v0 + 24) << 8 | (u0 + 47)) | TPAGE << 16,
+                cy << 16 | (cx - d), (v0 + 24) << 8 | u0,
+                (cy + d) << 16 | cx, (v0 + 47) << 8 | (u0 + 24),
+            )
+            a.la('t0', 'portrait_flags')
+            a.lbu('t1', which, 't0')
+            a.nop()
+            a.beqz('t1', f'no_portrait_{index}')
+            a.nop()
+            for slot, word in enumerate(words):
+                a.lui('t0', word >> 16)
+                a.ori('t0', 't0', word & 0xFFFF)
+                if slot in (1, 3, 5, 7):
+                    a.addu('t0', 't0', 's4')         # deslocamento de tela nos vértices
+                a.sw('t0', 4 + 4 * slot, 's3')
+            _link(a, 9)
+            a.label(f'no_portrait_{index}')
 
     # faixas e losangos (tabela)
     a.la('t6', 'quads')
@@ -353,7 +418,122 @@ def code(base: int, rank_entry: int | None = None) -> bytes:
     a.label('digits')
     a.word(0)
     a.word(0)
-    return a.bytes()
+    if portraits:
+        _loader(a, player_portrait)
+    return a
+
+
+def _loader(a, player_portrait):
+    """Duel_InitScene: depois do terreno, lê do disco o retrato do rival e o do jogador."""
+    oh, ol = hi_lo(OPPONENT)
+    a.label('loader')
+    a.addiu('sp', 'sp', -0x30)
+    a.sw('ra', 0x2C, 'sp')
+    a.jal(WAIT_TRANSFERS)
+    a.nop()
+    a.la('t0', 'portrait_flags')
+    a.sh('zero', 0, 't0')
+    a.lui('t0', oh)
+    a.lb('a0', ol, 't0')
+    a.nop()
+    a.bltz('a0', 'loader_player')                # 2 jogadores / link: sem retrato do rival
+    a.sltiu('t1', 'a0', PORTRAIT_COUNT)
+    a.beqz('t1', 'loader_player')
+    a.nop()
+    a.jal('load_portrait')
+    a.move('a1', 'zero')
+    a.label('loader_player')
+    a.li('a0', player_portrait)
+    a.jal('load_portrait')
+    a.li('a1', 1)
+    a.lw('ra', 0x2C, 'sp')
+    a.nop()
+    a.jr('ra')
+    a.addiu('sp', 'sp', 0x30)
+
+    # load_portrait(a0 = índice, a1 = 0 rival / 1 jogador)
+    sh_, sl_ = hi_lo(STAGING)
+    a.label('load_portrait')
+    a.addiu('sp', 'sp', -0x30)
+    a.sw('ra', 0x2C, 'sp')
+    a.sw('s0', 0x28, 'sp')
+    a.sw('s1', 0x24, 'sp')
+    a.move('s0', 'a1')
+    a.li('t0', PORTRAIT_RECORD)
+    a.multu('a0', 't0')
+    a.mflo('t1')
+    a.lui('t2', PORTRAIT_BANK >> 16)
+    a.ori('t2', 't2', PORTRAIT_BANK & 0xFFFF)
+    a.addu('t1', 't1', 't2')
+    a.srl('a2', 't1', 11)                        # setor no WA_MRG
+    a.andi('s1', 't1', 0x7FF)                    # deslocamento no 1º setor
+    a.addiu('t3', 's1', PORTRAIT_RECORD + 0x7FF)
+    a.srl('a3', 't3', 11)                        # 2 ou 3 setores
+    a.lui('t4', sh_)
+    a.lw('t4', sl_, 't4')
+    a.sw('zero', 0x10, 'sp')                     # sem callback de fase
+    a.sw('zero', 0x14, 'sp')
+    a.sw('t4', 0x18, 'sp')                       # destino na RAM (comprimento < 0)
+    a.move('a0', 'zero')
+    a.jal(REQUEST_TRANSFER)
+    a.move('a1', 'zero')
+    a.beqz('v0', 'load_done')                    # leitor ocupado: fica sem retrato
+    a.nop()
+    a.jal(WAIT_TRANSFERS)
+    a.nop()
+    # imagem 24x48 palavras em (832 + 24*lado, 128)
+    a.la('a0', 'portrait_rect')
+    a.sll('t0', 's0', 3)
+    a.sll('t1', 's0', 4)
+    a.addu('t0', 't0', 't1')
+    a.addiu('t0', 't0', VRAM_X)
+    a.sh('t0', 0, 'a0')
+    a.li('t0', VRAM_Y)
+    a.sh('t0', 2, 'a0')
+    a.li('t0', 24)
+    a.sh('t0', 4, 'a0')
+    a.li('t0', 48)
+    a.sh('t0', 6, 'a0')
+    a.lui('t4', sh_)
+    a.lw('t4', sl_, 't4')
+    a.nop()
+    a.jal(LOAD_IMAGE)
+    a.addu('a1', 't4', 's1')
+    a.jal(DRAW_SYNC)
+    a.move('a0', 'zero')
+    # CLUT 64x1 em (832, 176 + lado)
+    a.la('a0', 'portrait_rect')
+    a.li('t0', VRAM_X)
+    a.sh('t0', 0, 'a0')
+    a.addiu('t0', 's0', CLUT_Y)
+    a.sh('t0', 2, 'a0')
+    a.li('t0', 64)
+    a.sh('t0', 4, 'a0')
+    a.li('t0', 1)
+    a.sh('t0', 6, 'a0')
+    a.lui('t4', sh_)
+    a.lw('t4', sl_, 't4')
+    a.nop()
+    a.addu('a1', 't4', 's1')
+    a.jal(LOAD_IMAGE)
+    a.addiu('a1', 'a1', 0x900)
+    a.jal(DRAW_SYNC)
+    a.move('a0', 'zero')
+    a.la('t0', 'portrait_flags')
+    a.addu('t0', 't0', 's0')
+    a.li('t1', 1)
+    a.sb('t1', 0, 't0')
+    a.label('load_done')
+    a.lw('ra', 0x2C, 'sp')
+    a.lw('s0', 0x28, 'sp')
+    a.lw('s1', 0x24, 'sp')
+    a.jr('ra')
+    a.addiu('sp', 'sp', 0x30)
+    a.label('portrait_rect')
+    a.word(0)
+    a.word(0)
+    a.label('portrait_flags')
+    a.word(0)
 
 
 def _pad4(data: bytes):
@@ -361,29 +541,43 @@ def _pad4(data: bytes):
     return struct.unpack(f'<{len(data) // 4}I', data)
 
 
-def block_size(rank: bool = True) -> int:
-    return len(code(0x80100000, 0x801CF18C if rank else None))
+def block_size(rank: bool = True, portraits: bool = True) -> int:
+    return len(code(0x80100000, 0x801CF18C if rank else None, 0 if portraits else None))
 
 
 def _jump(target: int) -> int:
     return 0x08000000 | ((target >> 2) & 0x03FFFFFF)
 
 
-def apply(exe: bytes, hook: int, rank_entry: int | None) -> tuple[bytes, dict]:
+def apply(exe: bytes, hook: int, rank_entry: int | None,
+          player_portrait: int | None = None) -> tuple[bytes, dict]:
     at = exe_pos(ENTRY, exe, 8)
     words = struct.unpack_from('<II', exe, at)
     if words != ENTRY_WORDS:
         raise ModError('HUD de duelo: a função do painel de LP não confere com o Drop x15.')
-    block = code(hook, rank_entry)
+    init_at = exe_pos(INIT_CALL, exe, 4)
+    if player_portrait is not None:
+        if not 0 <= player_portrait < PORTRAIT_COUNT:
+            raise ModError('HUD de duelo: o retrato do jogador vai de 0 a 39.')
+        if struct.unpack_from('<I', exe, init_at)[0] != INIT_CALL_WORD:
+            raise ModError('HUD de duelo: a inicialização do duelo não confere com o Drop x15.')
+    block = code(hook, rank_entry, player_portrait)
     pos = exe_pos(hook, exe, len(block))
     if any(exe[pos:pos + len(block)]):
         raise ModError('HUD de duelo: a área reservada no SLUS não está livre.')
     out = bytearray(exe)
     out[pos:pos + len(block)] = block
     struct.pack_into('<II', out, at, _jump(hook), 0)
+    if player_portrait is not None:
+        loader = loader_address(hook, rank_entry, player_portrait)
+        struct.pack_into('<I', out, init_at, 0x0C000000 | (loader >> 2) & 0x03FFFFFF)
     return bytes(out), {
         'status': 'aplicado', 'rotina': f'0x{hook:08X}', 'bytes': len(block),
-        'rank_ao_vivo': rank_entry is not None, 'retratos': 'etapa_2',
+        'rank_ao_vivo': rank_entry is not None,
+        'retratos': ({'status': 'aplicado', 'jogador': player_portrait,
+                      'fonte': 'retratos do Free Duel (WA_MRG 0xF55000)',
+                      'vram': f'({VRAM_X},{VRAM_Y})'} if player_portrait is not None
+                     else {'status': 'desativado'}),
         'validado_epsxe': False,
     }
 
@@ -399,9 +593,10 @@ def installed(exe: bytes) -> int | None:
 
 
 def runtime_view(exe: bytes) -> bytes:
-    """SLUS com a entrada original do painel (para conferências byte a byte)."""
+    """SLUS com a entrada original do painel e a chamada original na inicialização."""
     if installed(exe) is None:
         return exe
     out = bytearray(exe)
     struct.pack_into('<II', out, exe_pos(ENTRY, exe, 8), *ENTRY_WORDS)
+    struct.pack_into('<I', out, exe_pos(INIT_CALL, exe, 4), INIT_CALL_WORD)
     return bytes(out)

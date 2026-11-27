@@ -1076,14 +1076,28 @@ class ModEditor(ttk.Frame):
         ttk.Separator(lp_pane, orient='horizontal').pack(fill='x', pady=13)
         ttk.Label(lp_pane, text='HUD de duelo — PlayStation 1',
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(4, 7))
-        ttk.Label(lp_pane, text='Novo: losango do duelista, "LP:" com o valor, barra de LP (cheia no LP '
-                  'inicial do duelo) e contador do deck; rival em vermelho em cima, você em azul embaixo. '
-                  'O rank ao vivo (ex.: C-POW) passa para a esquerda do bloco azul. Etapa 1: o losango '
-                  'ainda sem o retrato do duelista.',
+        ttk.Label(lp_pane, text='Novo: retrato do duelista em losango, "LP:" com o valor, barra de LP '
+                  '(cheia no LP inicial do duelo) e contador do deck; rival em vermelho em cima, você em '
+                  'azul embaixo. O rank ao vivo (ex.: C-POW) passa para a esquerda do bloco azul. Os '
+                  'retratos são os do Free Duel, lidos do disco ao iniciar cada duelo.',
                   wraplength=630, justify='left').pack(anchor='w', pady=(0, 9))
         self.ps1_hud_new = tk.BooleanVar(value=False)
         ttk.Checkbutton(lp_pane, text='Usar o HUD de duelo novo', variable=self.ps1_hud_new,
                         command=self.save_ps1_hud).pack(anchor='w')
+        self.ps1_hud_portraits = tk.BooleanVar(value=True)
+        ttk.Checkbutton(lp_pane, text='Mostrar os retratos dos duelistas no losango',
+                        variable=self.ps1_hud_portraits, command=self.save_ps1_hud).pack(anchor='w', pady=(4, 0))
+        portrait_row = ttk.Frame(lp_pane)
+        portrait_row.pack(anchor='w', pady=(6, 0))
+        ttk.Label(portrait_row, text='Retrato do jogador:').pack(side='left', padx=(0, 6))
+        self.ps1_player_portraits = ['00 — casa "Deck Build" do Free Duel (padrão)'] + [
+            f'{i:02d} — {DUELIST_NAMES_REFERENCE[i]}' for i in range(1, 40)]
+        self.ps1_player_portrait = tk.StringVar(value=self.ps1_player_portraits[0])
+        portrait_box = ttk.Combobox(portrait_row, textvariable=self.ps1_player_portrait, state='readonly',
+                                    values=self.ps1_player_portraits, width=44)
+        portrait_box.pack(side='left')
+        portrait_box.bind('<<ComboboxSelected>>', lambda _e: self.save_ps1_hud())
+        portrait_box.bind('<MouseWheel>', lambda _e: 'break')
         ttk.Button(lp_pane, text='Ver prévia do HUD', command=self.preview_ps1_hud).pack(anchor='w', pady=9)
         ttk.Label(self, textvariable=self.status, foreground=ACCENT, wraplength=610).pack(anchor='w', pady=(5, 0))
         self._update_available()
@@ -1113,6 +1127,8 @@ class ModEditor(ttk.Frame):
             self.rules = normalize_rules(self.project.metadata.get(CONFIG_KEY, {}), self.cards)
             self.mod_lp.set(str(starting_life(self.project, self._duel_id())['jogador']))
             self.ps1_hud_new.set(self.rules.get('hud_ps1', 'original') == 'novo')
+            self.ps1_hud_portraits.set(self.rules.get('retratos_hud_ps1', True))
+            self.ps1_player_portrait.set(self.ps1_player_portraits[self.rules.get('retrato_jogador_ps1', 0)])
             current_ai = self.rules.get('ia_ps1', 'normal')
             self.ps1_ai_choice.set(next((label for label, code in self.ps1_ai_modes.items()
                                          if code == current_ai), 'Normal — IA original'))
@@ -1867,6 +1883,15 @@ class ModEditor(ttk.Frame):
                 rules['hud_ps1'] = value
             else:
                 rules.pop('hud_ps1', None)
+            if self.ps1_hud_portraits.get():
+                rules.pop('retratos_hud_ps1', None)
+            else:
+                rules['retratos_hud_ps1'] = False
+            portrait = self.ps1_player_portraits.index(self.ps1_player_portrait.get())
+            if portrait:
+                rules['retrato_jogador_ps1'] = portrait
+            else:
+                rules.pop('retrato_jogador_ps1', None)
             self._commit(rules, 'HUD de duelo PS1: ' + ('novo. Recrie o BIN/CUE para ativar.' if value == 'novo'
                                                         else 'original. Recrie o BIN/CUE para restaurar.'))
         except (ModError, ValueError, OSError) as exc:
@@ -1888,8 +1913,8 @@ class ModEditor(ttk.Frame):
         label = ttk.Label(window, image=photo)
         label.image = photo
         label.pack(padx=10, pady=10)
-        ttk.Label(window, foreground=MUTED, text='Rival em cima (vermelho), você embaixo (azul). '
-                  'O losango recebe o retrato do duelista na próxima etapa.').pack(padx=10, pady=(0, 10))
+        ttk.Label(window, foreground=MUTED, text='Rival em cima (vermelho), você embaixo (azul). No jogo, '
+                  'o losango mostra o retrato do duelista lido do disco.').pack(padx=10, pady=(0, 10))
 
     def start_match(self):
         if not self.project or self.studio._extract_running:

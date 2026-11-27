@@ -416,6 +416,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     fixed_drop_hook = None
     duel_hud_wanted = bool(native_profile and
                            (project.metadata.get(_MOD_CONFIG_KEY) or {}).get('hud_ps1') == 'novo')
+    duel_hud_rules = (project.metadata.get(_MOD_CONFIG_KEY) or {}) if duel_hud_wanted else {}
+    duel_hud_portrait = (int(duel_hud_rules.get('retrato_jogador_ps1', 0))
+                         if duel_hud_rules.get('retratos_hud_ps1', True) else None)
     duel_hud_hook = None
     duel_hud_report = ({'status': 'original'} if native_profile else {'status': 'perfil_incompativel'})
     fixed_drop_report = ({'status': 'sem_drops_fixos'} if native_profile else {'status': 'perfil_incompativel'})
@@ -469,7 +472,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         hand_bonus_hook = reserve_code(hand_bonus_block_size())
     if duel_hud_wanted:
         from .ps1_duel_hud import block_size as duel_hud_block_size
-        duel_hud_hook = reserve_code(duel_hud_block_size(True))
+        duel_hud_hook = reserve_code(duel_hud_block_size(True, duel_hud_portrait is not None))
     if fixed_drop_map:
         # Drop fixo por duelista: desvio na entrada de Duel_SelectCardDrop (após o runtime).
         fixed_drop_hook = reserve_code(fixed_drop_block_size())
@@ -668,7 +671,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         from .ps1_runtime_blob import ENTRY_POINTS as _RUNTIME_ENTRIES
         patched_exe, duel_hud_report = apply_duel_hud(
             patched_exe, duel_hud_hook,
-            _RUNTIME_ENTRIES['DrawLiveRank'] if rank_hud_report.get('status') == 'aplicado' else None)
+            _RUNTIME_ENTRIES['DrawLiveRank'] if rank_hud_report.get('status') == 'aplicado' else None,
+            duel_hud_portrait)
     from .ps1_ai import mode_for, patch_hard_ai, verify_hard_ai
     ai_mode=mode_for(project)
     if native_profile:
