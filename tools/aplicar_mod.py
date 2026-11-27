@@ -71,7 +71,9 @@ def main(argv=None):
             print('Abra o projeto no Studio e clique em "Gerar jogo BIN/CUE".')
         else:
             plan = plan_mod(project, pack, starter=args.inicial)
-            mod_plan, _ = fit_native_space(project, plan, pack, rules_snapshot(project, plan, pack))
+            mod_plan = None
+            if not plan.blockers:
+                mod_plan, _ = fit_native_space(project, plan, pack, rules_snapshot(project, plan, pack))
             print(describe(plan, project, pack, mod_plan))
             print('\nNada foi gravado. Rode de novo com --aplicar para gravar no projeto.')
     except ModError as exc:

@@ -515,6 +515,7 @@ class ModPlan:
     removal: dict
     report: Report
     trimmed: list = field(default_factory=list)
+    blockers: list = field(default_factory=list)
     bytes_used: int = 0
     bytes_limit: int = 0
 
@@ -545,7 +546,16 @@ def plan_mod(project, pack, *, starter: str | int | None = None) -> ModPlan:
     drops = {op: build_drops(pack, opponents[op], opponents.get(following.get(op)), decks[op], catalog, blocked)
              for op in DUELISTS}
 
-    starters = {row['nome']: build_starter(pack, row, catalog, blocked) for row in pack['iniciais']}
+    starters, blockers = {}, []
+    for row in pack['iniciais']:
+        try:
+            starters[row['nome']] = build_starter(pack, row, catalog, blocked)
+        except ModError as exc:
+            blockers.append(str(exc))
+            report.warnings.append(f'BLOQUEIO: {exc}')
+    if not starters:
+        report.warnings.append('BLOQUEIO: nenhum deck inicial ficou válido.')
+        starters = {row['nome']: Counter() for row in pack['iniciais'][:1]}
     names = list(starters)
     if starter is None:
         chosen = names[0]
@@ -559,7 +569,7 @@ def plan_mod(project, pack, *, starter: str | int | None = None) -> ModPlan:
         if not matches:
             raise ModError(f'Deck inicial "{starter}" não existe. Opções: {", ".join(names)}')
         chosen = matches[0]
-    pools, exact = starter_pools(starters[chosen])
+    pools, exact = starter_pools(starters[chosen]) if starters[chosen] else ([], True)
 
     requirements, phrases = build_quests(pack, catalog)
     for problem in check_quest_sources(requirements, drops, catalog):
@@ -576,8 +586,10 @@ def plan_mod(project, pack, *, starter: str | int | None = None) -> ModPlan:
         removal[cid] = ({'atk_min': int(rule['atk_min'])} if 'atk_min' in rule
                         else {'tipo': _type_id(rule['tipo'])})
 
-    return ModPlan(effects, priority, fusions, fusion_names, decks, drops, starters, chosen, pools, exact,
+    plan = ModPlan(effects, priority, fusions, fusion_names, decks, drops, starters, chosen, pools, exact,
                    requirements, phrases, removal, report)
+    plan.blockers = blockers + [w for w in report.warnings if 'antecessor' in w]
+    return plan
 
 
 def rules_snapshot(project, plan: ModPlan, pack) -> dict:
@@ -641,6 +653,8 @@ def apply_mod(project, pack, *, starter=None, keep_other_effects=False):
     from .ps1_campaign_quests import save_quest_settings
 
     plan = plan_mod(project, pack, starter=starter)
+    if plan.blockers:
+        raise ModError('Corrija antes de aplicar:\n  - ' + '\n  - '.join(plan.blockers))
     rules = rules_snapshot(project, plan, pack)
     mod_plan, native = fit_native_space(project, plan, pack, rules)
 
@@ -716,6 +730,9 @@ def describe(plan: ModPlan, catalog_project, pack, mod_plan=None) -> str:
         lines.append('Aviso: o deck inicial passou de 7 pools e foi agrupado (sorteio aproximado).')
     if mod_plan is not None and mod_plan.pending:
         lines += ['', 'Pendências do exportador PS1:'] + [f'  - {row}' for row in mod_plan.pending]
+    if plan.report.missing:
+        lines += ['', f'Nomes não encontrados no projeto ({len(plan.report.missing)}):']
+        lines += [f'  - {name}' for name in sorted(plan.report.missing)]
     if plan.report.warnings:
         lines += ['', f'Avisos ({len(plan.report.warnings)}):'] + [f'  - {row}' for row in plan.report.warnings]
     if plan.report.notes:
