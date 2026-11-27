@@ -25,6 +25,12 @@ DEFAULT_PACK = ROOT / 'mods' / 'eclipse_do_farao' / 'mod.json'
 
 
 def main(argv=None):
+    # O console do Windows (cp1252) não imprime setas e alguns acentos: troca em vez de quebrar.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(description='Aplica um pacote de MOD do Studio FM num projeto.')
     parser.add_argument('projeto', type=Path, help='Pasta do projeto (onde fica projeto.json)')
     parser.add_argument('--mod', type=Path, default=DEFAULT_PACK, help='Arquivo mod.json do pacote')
