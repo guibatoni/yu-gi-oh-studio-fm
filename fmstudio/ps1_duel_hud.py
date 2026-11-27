@@ -36,7 +36,8 @@ import struct
 
 from .core import ModError
 from .deep_extract import exe_pos
-from .duel_hud_layout import DIGIT_ADVANCE, FONT, PREFIX, PREFIX_WIDTH, SIDES, WHITE, glyph_rects
+from .duel_hud_layout import (DIGIT_ADVANCE, FONT, OUTLINE_OFFSETS, PREFIX, PREFIX_WIDTH, SIDES, WHITE,
+                              diamond_quads, glyph_rects)
 from .mips_asm import Asm, hi_lo
 
 ENTRY = 0x80016E70                       # Duel_DrawLifePointsAndDeckCounts
@@ -84,9 +85,7 @@ def _quad_table():
     rows = []
     for index in (1, 0):
         side = SIDES[index]
-        cx, cy, h = side.diamond
-        inner = ((cx, cy - h + 1), (cx + h - 1, cy), (cx, cy + h - 1), (cx - h + 1, cy))
-        border = ((cx, cy - h - 1), (cx + h + 1, cy), (cx, cy + h + 1), (cx - h - 1, cy))
+        border, inner = diamond_quads(side)
         rows.append((_bgr(side.dim, 0x28), inner))        # fica por cima da borda
         rows.append((_bgr(WHITE, 0x28), border))
         for quad in side.bands:
@@ -215,23 +214,26 @@ def _build(base, rank_entry, player_portrait):
         th, tl = hi_lo(state)
         a.lui('s7', th)
         a.addiu('s7', 's7', tl)
-        # texto "LP:n" e contador do deck (enfileirados antes de tudo: ficam por cima)
-        a.lhu('a0', 0x12, 's7')
-        a.li('a1', side.lp_center[0])
-        a.li('a2', side.lp_center[1])
-        a.jal('text')
-        a.li('a3', 1)
-        a.lb('t0', 0x18, 's7')
-        a.li('a0', DECK_SIZE)
-        a.subu('a0', 'a0', 't0')
-        a.bgez('a0', f'deck_ok_{index}')
-        a.nop()
-        a.move('a0', 'zero')
-        a.label(f'deck_ok_{index}')
-        a.li('a1', side.deck_center[0])
-        a.li('a2', side.deck_center[1])
-        a.jal('text')
-        a.li('a3', 0)
+        # texto "LP:n" e contador do deck: primeiro o branco, depois o contorno
+        # preto (enfileirado depois = desenhado antes, por baixo do branco)
+        for mode in (0, 1):
+            a.li('v0', mode)
+            a.lhu('a0', 0x12, 's7')
+            a.li('a1', side.lp_center[0])
+            a.li('a2', side.lp_center[1])
+            a.jal('text')
+            a.li('a3', 1)
+            a.lb('t0', 0x18, 's7')
+            a.li('a0', DECK_SIZE)
+            a.subu('a0', 'a0', 't0')
+            a.bgez('a0', f'deck_ok_{index}_{mode}')
+            a.nop()
+            a.move('a0', 'zero')
+            a.label(f'deck_ok_{index}_{mode}')
+            a.li('a1', side.deck_center[0])
+            a.li('a2', side.deck_center[1])
+            a.jal('text')
+            a.li('a3', 0)
         # barra: branco = LP mostrado / LP inicial (max_life_points em +0x16)
         x0, y0, x1, y1 = side.bar
         width, height = x1 - x0 + 1, y1 - y0 + 1
@@ -269,6 +271,13 @@ def _build(base, rank_entry, player_portrait):
         a.lui('t6', dim >> 16)
         a.ori('t6', 't6', dim & 0xFFFF)
         _tile(a, 't5', 't4', 't6')
+        # contorno preto da barra (1 px em volta, por baixo)
+        a.lui('t4', height + 2)
+        a.ori('t4', 't4', width + 2)
+        a.lui('t5', y0 - 1)
+        a.ori('t5', 't5', x0 - 1)
+        a.lui('t6', 0x6000)
+        _tile(a, 't5', 't4', 't6')
 
     if portraits:
         # retratos (enfileirados antes da tabela: ficam por cima do losango escuro)
@@ -299,12 +308,21 @@ def _build(base, rank_entry, player_portrait):
             _link(a, 9)
             a.label(f'no_portrait_{index}')
 
-    # faixas e losangos (tabela)
+    # faixas e losangos (tabela): 1 passada colorida e 4 pretas deslocadas 1 px
+    # (contorno; enfileiradas depois = desenhadas antes, por baixo)
+    a.la('a3', 'outline_offsets')
+    a.li('a2', 1 + len(OUTLINE_OFFSETS))
+    a.label('pass_loop')
+    a.lw('a1', 0, 'a3')
     a.la('t6', 'quads')
     a.li('t7', len(quads))
     a.label('quad_loop')
     a.lw('t0', 0, 't6')
+    a.li('t1', 1 + len(OUTLINE_OFFSETS))
+    a.beq('a2', 't1', 'quad_color')
     a.nop()
+    a.lui('t0', 0x2800)                           # preto
+    a.label('quad_color')
     a.sw('t0', 4, 's3')
     for slot, vertex in enumerate((0, 1, 3, 2)):          # ordem de faixa do POLY_F4
         a.lbu('t0', 4 + 2 * vertex, 't6')
@@ -313,11 +331,15 @@ def _build(base, rank_entry, player_portrait):
         a.sll('t1', 't1', 16)
         a.or_('t0', 't0', 't1')
         a.addu('t0', 't0', 's4')
+        a.addu('t0', 't0', 'a1')
         a.sw('t0', 8 + 4 * slot, 's3')
     _link(a, 5)
     a.addiu('t7', 't7', -1)
     a.bnez('t7', 'quad_loop')
     a.addiu('t6', 't6', 12)
+    a.addiu('a2', 'a2', -1)
+    a.bnez('a2', 'pass_loop')
+    a.addiu('a3', 'a3', 4)
 
     # devolve o ponteiro de pacotes antes de qualquer GsSort* do jogo
     a.lui('t0', ph)
@@ -415,7 +437,21 @@ def _build(base, rank_entry, player_portrait):
     a.srl('t4', 't4', 4)
     a.sll('t4', 't4', 16)
     a.or_('t4', 't4', 't2')                      # wh
+    a.bnez('v0', 'glyph_outline')                # v0 = 1: contorno preto
+    a.nop()
     _tile(a, 't7', 't4', 's6')
+    a.b('glyph_next')
+    a.nop()
+    a.label('glyph_outline')
+    a.lui('a3', 0x6000)
+    for dx, dy in OUTLINE_OFFSETS:
+        if dy:
+            a.lui('a0', dy & 0xFFFF)
+            a.addu('t2', 't7', 'a0')
+        else:
+            a.addiu('t2', 't7', dx)
+        _tile(a, 't2', 't4', 'a3')
+    a.label('glyph_next')
     a.addiu('t6', 't6', -1)
     a.bnez('t6', 'rect_loop')
     a.addiu('t5', 't5', 2)
@@ -430,6 +466,10 @@ def _build(base, rank_entry, player_portrait):
         packed = b''.join(bytes((x - X_BIAS, y)) for x, y in quad)
         a.word(struct.unpack_from('<I', packed, 0)[0])
         a.word(struct.unpack_from('<I', packed, 4)[0])
+    a.label('outline_offsets')
+    a.word(0)
+    for dx, dy in OUTLINE_OFFSETS:
+        a.word(((dy << 16) + dx) & 0xFFFFFFFF)
     a.label('glyph_header')
     for chunk in _pad4(header):
         a.word(chunk)

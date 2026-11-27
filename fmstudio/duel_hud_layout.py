@@ -18,6 +18,9 @@ SCREEN_W, SCREEN_H = 320, 240
 RED, RED_DIM = (255, 16, 16), (156, 60, 60)
 BLUE, BLUE_DIM = (0, 66, 229), (40, 80, 181)
 WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+# Contorno de 1 px: cópias pretas deslocadas para os 4 lados, desenhadas por baixo.
+OUTLINE_OFFSETS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 # Fonte 3x5 (só o que o HUD usa), para o texto caber com folga nas faixas de 8 px.
 # Cada glifo vira poucos retângulos (TILE).
@@ -118,6 +121,42 @@ BOX = (223, 5, 315, 61)
 GAP = 2                   # espaço entre o losango e as faixas
 
 
+def _row_extent(quads, y):
+    """(x mínimo, x máximo) coberto pelos quadriláteros na linha y (centro do pixel)."""
+    yc = y + 0.5
+    xs = []
+    for quad in quads:
+        for (x0, y0), (x1, y1) in zip(quad, quad[1:] + quad[:1]):
+            if y0 == y1:
+                if abs(yc - y0) <= 0.5:
+                    xs += [x0, x1]
+            elif min(y0, y1) <= yc <= max(y0, y1):
+                xs.append(x0 + (x1 - x0) * (yc - y0) / (y1 - y0))
+    return min(xs), max(xs)
+
+
+def _span(quads, rows):
+    """Faixa horizontal livre em todas as linhas ``rows`` (interseção)."""
+    left = max(_row_extent(quads, y)[0] for y in rows)
+    right = min(_row_extent(quads, y)[1] for y in rows)
+    return left, right
+
+
+def _finish(color, dim, diamond, top, bar, deck, fill_from_right):
+    """Centraliza texto e barra no meio de cada faixa (altura e largura)."""
+    def text_anchor(quads):
+        y0 = min(y for q in quads for _, y in q)
+        top_row = y0 + 2                         # 5 linhas de texto + contorno numa faixa de 8
+        left, right = _span(quads, range(top_row, top_row + GLYPH_H))
+        return (round((left + right) / 2), top_row)
+    y0 = min(y for q in bar for _, y in q)
+    rows = range(y0 + 2, y0 + 6)                 # barra de 4 linhas no meio da faixa de 8
+    left, right = _span(bar, rows)
+    bar_rect = (int(left) + 3, rows[0], int(right + 0.999) - 3, rows[-1])
+    return Side(color, dim, diamond, tuple(top + bar + deck), bar_rect, fill_from_right,
+                text_anchor(top), text_anchor(deck))
+
+
 def _side_rival():
     cx, cy, h = 236, 19, 13          # losango em y 6..32 (borda 5..33)
 
@@ -130,8 +169,7 @@ def _side_rival():
     bar = _band((edge_up(15) + GAP, 15), (cx + h + GAP, cy), (edge_down(22) + GAP, 22), (302, 15), (302, 22))
     deck = _band((edge_down(24) + GAP, 24), (edge_down(28) + GAP, 28), (edge_down(31) + GAP, 31),
                  (262, 24), (262, 31))
-    return Side(RED, RED_DIM, (cx, cy, h), tuple(top + bar + deck), (256, 17, 297, 20), False,
-                (271, 8), (252, 26))
+    return _finish(RED, RED_DIM, (cx, cy, h), top, bar, deck, False)
 
 
 def _side_player():
@@ -143,14 +181,13 @@ def _side_player():
     def edge_down(y):    # aresta inferior esquerda
         return cx - ((cy + h) - y)
     # desenha como o rival (ponta do retrato à esquerda) em coordenadas espelhadas
-    top = _band((-(edge_up(34) - GAP), 34), (-(edge_up(38) - GAP), 38), (-(edge_up(41) - GAP), 41),
-                (-240, 34), (-240, 41))
-    bar = _band((-(edge_up(43) - GAP), 43), (-(cx - h - GAP), cy), (-(edge_down(50) - GAP), 50),
-                (-237, 43), (-237, 50))
-    deck = _band((-(edge_down(52) - GAP), 52), (-(edge_down(56) - GAP), 56), (-(edge_down(59) - GAP), 59),
-                 (-276, 52), (-276, 59))
-    quads = _mirror(top + bar + deck)
-    return Side(BLUE, BLUE_DIM, (cx, cy, h), tuple(quads), (242, 45, 282, 48), True, (266, 36), (285, 54))
+    top = _mirror(_band((-(edge_up(34) - GAP), 34), (-(edge_up(38) - GAP), 38), (-(edge_up(41) - GAP), 41),
+                        (-240, 34), (-240, 41)))
+    bar = _mirror(_band((-(edge_up(43) - GAP), 43), (-(cx - h - GAP), cy), (-(edge_down(50) - GAP), 50),
+                        (-237, 43), (-237, 50)))
+    deck = _mirror(_band((-(edge_down(52) - GAP), 52), (-(edge_down(56) - GAP), 56),
+                         (-(edge_down(59) - GAP), 59), (-276, 52), (-276, 59)))
+    return _finish(BLUE, BLUE_DIM, (cx, cy, h), top, bar, deck, True)
 
 
 SIDES = {1: _side_rival(), 0: _side_player()}
@@ -170,26 +207,54 @@ def bar_fill(side: Side, lp: int, start: int) -> int:
 
 
 # --------------------------------------------------------------------------- prévia
+def diamond_quads(side: Side):
+    """(borda branca, miolo escuro) do losango."""
+    cx, cy, h = side.diamond
+    border = ((cx, cy - h - 1), (cx + h + 1, cy), (cx, cy + h + 1), (cx - h - 1, cy))
+    inner = ((cx, cy - h + 1), (cx + h - 1, cy), (cx, cy + h - 1), (cx - h + 1, cy))
+    return border, inner
+
+
 def render_preview(base=None, *, lp=(1000, 7000), start=(8000, 8000), deck=(35, 40), portraits=None):
-    """Desenha o HUD numa imagem 320x240 (Pillow). ``portraits``: {lado: Image} opcional."""
+    """Desenha o HUD numa imagem 320x240 (Pillow), na mesma ordem da rotina do PS1:
+    contornos das faixas/losangos, faixas/losangos, retratos, barra (contorno,
+    fundo, branco) e texto (contorno e branco). ``portraits``: {lado: Image}."""
     from PIL import Image, ImageDraw
 
     img = (base.copy() if base is not None else Image.new('RGB', (SCREEN_W, SCREEN_H), (40, 40, 40))).convert('RGB')
     draw = ImageDraw.Draw(img)
 
-    def text(value, center, color=WHITE):
+    def text(value, center, color=WHITE, dx=0, dy=0):
         cx, top = center
-        x = cx - text_width(value) // 2
+        x = cx - text_width(value) // 2 + dx
         for char in value:
             for gx, gy, gw, gh in glyph_rects(char):
-                draw.rectangle([x + gx, top + gy, x + gx + gw - 1, top + gy + gh - 1], fill=color)
+                draw.rectangle([x + gx, top + dy + gy, x + gx + gw - 1, top + dy + gy + gh - 1], fill=color)
             x += len(FONT[char][0]) + 1
 
+    shapes = []
     for index in (1, 0):
         side = SIDES[index]
-        for quad in side.bands:
-            draw.polygon(quad, fill=side.color)
+        border, inner = diamond_quads(side)
+        shapes += [(quad, side.color) for quad in side.bands] + [(border, WHITE), (inner, side.dim)]
+    for dx, dy in OUTLINE_OFFSETS:
+        for quad, _ in shapes:
+            draw.polygon([(x + dx, y + dy) for x, y in quad], fill=BLACK)
+    for quad, color in shapes:
+        draw.polygon(quad, fill=color)
+    for index in (1, 0):
+        picture = (portraits or {}).get(index)
+        if picture is not None:
+            cx, cy, h = SIDES[index].diamond
+            size = 2 * h
+            face = picture.convert('RGB').resize((size, size))
+            mask = Image.new('L', (size, size), 0)
+            ImageDraw.Draw(mask).polygon([(h, 1), (size - 2, h), (h, size - 2), (1, h)], fill=255)
+            img.paste(face, (cx - h, cy - h), mask)
+    for index in (1, 0):
+        side = SIDES[index]
         x0, y0, x1, y1 = side.bar
+        draw.rectangle([x0 - 1, y0 - 1, x1 + 1, y1 + 1], fill=BLACK)
         draw.rectangle([x0, y0, x1, y1], fill=side.dim)
         fill = bar_fill(side, lp[index], start[index])
         if fill:
@@ -197,17 +262,10 @@ def render_preview(base=None, *, lp=(1000, 7000), start=(8000, 8000), deck=(35, 
                 draw.rectangle([x1 - fill + 1, y0, x1, y1], fill=WHITE)
             else:
                 draw.rectangle([x0, y0, x0 + fill - 1, y1], fill=WHITE)
-        text(lp_text(lp[index]), side.lp_center)
-        text(str(deck[index]), side.deck_center)
-        cx, cy, h = side.diamond
-        draw.polygon([(cx, cy - h - 1), (cx + h + 1, cy), (cx, cy + h + 1), (cx - h - 1, cy)], fill=WHITE)
-        picture = (portraits or {}).get(index)
-        if picture is None:
-            draw.polygon([(cx, cy - h + 1), (cx + h - 1, cy), (cx, cy + h - 1), (cx - h + 1, cy)], fill=side.dim)
-        else:
-            size = 2 * h
-            face = picture.convert('RGB').resize((size, size))
-            mask = Image.new('L', (size, size), 0)
-            ImageDraw.Draw(mask).polygon([(h, 1), (size - 2, h), (h, size - 2), (1, h)], fill=255)
-            img.paste(face, (cx - h, cy - h), mask)
+        labels = ((lp_text(lp[index]), side.lp_center), (str(deck[index]), side.deck_center))
+        for dx, dy in OUTLINE_OFFSETS:
+            for value, center in labels:
+                text(value, center, BLACK, dx, dy)
+        for value, center in labels:
+            text(value, center)
     return img
