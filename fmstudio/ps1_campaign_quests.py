@@ -129,7 +129,9 @@ def project_quest_catalog(project, wa, *, exe=None, level_address=LEVEL_ADDR, su
     from .mod_data import CONFIG_KEY
     from .ps1_fixed_drop import fixed_drops
     fixed = fixed_drops(getattr(project, 'metadata', {}).get(CONFIG_KEY) or {}, CARD_COUNT)
-    return QuestCatalog.from_rows(cards.values(), drops, decode_starters(wa), fixed)
+    from .ps1_starter_choice import settings as starter_choice_settings
+    choice = starter_choice_settings(project)['ativado'] if hasattr(project, 'metadata') else False
+    return QuestCatalog.from_rows(cards.values(), drops, None if choice else decode_starters(wa), fixed)
 
 
 def preview_project_quests(project, source: Path, seed: str, requirements: dict):

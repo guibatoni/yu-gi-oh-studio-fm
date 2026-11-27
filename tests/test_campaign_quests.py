@@ -170,6 +170,17 @@ class CampaignQuestsTests(unittest.TestCase):
         table = compile_table(config, catalog, GLYPHS)
         self.assertTrue(table)
 
+    def test_fixed_starter_decks_skip_the_weighted_proof(self):
+        base = sample_quests()
+        rows = [{'id': cid, **{k: v for k, v in row.items()}} for cid, row in base.cards.items()]
+        drops = [{'duelista_id': op, 'grupo': rank, 'carta_id': cid, 'peso': weight}
+                 for (op, rank), pool in base.drops.items() for cid, weight in pool.items()]
+        with self.assertRaisesRegex(ModError, '40 compras'):
+            QuestCatalog.from_rows(rows, drops, [])          # pools apagados pela escolha de deck
+        catalog = QuestCatalog.from_rows(rows, drops, None)  # escolha de deck ligada
+        self.assertEqual(catalog.starters, {})
+        self.assertEqual(catalog.fingerprint(), QuestCatalog.from_rows(rows, drops, None).fingerprint())
+
     def test_migrating_previous_requirements_leaves_simon_out(self):
         previous = {'formato': LEGACY_FORMAT, 'quests': [
             {'oponente_id': 1, 'criterios': [{'tipo': 'carta', 'alvo': 9, 'quantidade': 20}]},

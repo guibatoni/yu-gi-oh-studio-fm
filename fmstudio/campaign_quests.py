@@ -115,6 +115,13 @@ class QuestCatalog:
                 raise ModError(f'Pool {opponent}/{rank} excede os {POOL_TOTAL} pesos do PS1.')
 
         initial = {}
+        if starters is None:
+            # Escolha de deck no New Game: os decks são fixos e a rotina ocupa a área
+            # dos pools; as quests não usam o deck inicial como fonte.
+            starters = []
+            fixed_starters = True
+        else:
+            fixed_starters = False
         for row in starters:
             group = _integer(row.get('grupo'), 'Pool inicial', 0, 6)
             draws = _integer(row.get('compras'), 'Compras iniciais', 0, DECK_SIZE)
@@ -122,7 +129,7 @@ class QuestCatalog:
             if saved != draws:
                 raise ModError(f'Quantidade de compras divergente no pool inicial {group}.')
             _add_weight(pool, row)
-        if (sum(draws for draws, _ in initial.values()) != DECK_SIZE
+        if not fixed_starters and (sum(draws for draws, _ in initial.values()) != DECK_SIZE
                 or any(draws and sum(pool.values()) != POOL_TOTAL for draws, pool in initial.values())):
             raise ModError('O deck inicial precisa comprovar as 40 compras ponderadas.')
         fixed = {int(op): int(card) for op, card in (fixed or {}).items()
