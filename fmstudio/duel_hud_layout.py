@@ -1,0 +1,207 @@
+"""Layout do HUD de duelo novo (retrato em losango, LP, barra e deck), em pixels do PS1.
+
+Fonte única para a rotina MIPS e para a prévia do Studio: tudo é desenhado com
+primitivas simples da GPU — quadriláteros chapados (POLY_F4), retângulos
+(TILE) para a barra e para o texto, e um quadrilátero texturizado (POLY_FT4)
+para o retrato. Tela do duelo: 320x240.
+
+Lado 1 = rival (vermelho, em cima à esquerda); lado 0 = jogador (azul, embaixo
+à direita), como no desenho do usuário. A barra de LP enche a partir do lado do
+retrato e vai de 0 ao LP inicial do duelo (cura acima do inicial: barra cheia).
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+SCREEN_W, SCREEN_H = 320, 240
+
+RED, RED_DIM = (255, 16, 16), (156, 60, 60)
+BLUE, BLUE_DIM = (0, 66, 229), (40, 80, 181)
+WHITE = (255, 255, 255)
+
+# Fonte 5x7 (só o que o HUD usa). Cada glifo vira poucos retângulos (TILE).
+FONT = {
+    '0': ("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
+    '1': ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
+    '2': ("01110", "10001", "00001", "00010", "00100", "01000", "11111"),
+    '3': ("11110", "00001", "00001", "01110", "00001", "00001", "11110"),
+    '4': ("00010", "00110", "01010", "10010", "11111", "00010", "00010"),
+    '5': ("11111", "10000", "11110", "00001", "00001", "10001", "01110"),
+    '6': ("00110", "01000", "10000", "11110", "10001", "10001", "01110"),
+    '7': ("11111", "00001", "00010", "00100", "01000", "01000", "01000"),
+    '8': ("01110", "10001", "10001", "01110", "10001", "10001", "01110"),
+    '9': ("01110", "10001", "10001", "01111", "00001", "00010", "01100"),
+    'L': ("10000", "10000", "10000", "10000", "10000", "10000", "11111"),
+    'P': ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
+    ':': ("0", "1", "0", "0", "0", "1", "0"),
+}
+GLYPH_H = 7
+ADVANCE = 6          # 5 px + 1 de espaço (dígitos e letras)
+
+
+def glyph_rects(char: str) -> tuple[tuple[int, int, int, int], ...]:
+    """Cobre o glifo com retângulos (x, y, w, h): junta trechos iguais de linhas seguidas."""
+    rows = FONT[char]
+    runs = []
+    for y, row in enumerate(rows):
+        x = 0
+        while x < len(row):
+            if row[x] == '1':
+                start = x
+                while x < len(row) and row[x] == '1':
+                    x += 1
+                runs.append([start, y, x - start, 1])
+            else:
+                x += 1
+    merged = []
+    for run in runs:
+        for rect in merged:
+            if rect[0] == run[0] and rect[2] == run[2] and rect[1] + rect[3] == run[1]:
+                rect[3] += 1
+                break
+        else:
+            merged.append(run)
+    return tuple(tuple(r) for r in merged)
+
+
+def text_width(text: str) -> int:
+    return sum(len(FONT[c][0]) + 1 for c in text) - 1
+
+
+@dataclass(frozen=True)
+class Side:
+    """Um bloco do HUD. ``bands``: quadriláteros (4 pontos, sentido horário)."""
+    color: tuple
+    dim: tuple
+    diamond: tuple            # (cx, cy, meia-diagonal)
+    bands: tuple              # ((x, y) * 4, ...)
+    bar: tuple                # (x0, y0, x1, y1) inclusivo
+    fill_from_right: bool     # barra enche a partir do retrato
+    lp_center: tuple          # (cx, topo) do texto "LP: n"
+    deck_center: tuple        # (cx, topo) do contador do deck
+
+
+def _band(left_top, left_mid, left_bottom, right_top, right_bottom, round_right=True):
+    """Faixa com a ponta do retrato em ``left_*`` e ponta arredondada (chanfro) do outro lado."""
+    quads = []
+    (lx0, y0), (lxm, ym), (lx1, y1) = left_top, left_mid, left_bottom
+    rx, ry0, ry1 = right_top[0], right_top[1], right_bottom[1]
+    quads.append(((lx0, y0), (rx, y0), (rx, ym), (lxm, ym)))
+    quads.append(((lxm, ym), (rx, ym), (rx, y1), (lx1, y1)))
+    # ponta arredondada: meia-elipse em leque de quadriláteros convexos
+    import math
+    r = (y1 - y0 + 1) / 2
+    cy = y0 + r - 0.5
+    arc = [(rx + round(0.8 * r * math.sin(a)), round(cy - r * math.cos(a) + (0.5 if a > math.pi / 2 else 0)))
+           for a in (i * math.pi / 6 for i in range(7))]
+    arc[0], arc[-1] = (rx, y0), (rx, y1)
+    quads.append((arc[0], arc[1], arc[2], arc[3]))
+    quads.append((arc[0], arc[3], arc[4], arc[5]))
+    quads.append((arc[0], arc[5], arc[6], arc[6]))
+    return quads
+
+
+def _mirror(quads):
+    """Espelha horizontalmente (x -> -x) mantendo o sentido horário."""
+    return [tuple((-x, y) for x, y in reversed(q)) for q in quads]
+
+
+def _shift(quads, dx):
+    return [tuple((x + dx, y) for x, y in q) for q in quads]
+
+
+def _side_rival():
+    cx, cy, h = 200, 17, 16
+
+    def edge_up(y):      # aresta superior direita do losango
+        return cx + (y - (cy - h))
+
+    def edge_down(y):    # aresta inferior direita
+        return cx + ((cy + h) - y)
+    gap = 3
+    top = _band((edge_up(2) + gap, 2), (edge_up(6) + gap, 6), (edge_up(10) + gap, 10), (262, 2), (262, 10))
+    bar = _band((edge_up(12) + gap, 12), (cx + h + gap, cy), (edge_down(21) + gap, 21), (275, 12), (275, 21))
+    deck = _band((edge_down(23) + gap, 23), (edge_down(27) + gap, 27), (edge_down(30) + gap, 30),
+                 (232, 23), (232, 30))           # termina em 30: a faixa azul começa em 31
+    return Side(RED, RED_DIM, (cx, cy, h), tuple(top + bar + deck), (222, 14, 268, 19), False,
+                (238, 3), (222, 24))
+
+
+def _side_player():
+    cx, cy, h = 301, 45, 15
+
+    def edge_up(y):      # aresta superior esquerda
+        return cx - (y - (cy - h))
+
+    def edge_down(y):    # aresta inferior esquerda
+        return cx - ((cy + h) - y)
+    gap = 3
+    # desenha como o rival (ponta do retrato à esquerda) em coordenadas espelhadas
+    top = _band((-(edge_up(31) - gap), 31), (-(edge_up(35) - gap), 35), (-(edge_up(39) - gap), 39),
+                (-232, 31), (-232, 39))
+    bar = _band((-(edge_up(41) - gap), 41), (-(cx - h - gap), cy), (-(edge_down(50) - gap), 50),
+                (-222, 41), (-222, 50))
+    deck = _band((-(edge_down(52) - gap), 52), (-(edge_down(56) - gap), 56), (-(edge_down(60) - gap), 60),
+                 (-262, 52), (-262, 60))
+    quads = _mirror(top + bar + deck)
+    return Side(BLUE, BLUE_DIM, (cx, cy, h), tuple(quads), (228, 43, 279, 48), True, (262, 32), (276, 53))
+
+
+SIDES = {1: _side_rival(), 0: _side_player()}
+
+
+def lp_text(value: int) -> str:
+    return f'LP:{max(0, int(value))}'
+
+
+def bar_fill(side: Side, lp: int, start: int) -> int:
+    """Pixels brancos da barra (0..largura)."""
+    x0, _, x1, _ = side.bar
+    width = x1 - x0 + 1
+    if start <= 0:
+        return width
+    return max(0, min(width, (max(0, lp) * width) // start))
+
+
+# --------------------------------------------------------------------------- prévia
+def render_preview(base=None, *, lp=(1000, 7000), start=(8000, 8000), deck=(35, 40), portraits=None):
+    """Desenha o HUD numa imagem 320x240 (Pillow). ``portraits``: {lado: Image} opcional."""
+    from PIL import Image, ImageDraw
+
+    img = (base.copy() if base is not None else Image.new('RGB', (SCREEN_W, SCREEN_H), (40, 40, 40))).convert('RGB')
+    draw = ImageDraw.Draw(img)
+
+    def text(value, center, color=WHITE):
+        cx, top = center
+        x = cx - text_width(value) // 2
+        for char in value:
+            for gx, gy, gw, gh in glyph_rects(char):
+                draw.rectangle([x + gx, top + gy, x + gx + gw - 1, top + gy + gh - 1], fill=color)
+            x += len(FONT[char][0]) + 1
+
+    for index in (1, 0):
+        side = SIDES[index]
+        for quad in side.bands:
+            draw.polygon(quad, fill=side.color)
+        x0, y0, x1, y1 = side.bar
+        draw.rectangle([x0, y0, x1, y1], fill=side.dim)
+        fill = bar_fill(side, lp[index], start[index])
+        if fill:
+            if side.fill_from_right:
+                draw.rectangle([x1 - fill + 1, y0, x1, y1], fill=WHITE)
+            else:
+                draw.rectangle([x0, y0, x0 + fill - 1, y1], fill=WHITE)
+        text(lp_text(lp[index]), side.lp_center)
+        text(str(deck[index]), side.deck_center)
+        cx, cy, h = side.diamond
+        draw.polygon([(cx, cy - h - 1), (cx + h + 1, cy), (cx, cy + h + 1), (cx - h - 1, cy)], fill=WHITE)
+        picture = (portraits or {}).get(index)
+        if picture is None:
+            draw.polygon([(cx, cy - h + 1), (cx + h - 1, cy), (cx, cy + h - 1), (cx - h + 1, cy)], fill=side.dim)
+        else:
+            size = 2 * h
+            face = picture.convert('RGB').resize((size, size))
+            mask = Image.new('L', (size, size), 0)
+            ImageDraw.Draw(mask).polygon([(h, 1), (size - 2, h), (h, size - 2), (1, h)], fill=255)
+            img.paste(face, (cx - h, cy - h), mask)
+    return img

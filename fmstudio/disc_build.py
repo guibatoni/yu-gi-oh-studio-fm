@@ -414,10 +414,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     fixed_drop_map = (fixed_drops(project.metadata.get(_MOD_CONFIG_KEY) or {}, native_plan.capacity)
                       if native_profile else {})
     fixed_drop_hook = None
+    duel_hud_wanted = bool(native_profile and
+                           (project.metadata.get(_MOD_CONFIG_KEY) or {}).get('hud_ps1') == 'novo')
+    duel_hud_hook = None
+    duel_hud_report = ({'status': 'original'} if native_profile else {'status': 'perfil_incompativel'})
     fixed_drop_report = ({'status': 'sem_drops_fixos'} if native_profile else {'status': 'perfil_incompativel'})
     if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled
                            or splash_requested or lp_hud_wide or lifelink_wanted or starter_choice_on
-                           or subtype_wanted or hand_bonus_wanted or fixed_drop_map):
+                           or subtype_wanted or hand_bonus_wanted or fixed_drop_map or duel_hud_wanted):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     code_space = []
@@ -463,6 +467,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         # Bônus por cartas na mão: desvio da chamada de count_bonus (após o runtime).
         from .ps1_hand_bonus import block_size as hand_bonus_block_size
         hand_bonus_hook = reserve_code(hand_bonus_block_size())
+    if duel_hud_wanted:
+        from .ps1_duel_hud import block_size as duel_hud_block_size
+        duel_hud_hook = reserve_code(duel_hud_block_size(True))
     if fixed_drop_map:
         # Drop fixo por duelista: desvio na entrada de Duel_SelectCardDrop (após o runtime).
         fixed_drop_hook = reserve_code(fixed_drop_block_size())
@@ -655,6 +662,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if native_profile:
         patched_exe, rank_hud_report = patch_rank_hud(
             original_exe, patched_exe, occupied_until=native_plan.data_end)
+    if duel_hud_hook is not None:
+        # HUD novo: substitui a função do painel; o rank ao vivo é chamado por ele.
+        from .ps1_duel_hud import apply as apply_duel_hud
+        from .ps1_runtime_blob import ENTRY_POINTS as _RUNTIME_ENTRIES
+        patched_exe, duel_hud_report = apply_duel_hud(
+            patched_exe, duel_hud_hook,
+            _RUNTIME_ENTRIES['DrawLiveRank'] if rank_hud_report.get('status') == 'aplicado' else None)
     from .ps1_ai import mode_for, patch_hard_ai, verify_hard_ai
     ai_mode=mode_for(project)
     if native_profile:
@@ -862,6 +876,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                                'A imagem anterior foi preservada.')
             if rank_hud_report['status'] == 'aplicado' and inspect_rank_hud(reread_exe)['status'] != 'aplicado':
                 raise ModError('Rank no HUD: a extensão diverge no BIN final.')
+            if duel_hud_report.get('status') == 'aplicado':
+                from .ps1_duel_hud import installed as duel_hud_installed
+                if duel_hud_installed(reread_exe) != duel_hud_hook:
+                    raise ModError('HUD de duelo: a rotina diverge no BIN final.')
             if patched_wa is not None:
                 reread_wa = b''.join(verify.read_entry(files['DATA/WA_MRG.MRG']))
                 if reread_wa != patched_wa:
@@ -926,6 +944,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'vinculo_com_vida_ps1':lifelink_report,
                 'drop_fixo_ps1':fixed_drop_report,
                 'espaco_menu_debug_ps1':debug_space_report,
+                'hud_duelo_ps1':duel_hud_report,
                 'subtipos_ps1':subtype_report,
                 'bonus_mao_ps1':hand_bonus_report,
                 'escolha_deck_inicial_ps1':starter_choice_report,

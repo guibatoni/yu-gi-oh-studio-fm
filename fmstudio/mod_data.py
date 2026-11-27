@@ -166,6 +166,8 @@ def _normalize_deck(value, cards):
 def normalize_rules(data, cards):
     """Validate a settings snapshot without changing the project."""
     out = deepcopy(data)
+    if 'hud_ps1' in out and out['hud_ps1'] not in ('original', 'novo'):
+        raise ModError('HUD de duelo PS1: use original ou novo.')
     if 'ia_ps1' in out and out['ia_ps1'] not in ('normal', 'dificil', 'agressiva', 'maxima'):
         raise ModError('IA PS1: escolha Normal ou Difícil.')
     if 'lp_inicial' in out:

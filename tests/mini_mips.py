@@ -23,6 +23,7 @@ class MiniCpu:
         """Executa até um endereço de ``stop``; ``calls`` = {endereço: função(cpu)} simula rotinas."""
         calls = calls or {}
         r, delay = self.r, None
+        hi = lo = 0
         for _ in range(limit):
             if pc in stop:
                 return pc
@@ -39,7 +40,18 @@ class MiniCpu:
             if op == 0:
                 if fn == 0: val = r[rt] << sa & 0xFFFFFFFF
                 elif fn == 2: val = r[rt] >> sa
+                elif fn == 3:
+                    signed = r[rt] - (1 << 32) if r[rt] & 0x80000000 else r[rt]
+                    val = (signed >> sa) & 0xFFFFFFFF
                 elif fn == 6: val = r[rt] >> (r[rs] & 31)
+                elif fn == 0x10: val = hi
+                elif fn == 0x12: val = lo
+                elif fn == 0x19:
+                    product = r[rs] * r[rt]
+                    hi, lo, val = product >> 32, product & 0xFFFFFFFF, None
+                elif fn == 0x1B:
+                    assert r[rt], f'divisão por zero em {pc:#x}'
+                    hi, lo, val = r[rs] % r[rt], r[rs] // r[rt], None
                 elif fn == 8: target, val = r[rs], None
                 elif fn == 9: target, val, r[rd] = r[rs], None, pc + 8
                 elif fn == 0x21: val = (r[rs] + r[rt]) & 0xFFFFFFFF

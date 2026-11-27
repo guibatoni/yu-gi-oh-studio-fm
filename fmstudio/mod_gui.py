@@ -1073,6 +1073,18 @@ class ModEditor(ttk.Frame):
         ttk.Label(lp_pane, text='Disponível para a imagem Drop x15 validada. '
                   'Após salvar, gere outro BIN/CUE. A IA do simulador não é alterada.',
                   foreground=MUTED, wraplength=630).pack(anchor='w', pady=(0, 8))
+        ttk.Separator(lp_pane, orient='horizontal').pack(fill='x', pady=13)
+        ttk.Label(lp_pane, text='HUD de duelo — PlayStation 1',
+                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(4, 7))
+        ttk.Label(lp_pane, text='Novo: losango do duelista, "LP:" com o valor, barra de LP (cheia no LP '
+                  'inicial do duelo) e contador do deck; rival em vermelho em cima, você em azul embaixo. '
+                  'O rank ao vivo (ex.: C-POW) passa para a esquerda do bloco azul. Etapa 1: o losango '
+                  'ainda sem o retrato do duelista.',
+                  wraplength=630, justify='left').pack(anchor='w', pady=(0, 9))
+        self.ps1_hud_new = tk.BooleanVar(value=False)
+        ttk.Checkbutton(lp_pane, text='Usar o HUD de duelo novo', variable=self.ps1_hud_new,
+                        command=self.save_ps1_hud).pack(anchor='w')
+        ttk.Button(lp_pane, text='Ver prévia do HUD', command=self.preview_ps1_hud).pack(anchor='w', pady=9)
         ttk.Label(self, textvariable=self.status, foreground=ACCENT, wraplength=610).pack(anchor='w', pady=(5, 0))
         self._update_available()
 
@@ -1100,6 +1112,7 @@ class ModEditor(ttk.Frame):
             self.pools, self.stock, _, _ = base_tables(self.project)
             self.rules = normalize_rules(self.project.metadata.get(CONFIG_KEY, {}), self.cards)
             self.mod_lp.set(str(starting_life(self.project, self._duel_id())['jogador']))
+            self.ps1_hud_new.set(self.rules.get('hud_ps1', 'original') == 'novo')
             current_ai = self.rules.get('ia_ps1', 'normal')
             self.ps1_ai_choice.set(next((label for label, code in self.ps1_ai_modes.items()
                                          if code == current_ai), 'Normal — IA original'))
@@ -1842,6 +1855,41 @@ class ModEditor(ttk.Frame):
                           else 'Normal. Recrie o BIN/CUE para restaurar.'))
         except (ModError, ValueError, OSError) as exc:
             messagebox.showerror('Config. MOD — IA PlayStation 1', str(exc), parent=self)
+
+    def save_ps1_hud(self):
+        if not self.project:
+            self.ps1_hud_new.set(False)
+            return
+        try:
+            rules = self._edit()
+            value = 'novo' if self.ps1_hud_new.get() else 'original'
+            if value == 'novo':
+                rules['hud_ps1'] = value
+            else:
+                rules.pop('hud_ps1', None)
+            self._commit(rules, 'HUD de duelo PS1: ' + ('novo. Recrie o BIN/CUE para ativar.' if value == 'novo'
+                                                        else 'original. Recrie o BIN/CUE para restaurar.'))
+        except (ModError, ValueError, OSError) as exc:
+            messagebox.showerror('Config. MOD — HUD de duelo', str(exc), parent=self)
+
+    def preview_ps1_hud(self):
+        try:
+            from PIL import ImageTk
+            from .duel_hud_layout import render_preview
+        except ImportError:
+            messagebox.showinfo('Prévia do HUD', 'A prévia precisa do Pillow instalado.', parent=self)
+            return
+        image = render_preview(lp=(8000, 5600), start=(8000, 8000), deck=(36, 40))
+        image = image.crop((140, 0, 320, 72)).resize((720, 288), 0)   # 0 = vizinho mais próximo
+        window = tk.Toplevel(self)
+        window.title('Prévia do HUD de duelo (PS1, ampliada 4x)')
+        window.transient(self.winfo_toplevel())
+        photo = ImageTk.PhotoImage(image)
+        label = ttk.Label(window, image=photo)
+        label.image = photo
+        label.pack(padx=10, pady=10)
+        ttk.Label(window, foreground=MUTED, text='Rival em cima (vermelho), você embaixo (azul). '
+                  'O losango recebe o retrato do duelista na próxima etapa.').pack(padx=10, pady=(0, 10))
 
     def start_match(self):
         if not self.project or self.studio._extract_running:
