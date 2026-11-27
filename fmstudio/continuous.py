@@ -57,6 +57,23 @@ def _count_bonus(effect, side, field, catalog, zones, legacy):
                for candidate in sides for counter in [legacy.get(origin, {}).get(candidate, {})])
 
 
+def _counts_hand(effect) -> bool:
+    return (effect.get('origem_contagem') or COUNT_ZONES.get(effect.get('acao'))) == 'mao'
+
+
+def entry_hand_counts(cid, side, effects_by_card, *, catalog, zones):
+    """{índice do efeito: cartas na mão agora} para os bônus de mão da carta que entra em campo."""
+    from .core import check_effect
+    counts = {}
+    for i, raw in enumerate(effects_by_card.get(str(cid), effects_by_card.get(cid, []))):
+        if raw.get('evento') != 'continuo' or raw.get('acao') not in SCALING_ACTIONS:
+            continue
+        effect = check_effect(raw)
+        if _counts_hand(effect):
+            counts[i] = _count_bonus(effect, side, [], catalog, zones, {})
+    return counts
+
+
 def project_stats(card, cid, side, effects, field, *, catalog, zones):
     """Project a card's own counting bonuses in the hand or draw pile."""
     from .core import check_effect
@@ -118,7 +135,8 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
             'imune_armadilha':False, 'imune_magia':False, 'indestrutivel':False,
             'indestrutivel_batalha':False,
             'ataques_max':1, 'perfurante':False, 'nao_bloqueavel':False,
-            'ataque_primeiro_turno':False})
+            'ataque_primeiro_turno':False,
+            'contagem_mao':dict(raw.get('contagem_mao') or {})})
     index = {(m['lado'],m['slot']): m for m in field}
     legacy = {'deck': deck_types or {}, 'deck_cards': deck_cards or {},
               'cemiterio': cemetery_types or {}}
@@ -179,7 +197,11 @@ def resolve_field(monsters: list[dict], effects_by_card: dict, *,
                     if _in_scope(source['lado'], target['lado'], eff['escopo']) and matches_filter(target, eff):
                         add_bonus(source, target, eff, 1, i)
             else:
-                n = _count_bonus(eff, source['lado'], field, catalog, zones, legacy)
+                frozen = source['contagem_mao']
+                if _counts_hand(eff) and i in frozen:
+                    n = frozen[i]               # contado quando entrou em campo
+                else:
+                    n = _count_bonus(eff, source['lado'], field, catalog, zones, legacy)
                 add_bonus(source, source, eff, n, i)
 
     for equipment in equipments or []:

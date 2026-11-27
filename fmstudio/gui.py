@@ -497,7 +497,7 @@ class EffectDialog(tk.Toplevel):
         elif action=='bonus_deck_tipo':
             help_text='Bônus fixo por carta correspondente na composição inicial do deck.'
         elif action=='bonus_mao_tipo':
-            help_text='Recebe o bônus por carta correspondente na mão. Recalcula após compras, invocações e descartes.'
+            help_text='Conta as cartas correspondentes na mão no momento em que este monstro entra em campo; o bônus fica fixo enquanto ele estiver no campo (compras e descartes não mudam). Simulador e PS1.'
         elif action=='bonus_por_tipo':
             help_text=('Esta carta recebe o bônus por cada monstro correspondente no campo. '
                        'Monstros virados para baixo também contam.')
@@ -593,7 +593,7 @@ class SpecificCardEffectDialog(tk.Toplevel):
         self.origin=tk.StringVar(value=self.initial_effect.get('origem_contagem', 'campo')
                                  if self.initial_effect else default_origin)
         for label,val in [('Campo (inclusive cartas viradas para baixo)','campo'),('Monte de compra','deck'),
-                          ('Mão (só no simulador do Studio)','mao'),('Cemitério (só no simulador do Studio)','cemiterio')]:
+                          ('Mão (contada quando entra em campo)','mao'),('Cemitério (só no simulador do Studio)','cemiterio')]:
             ttk.Radiobutton(pane,text=label,value=val,variable=self.origin).pack(anchor='w',pady=3)
         ttk.Label(pane,text='Quais decks/campos contam?').pack(anchor='w',pady=(7,3))
         self.scope=tk.StringVar(value=self.initial_effect.get('escopo', 'aliados')

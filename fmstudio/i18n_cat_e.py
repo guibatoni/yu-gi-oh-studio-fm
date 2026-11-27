@@ -56,7 +56,7 @@ ENTRIES = {
     'Mágicas e armadilhas': ('Magic and traps', 'Magie und Fallen', 'Magie e trappole', '魔法と罠', '魔法和陷阱', '마법과 함정'),
     'Mágicas/Traps': ('Magic/Traps', 'Magie/Fallen', 'Magie/Trappole', '魔法/罠', '魔法/陷阱', '마법/함정'),
     'Mão': ('Hand', 'Hand', 'Mano', '手札', '手牌', '손패'),
-    'Mão (só no simulador do Studio)': ('Hand (Studio simulator only)', 'Hand (nur im Studio-Simulator)', 'Mano (solo nel simulatore dello Studio)', '手札(Studioのシミュレーターのみ)', '手牌（仅限 Studio 模拟器）', '손패(Studio 시뮬레이터 전용)'),
+    'Mão (contada quando entra em campo)': ('Hand (counted when it enters the field)', 'Hand (beim Betreten des Feldes gezählt)', 'Mano (contata quando entra in campo)', '手札(場に出た時に数える)', '手牌（进场时计数）', '손패(필드에 나올 때 계산)'),
     'Mão até 5:': ('Hand up to 5:', 'Hand bis 5:', 'Mano fino a 5:', '手札(5枚まで):', '手牌最多 5：', '손패 최대 5:'),
     'NENHUMA CARTA': ('NO CARD', 'KEINE KARTE', 'NESSUNA CARTA', 'カードなし', '无卡牌', '카드 없음'),
     'Nenhum projeto': ('No project', 'Kein Projekt', 'Nessun progetto', 'プロジェクトなし', '无项目', '프로젝트 없음'),

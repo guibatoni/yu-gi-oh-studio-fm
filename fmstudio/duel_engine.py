@@ -4,7 +4,7 @@ from collections import Counter
 from copy import copy, deepcopy
 import re
 
-from .continuous import SIDES, _in_scope, matches_filter, project_stats, resolve_field
+from .continuous import SIDES, _in_scope, entry_hand_counts, matches_filter, project_stats, resolve_field
 from .core import ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ModError, check_effect, simulation_nonnegative_int
 from .guardian import guardian_bonuses
 from .mod_data import MONSTER_TYPES, card_effects, opposite, validate_deck
@@ -43,7 +43,8 @@ class DuelLab:
     Qualquer evento só é aplicado quando trigger() é explicitamente invocado.
     """
     state_fields = ('monsters', 'equipments', 'decks', 'initial_decks', 'graveyards', 'turns',
-                    'summoned_turn', 'hands', 'lp', 'damage', 'attacks_used', 'stat_markers', 'logs')
+                    'summoned_turn', 'hands', 'lp', 'damage', 'attacks_used', 'stat_markers',
+                    'hand_counts', 'logs')
 
     def __init__(self, cards: dict, effects: dict, *, summoning_delay: bool = False,
                  initial_lp: int | dict = 8000, default_copies: int = 3):
@@ -66,6 +67,8 @@ class DuelLab:
         self.damage = {}  # (side,slot,card_id) => dano simulado permanente
         self.attacks_used = {}  # (side,slot,card_id) => ataques neste turno
         self.stat_markers: dict[tuple[str, int, int], tuple[int, int]] = {}
+        # (lado, slot, ID) -> {índice do efeito: cartas na mão quando entrou em campo}
+        self.hand_counts: dict[tuple[str, int, int], dict[int, int]] = {}
         self.logs = []
 
     def _snapshot(self, *, include_logs=True):
@@ -140,14 +143,25 @@ class DuelLab:
             self.summoned_turn.setdefault(key,self.turns[key[0]])
         self.attacks_used={key:v for key,v in self.attacks_used.items() if key in new_keys}
         self.stat_markers = {key: delta for key, delta in self.stat_markers.items() if key in new_keys}
+        # Bônus de mão: conta a mão no momento em que o monstro entra e fica fixo (igual ao PS1).
+        old_keys = {(m['lado'], int(m['slot']), int(m['card_id'])) for m in self.monsters}
+        self.hand_counts = {key: value for key, value in self.hand_counts.items() if key in new_keys}
+        for key in new_keys - old_keys:
+            counts = entry_hand_counts(key[2], key[0], self.effects, catalog=self.cards, zones=self.zones())
+            if counts:
+                self.hand_counts[key] = counts
         self.monsters=deepcopy(monsters)
         self.equipments=deepcopy(equipments or [])
 
     def resolve(self, *, terrain_bonuses=None):
         board = self.monsters
+        if self.hand_counts:
+            board = [{**unit, 'contagem_mao': self.hand_counts[key]} if (
+                key := (unit['lado'], int(unit['slot']), int(unit['card_id']))) in self.hand_counts else unit
+                for unit in board]
         if self.stat_markers or terrain_bonuses:
-            board = []
-            for unit in self.monsters:
+            units, board = board, []
+            for unit in units:
                 key = (unit['lado'], int(unit['slot']), int(unit['card_id']))
                 atk, defense = self.stat_markers.get(key, (0, 0))
                 kinds = {int(unit['tipo_id'])}

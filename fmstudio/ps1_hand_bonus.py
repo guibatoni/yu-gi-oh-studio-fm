@@ -6,11 +6,22 @@ origem mão como bônus de deck por ID (código 5), com o ``match`` marcado:
 ``0x4000 | tipo/ID`` (ou ``0x7FFF`` para qualquer tipo). Sozinho isso conta 0 (nenhum tipo é
 0x4000+), então é inofensivo se o desvio abaixo não existir.
 
-A única chamada de ``count_bonus`` (0x800FE984, dentro de CalculateStats,
-igual nos runtimes de 722 e 740 cartas) passa por ``wrapper``: bônus de deck
-marcados contam as cartas da MÃO (registros 0-4 de cada lado em CARDS, com o
-bit OCUPADO) usando o próprio ``matches_bonus`` do runtime (atributo, "ou" e
-sub-tipo funcionam igual); os demais seguem para o ``count_bonus`` original.
+A contagem é feita UMA vez, quando o monstro entra em campo, e fica fixa
+enquanto ele estiver lá (pedido do usuário: o poder não oscila a cada compra):
+
+* ``entry``: o fim de ``ConfirmPlacement`` (0x800FF74C, ``j summon_damage``,
+  só numa entrada nova — invocação ou fusão) passa por aqui. Para cada um dos 4
+  primeiros bônus da regra da carta que entrou, se for bônus de mão, conta as
+  cartas da MÃO (registros 0-4 de cada lado em CARDS, com o bit OCUPADO, pelo
+  próprio ``matches_bonus`` do runtime: atributo, "ou" e sub-tipo funcionam
+  igual) e guarda em ``snapshots[slot][bônus]``; depois segue para
+  ``summon_damage``.
+* a única chamada de ``count_bonus`` (0x800FE984, em CalculateStats) passa
+  pelo início do bloco: bônus de mão devolvem o valor guardado do slot (s7 =
+  slot, s5 = índice do bônus + 1 no runtime compilado); os demais seguem para o
+  ``count_bonus`` original. Sem slot válido, conta na hora (``live``).
+
+Os dois pontos são iguais nos runtimes de 722 e 740 cartas.
 """
 from __future__ import annotations
 
@@ -21,6 +32,12 @@ from .deep_extract import exe_pos
 from .mips_asm import Asm, hi_lo
 
 CALL_SITE = 0x800FE984
+# Fim de ConfirmPlacement numa entrada nova em campo: ``j summon_damage``
+# (com o slot em a0). Igual nos runtimes de 722 e 740 cartas.
+ENTRY_SITE = 0x800FF74C
+SUMMON_ENTRY = 0x801CFDF8
+CONFIG = 0x801CD7A0
+SNAP_BONUSES = 4             # bônus de mão guardados por slot (os 4 primeiros da regra)
 COUNT_BONUS = 0x801CFBBC
 MATCHES_BONUS = 0x801CFB14
 CARDS = 0x801A7AD8
@@ -40,20 +57,58 @@ def _jal(target: int) -> int:
 
 
 def code(base: int) -> bytes:
+    return _build(base).bytes()
+
+
+def _labels(base: int) -> dict:
+    return _build(base).labels
+
+
+def _build(base: int) -> Asm:
     a = Asm(base)
+    # ------------------------------------------------ count_bonus(bônus, lado)
+    # Chamado só por CalculateStats com i == slot: s7 ($23) = slot de quem tem
+    # o bônus e s5 ($21) = índice do bônus + 1 (registradores do runtime
+    # compilado, iguais nos runtimes de 722 e 740 cartas).
     a.lbu('t0', 0, 'a0')                        # ação
     a.lhu('t2', 2, 'a0')                        # match
     a.ori('t1', 'zero', DECK_TYPE)
     a.beq('t0', 't1', 'is_deck')
-    a.move('t8', 'zero')                        # delay: por tipo
+    a.nop()
     a.ori('t1', 'zero', DECK_ID)
     a.bne('t0', 't1', 'original')
-    a.ori('t8', 'zero', 1)                      # delay: por carta específica
+    a.nop()
     a.label('is_deck')
     a.andi('t3', 't2', 0xC000)
     a.ori('t1', 'zero', HAND_FLAG)
     a.bne('t3', 't1', 'original')
     a.nop()
+    # valor guardado na entrada em campo
+    a.move('t9', 'ra')
+    a.move('t4', 's7')
+    a.jal('snapshot_slot')                      # t5 = endereço de snap[slot][0] ou 0
+    a.addiu('t6', 's5', -1)                     # delay: índice do bônus
+    a.move('ra', 't9')
+    a.beqz('t5', 'live')
+    a.sltiu('t7', 't6', SNAP_BONUSES)
+    a.beqz('t7', 'live')
+    a.addu('t5', 't5', 't6')                    # delay
+    a.lbu('v0', 0, 't5')
+    a.jr('ra')
+    a.nop()
+    a.label('original')
+    a.j(COUNT_BONUS)
+    a.nop()
+
+    # ------------------------------------- live(bônus, lado): conta a mão agora
+    a.label('live')
+    a.lbu('t0', 0, 'a0')
+    a.ori('t1', 'zero', DECK_ID)
+    a.bne('t0', 't1', 'live_type')
+    a.move('t8', 'zero')                        # delay: por tipo
+    a.ori('t8', 'zero', 1)                      # por carta específica
+    a.label('live_type')
+    a.lhu('t2', 2, 'a0')
     a.addiu('sp', 'sp', -0x40)
     a.sw('ra', 0x3C, 'sp'); a.sw('s0', 0x38, 'sp'); a.sw('s1', 0x34, 'sp')
     a.sw('s2', 0x30, 'sp'); a.sw('s3', 0x2C, 'sp'); a.sw('s4', 0x28, 'sp')
@@ -117,20 +172,120 @@ def code(base: int) -> bytes:
     a.lw('s2', 0x30, 'sp'); a.lw('s3', 0x2C, 'sp'); a.lw('s4', 0x28, 'sp')
     a.jr('ra')
     a.addiu('sp', 'sp', 0x40)
-    a.label('original')
-    a.j(COUNT_BONUS)
+
+    # ------------------------- snapshot_slot(t4 = slot) -> t5 = &snap[k][0] ou 0
+    a.label('snapshot_slot')
+    a.addiu('t5', 't4', -5)
+    a.sltiu('t7', 't5', 5)
+    a.bnez('t7', 'snap_ok')
+    a.addiu('t7', 't4', -15)
+    a.addiu('t5', 't4', -20)
+    a.sltiu('t5', 't5', 5)
+    a.beqz('t5', 'snap_none')
     a.nop()
-    return a.bytes()
+    a.move('t5', 't7')                          # 20..24 -> 5..9
+    a.label('snap_ok')
+    a.sll('t5', 't5', 2)                        # SNAP_BONUSES = 4 bytes por slot
+    a.la('t7', 'snapshots')
+    a.jr('ra')
+    a.addu('t5', 't5', 't7')
+    a.label('snap_none')
+    a.jr('ra')
+    a.move('t5', 'zero')
+
+    # ---------------- entry(a0 = slot): fim de ConfirmPlacement numa entrada nova
+    a.label('entry')
+    a.addiu('sp', 'sp', -0x30)
+    a.sw('ra', 0x2C, 'sp'); a.sw('s0', 0x28, 'sp'); a.sw('s1', 0x24, 'sp')
+    a.sw('s2', 0x20, 'sp'); a.sw('s3', 0x1C, 'sp')
+    a.move('s0', 'a0')
+    a.move('t4', 'a0')
+    a.jal('snapshot_slot')
+    a.nop()
+    a.beqz('t5', 'entry_done')
+    a.move('s3', 't5')                          # delay: &snap[k][0]
+    a.sw('zero', 0, 's3')                       # zera os 4 valores do slot
+    # regra da carta que entrou: CONFIG + offsets[id]
+    a.sll('t0', 's0', 3)
+    a.subu('t0', 't0', 's0')
+    a.sll('t0', 't0', 2)                        # slot * 28
+    ch, cl = hi_lo(CARDS)
+    a.lui('t1', ch); a.addiu('t1', 't1', cl)
+    a.addu('t1', 't1', 't0')
+    a.lh('t2', 0x0C, 't1')                      # id
+    gh, gl = hi_lo(CONFIG)
+    a.lui('t3', gh); a.addiu('t3', 't3', gl)
+    a.sll('t2', 't2', 1)
+    a.addu('t2', 't2', 't3')
+    a.lhu('t2', 2, 't2')                        # offsets[id]
+    a.nop()
+    a.beqz('t2', 'entry_done')
+    a.addu('s1', 't3', 't2')                    # delay: regra
+    a.lbu('t0', 3, 's1')                        # bonus_count
+    a.addiu('s1', 's1', 8)                      # primeiro bônus
+    a.sltiu('t1', 't0', SNAP_BONUSES + 1)
+    a.bnez('t1', 'entry_count')
+    a.nop()
+    a.ori('t0', 'zero', SNAP_BONUSES)
+    a.label('entry_count')
+    a.move('s2', 't0')                          # bônus restantes
+    a.label('entry_loop')
+    a.beqz('s2', 'entry_done')
+    a.nop()
+    a.lbu('t0', 0, 's1')
+    a.lhu('t2', 2, 's1')
+    a.ori('t1', 'zero', DECK_TYPE)
+    a.beq('t0', 't1', 'entry_deck')
+    a.ori('t1', 'zero', DECK_ID)
+    a.bne('t0', 't1', 'entry_next')
+    a.nop()
+    a.label('entry_deck')
+    a.andi('t3', 't2', 0xC000)
+    a.ori('t1', 'zero', HAND_FLAG)
+    a.bne('t3', 't1', 'entry_next')
+    a.nop()
+    a.move('a0', 's1')
+    a.sltiu('a1', 's0', 15)
+    a.jal('live')
+    a.xori('a1', 'a1', 1)                       # delay: lado do slot (0 jogador, 1 rival)
+    a.sltiu('t0', 'v0', 256)
+    a.bnez('t0', 'entry_store')
+    a.nop()
+    a.ori('v0', 'zero', 255)
+    a.label('entry_store')
+    a.sb('v0', 0, 's3')
+    a.label('entry_next')
+    a.addiu('s1', 's1', 8)
+    a.addiu('s3', 's3', 1)
+    a.b('entry_loop')
+    a.addiu('s2', 's2', -1)
+    a.label('entry_done')
+    a.move('a0', 's0')
+    a.lw('ra', 0x2C, 'sp'); a.lw('s0', 0x28, 'sp'); a.lw('s1', 0x24, 'sp')
+    a.lw('s2', 0x20, 'sp'); a.lw('s3', 0x1C, 'sp')
+    a.j(SUMMON_ENTRY)                           # segue para summon_damage(slot)
+    a.addiu('sp', 'sp', 0x30)
+    a.label('snapshots')
+    for _ in range(10 * SNAP_BONUSES // 4):
+        a.word(0)
+    return a
 
 
 def block_size() -> int:
     return len(code(0x80100000))
 
 
+def _j(target: int) -> int:
+    return 0x08000000 | ((target & 0x0FFFFFFF) >> 2)
+
+
 def apply(exe: bytes, hook: int) -> tuple[bytes, dict]:
     site = exe_pos(CALL_SITE, exe, 4)
     if struct.unpack_from('<I', exe, site)[0] != _jal(COUNT_BONUS):
         raise ModError('Bônus na mão: a chamada de count_bonus do runtime não é a esperada.')
+    entry_site = exe_pos(ENTRY_SITE, exe, 4)
+    if struct.unpack_from('<I', exe, entry_site)[0] != _j(SUMMON_ENTRY):
+        raise ModError('Bônus na mão: a entrada em campo do runtime não é a esperada.')
     block = code(hook)
     at = exe_pos(hook, exe, len(block))
     if any(exe[at:at + len(block)]):
@@ -138,7 +293,9 @@ def apply(exe: bytes, hook: int) -> tuple[bytes, dict]:
     out = bytearray(exe)
     out[at:at + len(block)] = block
     struct.pack_into('<I', out, site, _jal(hook))
-    return bytes(out), {'status': 'aplicado', 'rotina': f'0x{hook:08X}', 'validado_epsxe': False}
+    struct.pack_into('<I', out, entry_site, _j(_labels(hook)['entry']))
+    return bytes(out), {'status': 'aplicado', 'rotina': f'0x{hook:08X}',
+                        'contagem': 'ao entrar em campo (fica fixa)', 'validado_epsxe': False}
 
 
 def runtime_view(exe: bytes) -> bytes:
@@ -157,4 +314,7 @@ def runtime_view(exe: bytes) -> bytes:
         return exe
     out = bytearray(exe)
     struct.pack_into('<I', out, site, _jal(COUNT_BONUS))
+    entry_site = exe_pos(ENTRY_SITE, exe, 4)
+    if struct.unpack_from('<I', exe, entry_site)[0] == _j(_labels(hook)['entry']):
+        struct.pack_into('<I', out, entry_site, _j(SUMMON_ENTRY))
     return bytes(out)
