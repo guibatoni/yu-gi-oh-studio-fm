@@ -11,7 +11,7 @@ nop`` e a rotina:
    renderizador de folhas de sprite do PS1 ignora GsDOFF);
 3. desenha o layout de ``duel_hud_layout`` direto na OT do painel, com
    primitivas sem textura e sem GTE: POLY_F4 para faixas e losangos, TILE
-   para a barra e para o texto (fonte 5x7 em retângulos). Mesmo deslocamento
+   para a barra e para o texto (fonte 3x5 em retângulos). Mesmo deslocamento
    de tela e mesma profundidade que o GsSortFastSprite dos dígitos originais;
 4. chama o rank ao vivo do runtime (``DrawLiveRank``), se instalado, com o
    painel movido só durante a chamada para a posição nova.
@@ -36,7 +36,7 @@ import struct
 
 from .core import ModError
 from .deep_extract import exe_pos
-from .duel_hud_layout import FONT, SIDES, WHITE, glyph_rects
+from .duel_hud_layout import DIGIT_ADVANCE, FONT, PREFIX, PREFIX_WIDTH, SIDES, WHITE, glyph_rects
 from .mips_asm import Asm, hi_lo
 
 ENTRY = 0x80016E70                       # Duel_DrawLifePointsAndDeckCounts
@@ -366,19 +366,19 @@ def _build(base, rank_entry, player_portrait):
     a.sb('t3', 0, 't4')
     a.bnez('a0', 'digit_loop')
     a.addiu('t1', 't1', 1)
-    a.sll('t2', 't1', 1)
-    a.addu('t2', 't2', 't1')
-    a.sll('t2', 't2', 1)                         # 6n
+    a.li('t3', DIGIT_ADVANCE)
+    a.multu('t1', 't3')
+    a.mflo('t2')                                 # n * avanço do dígito
     a.addiu('t2', 't2', -1)
     a.beqz('a3', 'no_prefix')
     a.nop()
-    a.addiu('t2', 't2', 14)                      # "LP:" = 6 + 6 + 2
+    a.addiu('t2', 't2', PREFIX_WIDTH)            # "LP:"
     a.label('no_prefix')
     a.sra('t2', 't2', 1)
     a.subu('a1', 'a1', 't2')
     a.beqz('a3', 'digits_out')
     a.nop()
-    for glyph in 'LP:':
+    for glyph in PREFIX:
         a.jal('glyph')
         a.li('a0', GLYPH_ORDER.index(glyph))
     a.label('digits_out')
