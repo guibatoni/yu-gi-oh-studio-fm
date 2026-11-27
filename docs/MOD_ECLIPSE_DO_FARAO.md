@@ -72,11 +72,11 @@ Aqua, Fish + qualquer WATER, Curse of Dragon + Warriors (Gaia).
 
 ## Caçadores (counters)
 
-Monstros com "ao entrar, enfraquece inimigos de um tipo": Sword Hunter (Dragon),
-Zoa (Spellcaster), St. Joan (DARK), Labyrinth Tank (Warrior), Rabid Horseman
+Monstros com "ao entrar, enfraquece inimigos de um tipo": #716 (Warrior 2550,
+contra Dragon), Zoa (Spellcaster), Labyrinth Tank (Warrior), Rabid Horseman
 (Beast), Kazejin (Winged Beast), Swordstalker (Fiend), Summoned Skull (LIGHT),
 Crimson Sunbird (Insect), Tri-horned Dragon (Dinosaur), Sanga (WATER),
-Levia-Dragon (Machine), Suijin (Pyro), Great Moth (Plant).
+#442 (Sea Serpent 2250, contra Machine), Suijin (Pyro), Great Moth (Plant).
 
 Mágicas de destruição redirecionadas: Crush Card (ATK ≥ 2000), Warrior
 Elimination, Eternal Rest (Zombie), Stain Storm (Machine), Eradicating Aerosol
@@ -91,7 +91,7 @@ Elimination, Eternal Rest (Zombie), Stain Storm (Machine), Eradicating Aerosol
 | Time Wizard + Dark Magician | Magician of Black Chaos |
 | Time Wizard + Cocoon of Evolution | Perfectly Ultimate Great Moth |
 | Time Wizard + Petit Moth | Great Moth |
-| Time Wizard + Machine King | Perfect Machine King |
+| Time Wizard + Machine King | Metalzoa |
 | Time Wizard + Celtic Guardian | Gaia the Fierce Knight |
 | Time Wizard + Labyrinth Wall | Labyrinth Tank |
 | Gaia the Fierce Knight + Dark Magician | Black Luster Soldier |
@@ -99,8 +99,7 @@ Elimination, Eternal Rest (Zombie), Stain Storm (Machine), Eradicating Aerosol
 | Tri-horned Dragon + Blue-eyes White Dragon | Blue-eyes Ultimate Dragon |
 | Summoned Skull + Red-eyes B. Dragon | B. Skull Dragon |
 | Kuriboh + Summoned Skull | Zoa |
-| Levia-Dragon + Sanga of the Thunder | Twin-headed Thunder Dragon |
-| Mystical Elf + Dark Elf | St. Joan |
+| #442 (Sea Serpent 2250) + Sanga of the Thunder | Twin-headed Thunder Dragon |
 | Baby Dragon + Curse of Dragon | Serpent Night Dragon |
 
 Time Wizard só cai no TEC de Shadi, Pegasus e Labyrinth Mage, com peso baixo.
@@ -179,6 +178,12 @@ partidas do Studio. Para jogar outro tema no PS1, aplique de novo com outro
 `--inicial` e gere outro BIN/CUE.
 
 ## Limites conhecidos
+
+- Projetos importados sem a extração de textos não têm nomes de carta. O pacote
+  traz os IDs oficiais (`referencias`) e confere tipo e ATK com o `cartas.csv`.
+- St. Joan, Barrel Dragon, Perfect Machine King, Sword Hunter, Levia-Dragon e
+  Salamandra não existem no FM; foram trocados. As armadilhas entram por ID
+  (#681, #683–#686).
 
 - Os nomes seguem a lista em inglês do FM. O relatório aponta qualquer nome que
   o seu disco escreva diferente.

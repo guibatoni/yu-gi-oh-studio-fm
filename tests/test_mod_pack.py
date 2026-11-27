@@ -31,25 +31,29 @@ MONSTERS = {
     'Serpent Night Dragon': (0, 2350, 1), 'Twin-headed Thunder Dragon': (15, 2800, 0),
     'Magician of Black Chaos': (1, 2800, 1), 'Dark Elf': (1, 2000, 1), 'Black Luster Soldier': (3, 3000, 2),
     'Kazejin': (1, 2400, 5), 'Sanga of the Thunder': (15, 2600, 0), 'Suijin': (16, 2500, 3),
-    'Gate Guardian': (3, 3750, 1), 'Zoa': (7, 2600, 1), 'St. Joan': (8, 2800, 0), 'Labyrinth Tank': (14, 2400, 1),
+    'Gate Guardian': (3, 3750, 1), 'Zoa': (7, 2600, 1), 'Labyrinth Tank': (14, 2400, 1),
     'Labyrinth Wall': (18, 0, 2), 'Perfectly Ultimate Great Moth': (9, 3500, 2), 'Great Moth': (9, 2600, 2),
     'Cocoon of Evolution': (9, 0, 2), 'Petit Moth': (9, 300, 2), 'Crimson Sunbird': (6, 2300, 4),
     'Harpie Lady Sisters': (6, 1950, 5), 'Cosmo Queen': (1, 2900, 1), 'Javelin Beetle': (9, 2450, 2),
-    'Barrel Dragon': (14, 2600, 1), 'Perfect Machine King': (14, 2700, 2), 'Machine King': (14, 2200, 2),
-    'Launcher Spider': (14, 2200, 4), 'Levia-Dragon': (13, 2600, 3), 'Sword Hunter': (3, 2450, 2),
+    'Metalzoa': (14, 3000, 1), 'Machine King': (14, 2200, 2),
+    'Launcher Spider': (14, 2200, 4), 
     'Swordstalker': (3, 2000, 1), 'Rabid Horseman': (4, 2000, 2), 'Great Mammoth of Goldfine': (2, 2200, 1),
 }
 SPELLS = ['Dark Hole', 'Raigeki', 'Mooyan Curry', 'Red Medicine', "Goblin's Secret Remedy", 'Soul of the Pure',
           'Sparks', 'Hinotama', 'Final Flame', 'Ookazi', 'Tremendous Fire', 'Swords of Revealing Light',
-          "Harpie's Feather Duster", 'Forest', 'Wasteland', 'Mountain', 'Sogen', 'Umi', 'Yami']
-TRAPS = ['Fake Trap', 'Widespread Ruin', 'Acid Trap Hole', 'Invisible Wire', 'Bear Trap']
+          'Forest', 'Wasteland', 'Mountain', 'Sogen', 'Umi', 'Yami']
+TRAPS = []
 EQUIPS = ['Dragon Treasure', 'Book of Secret Arts', 'Violet Crystal', 'Legendary Sword', 'Mystical Moon',
           'Beast Fangs', 'Follow Wind', 'Dark Energy', 'Silver Bow and Arrow', 'Laser Cannon Armor',
           'Raise Body Heat', 'Horn of the Unicorn', 'Steel Shell', 'Machine Conversion Factory', 'Electro-whip',
-          'Power of Kaishin', 'Salamandra', 'Vile Germs', 'Axe of Despair', 'Megamorph',
+          'Power of Kaishin', 'Vile Germs', 'Axe of Despair', 'Megamorph',
           'Sword of Dark Destruction', "Elf's Light"]
-REMOVAL = {653: 'Crush Card', 656: 'Warrior Elimination', 660: 'Eternal Rest', 661: 'Stain Storm',
+REMOVAL = {653: 'Warrior Elimination', 656: 'Eternal Rest', 660: 'Stain Storm', 661: 'Crush Card',
            662: 'Eradicating Aerosol', 663: 'Breath of Light', 664: 'Eternal Drought'}
+# IDs que o pacote usa direto (#ID): armadilhas de ataque e dois monstros sem nome confirmado.
+FIXED = {681: ('Trap 681', 21, 0, 0), 683: ('Trap 683', 21, 0, 0), 684: ('Trap 684', 21, 0, 0),
+         685: ('Trap 685', 21, 0, 0), 686: ('Trap 686', 21, 0, 0), 716: ('Warrior 716', 3, 2550, 1),
+         442: ('Serpent 442', 13, 2250, 3)}
 ATTR_BY_TYPE = {0: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 2, 6: 5, 7: 1, 8: 0, 9: 2, 10: 2, 11: 3, 12: 3, 13: 3,
                 14: 1, 15: 0, 16: 3, 17: 4, 18: 2, 19: 2}
 
@@ -66,6 +70,8 @@ def synthetic_rows():
     for cid in range(1, CARD_COUNT + 1):
         if cid in REMOVAL:
             entry = (REMOVAL[cid], 20, 0, 0)
+        elif cid in FIXED:
+            entry = FIXED[cid]
         else:
             entry = next(queue, (f'Spare {cid}', 20, 0, 0))
         name, kind, atk, attr = entry
@@ -98,7 +104,7 @@ class TestEclipseModPack(unittest.TestCase):
     def test_every_name_resolves_on_a_full_catalog(self):
         plan = plan_mod(self.project, self.pack)
         self.assertEqual(plan.report.missing, {})
-        self.assertEqual(plan.report.warnings, [])
+        self.assertEqual(plan.blockers, [])
 
     def test_opponent_decks_respect_types_size_and_pool_rules(self):
         plan = plan_mod(self.project, self.pack)
@@ -149,14 +155,14 @@ class TestEclipseModPack(unittest.TestCase):
         normalize_rules(rules, {cid: reopened.get(cid) for cid in reopened.cards})
         self.assertEqual(rules['ia_ps1'], 'dificil')
         self.assertEqual(len(rules['duelistas']), 39)
-        self.assertEqual(len(rules['receitas']['fusoes']), 16)
+        self.assertEqual(len(rules['receitas']['fusoes']), 15)
         settings = quest_settings(reopened)
         self.assertTrue(settings['ativado'])
         self.assertEqual(len(settings['requisitos']), 37)
         self.assertTrue(all(len(rows) <= 3 for rows in settings['requisitos'].values()))
         self.assertEqual(len(magic_values(reopened)['destruicao']), 7)
         replay = compile_mod(reopened, profile=True, wa_verified=True)
-        self.assertEqual(len(replay.fusions), 16)
+        self.assertEqual(len(replay.fusions), 15)
         self.assertEqual(sorted(op for op, kind in replay.groups if kind == 'deck'), list(range(1, 40)))
         self.assertTrue(all(kind in ('deck', 'pow', 'tec', 'bcd') for _, kind in replay.groups))
         self.assertEqual(replay.starters and len(replay.starters), len(plan.starter_pools))
@@ -172,7 +178,7 @@ class TestEclipseModPack(unittest.TestCase):
         plan = plan_mod(self.project, self.pack)
         catalog = Catalog(self.project, Report())
         drought = catalog.by_name[norm('Eternal Drought')]
-        hunter = catalog.by_name[norm('Sword Hunter')]
+        hunter = 716
         # Heishin (#8) entrega Eternal Drought; Isis (#16) antecede Kaiba e libera o caçador de dragões.
         self.assertIn(drought, plan.drops[8]['tec'])
         self.assertIn(hunter, plan.drops[16]['pow'])

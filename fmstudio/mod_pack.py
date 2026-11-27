@@ -54,7 +54,7 @@ RESERVED_DEFAULT = (
     'Blue-eyes Ultimate Dragon', 'Black Luster Soldier', 'Gate Guardian', 'Kazejin', 'Sanga of the Thunder',
     'Suijin', 'Tri-horned Dragon', 'Summoned Skull', 'Red-eyes B. Dragon', 'Labyrinth Tank',
     'Perfectly Ultimate Great Moth', 'St. Joan', 'Zoa', 'Meteor B. Dragon', 'B. Skull Dragon',
-    'Exodia the Forbidden One', 'Left Arm of the Forbidden One', 'Right Arm of the Forbidden One',
+    'Metalzoa', 'Exodia the Forbidden One', 'Left Arm of the Forbidden One', 'Right Arm of the Forbidden One',
     'Left Leg of the Forbidden One', 'Right Leg of the Forbidden One', 'Cosmo Queen', 'Perfect Machine King',
 )
 
@@ -99,7 +99,7 @@ class Report:
 class Catalog:
     """Visão somente leitura das cartas originais do projeto."""
 
-    def __init__(self, project, report: Report):
+    def __init__(self, project, report: Report, references: dict | None = None):
         self.project = project
         self.report = report
         self.cards = {}
@@ -113,10 +113,26 @@ class Catalog:
         for cid, card in self.cards.items():
             if card['nome']:
                 self.by_name.setdefault(norm(card['nome']), cid)
+        # Referências por ID oficial: valem quando o projeto não tem o nome
+        # (base importada sem a extração de textos). Tipo e ATK são conferidos.
+        for name, (cid, kind, atk) in (references or {}).items():
+            key = norm(name)
+            if key in self.by_name or cid not in self.cards:
+                continue
+            card = self.cards[cid]
+            if TYPE_NAMES[card['tipo']] != kind or (atk is not None and card['atk'] != atk):
+                report.warnings.append(f'Referência {name} (#{cid:03d}) não confere com o projeto '
+                                       f'({TYPE_NAMES[card["tipo"]]}, ATK {card["atk"]}); ignorada.')
+                continue
+            self.by_name[key] = cid
+            if not card['nome']:
+                card['nome'] = name.lstrip('#') if not name.startswith('#') else f'Carta {name}'
         self.fusion_results = {int(row['resultado']) for row in getattr(project, 'fusions', [])
                                if str(row.get('possivel_glitch', 0)) != '1'}
 
     def find(self, name, where):
+        if str(name).startswith('#') and str(name)[1:].isdigit() and int(str(name)[1:]) in self.cards:
+            return int(str(name)[1:])
         key = norm(name)
         if key in self.by_name:
             return self.by_name[key]
@@ -128,7 +144,11 @@ class Catalog:
         return self.cards[cid]['tipo'] in MONSTER_TYPE_IDS
 
     def label(self, cid):
-        return f"#{cid:03d} {self.cards[cid]['nome']}"
+        card = self.cards[cid]
+        if card['nome'] and not card['nome'].startswith('Carta #'):
+            return f"#{cid:03d} {card['nome']}"
+        kind = TYPE_NAMES[card['tipo']]
+        return f"#{cid:03d} ({kind} {card['atk']})" if card['tipo'] in MONSTER_TYPE_IDS else f"#{cid:03d} ({kind})"
 
 
 # ---------------------------------------------------------------- efeitos
@@ -529,7 +549,7 @@ def load_pack(path: Path) -> dict:
 
 def plan_mod(project, pack, *, starter: str | int | None = None) -> ModPlan:
     report = Report()
-    catalog = Catalog(project, report)
+    catalog = Catalog(project, report, pack.get('referencias'))
     if len(catalog.cards) < CARD_COUNT:
         raise ModError('O projeto precisa do catálogo completo #001–#722 (importe o BIN/CUE Drop x15).')
     blocked = _reserved(pack, catalog)
@@ -662,7 +682,7 @@ def apply_mod(project, pack, *, starter=None, keep_other_effects=False):
     starter_rows = [{'grupo': index, 'compras': row['compras'], 'carta_id': cid, 'peso': weight}
                     for index, row in enumerate(plan.starter_pools)
                     for cid, weight in _quantized(row['pesos']).items()]
-    catalog = Catalog(project, plan.report)
+    catalog = Catalog(project, plan.report, pack.get('referencias'))
     generate_quests(quest_catalog(project, catalog, plan.drops, starter_rows), pack['regras']['seed_quests'],
                     plan.quests)
 
@@ -691,7 +711,7 @@ def apply_mod(project, pack, *, starter=None, keep_other_effects=False):
 
 
 def describe(plan: ModPlan, catalog_project, pack, mod_plan=None) -> str:
-    catalog = Catalog(catalog_project, Report())
+    catalog = Catalog(catalog_project, Report(), pack.get('referencias'))
     lines = [f"MOD {pack['nome']} v{pack['versao']}", '']
     lines.append(f'Efeitos nativos: {len(plan.effects)} cartas '
                  f'({sum(1 for c in plan.effects if plan.priority[c][0] == 0)} assinaturas).')
