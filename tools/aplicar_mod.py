@@ -34,10 +34,26 @@ def main(argv=None):
     parser.add_argument('--estrito', action='store_true', help='Recusa aplicar se houver carta não encontrada')
     parser.add_argument('--manter-efeitos', action='store_true',
                         help='Mantém efeitos já existentes em cartas que o mod não usa')
+    parser.add_argument('--novo', action='store_true',
+                        help='Cria um projeto NOVO na pasta indicada e importa o --bin (não mexe em outros projetos)')
+    parser.add_argument('--bin', type=Path, help='Imagem original Drop x15 (.bin/.cue) usada com --novo')
+    parser.add_argument('--nome', default=None, help='Nome do projeto novo (padrão: nome do mod)')
     args = parser.parse_args(argv)
 
     try:
         pack = load_pack(args.mod)
+        if args.novo:
+            if not args.bin or not args.bin.is_file():
+                raise ModError('Use --bin com o caminho da imagem Drop x15 para criar o projeto novo.')
+            if (args.projeto / 'projeto.json').exists():
+                print(f'Projeto já existe em {args.projeto}; usando o que está lá.')
+            else:
+                if args.projeto.exists() and any(args.projeto.iterdir()):
+                    raise ModError(f'A pasta {args.projeto} não está vazia; escolha uma pasta nova.')
+                created = Project.create(args.projeto, args.nome or pack['nome'])
+                print(f'Importando {args.bin.name} para o projeto novo (o arquivo original não é alterado)...')
+                created.import_disc(args.bin)
+                print(f'Projeto novo criado em {args.projeto}')
         project = Project.open(args.projeto)
         if args.aplicar:
             if args.estrito:
