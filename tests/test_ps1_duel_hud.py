@@ -20,7 +20,7 @@ PACKETS = 0x800F4000
 RETURN = 0x80000100
 
 
-def run(lp=(1000, 7000), start=(8000, 8000), drawn=(5, 0), *, rank=True, panel_xy=(281, 28),
+def run(lp=(1000, 7000), start=(8000, 8000), drawn=(5, 0), *, rank=True, panel_xy=hud.PANEL_HOME,
         portrait=None, flags=(0, 0)):
     cpu = MiniCpu()
     asm = hud._build(HOOK, RANK if rank else None, portrait)
@@ -130,7 +130,30 @@ class DuelHudMipsTests(unittest.TestCase):
         self.assertEqual((owner, sprite, value, count), (PANEL, hud.SCRATCH_SPRITE, 0, 0))
         self.assertEqual(xy, (hud.RANK_X + 35, hud.RANK_Y - 23))
         # posição do painel volta ao normal depois do rank
-        self.assertEqual(struct.unpack_from('<hh', cpu.mem, (PANEL + 0x30) & M), (281, 28))
+        self.assertEqual(struct.unpack_from('<hh', cpu.mem, (PANEL + 0x30) & M), hud.PANEL_HOME)
+
+    def test_follows_the_panel_slide_and_leaves_the_screen(self):
+        base = Image.new('RGB', (480, 240), (10, 20, 30))
+        home = rasterize(packets(run()[0]), base)
+        for dx, dy in ((10, 0), (40, -6)):
+            cpu, _, ranks = run(panel_xy=(hud.PANEL_HOME[0] + dx, hud.PANEL_HOME[1] + dy))
+            shift = dx + dx // 2
+            moved = rasterize(packets(cpu), base)
+            expected = base.copy()
+            expected.paste(home.crop((0, 0, 480 - shift, 240)), (shift, dy))
+            if dy < 0:
+                expected.paste(base.crop((0, 240 + dy, 480, 240)), (0, 240 + dy))
+            self.assertEqual(list(moved.getdata()), list(expected.getdata()), (dx, dy))
+            self.assertEqual(ranks[0][4], (hud.RANK_X + 35 + shift, hud.RANK_Y - 23 + dy))
+        # fora da tela (batalha: 384; fim do duelo: 408): nada desenhado, nem o rank
+        for x in (384, 408):
+            cpu, calls, ranks = run(panel_xy=(x, hud.PANEL_HOME[1]))
+            self.assertEqual(packets(cpu), [])
+            self.assertEqual(ranks, [])
+            self.assertEqual(len(calls), 2)               # o LP continua animando
+        # painel à esquerda da posição: o HUD fica parado
+        cpu, _, _ = run(panel_xy=(hud.PANEL_HOME[0] - 30, hud.PANEL_HOME[1]))
+        self.assertEqual(list(rasterize(packets(cpu), base).getdata()), list(home.getdata()))
 
     def test_without_rank(self):
         _, _, ranks = run(rank=False)

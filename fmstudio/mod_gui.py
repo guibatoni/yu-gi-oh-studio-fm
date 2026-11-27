@@ -1078,7 +1078,7 @@ class ModEditor(ttk.Frame):
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(4, 7))
         ttk.Label(lp_pane, text='Novo: retrato do duelista em losango, "LP:" com o valor, barra de LP '
                   '(cheia no LP inicial do duelo) e contador do deck; rival em vermelho em cima, você em '
-                  'azul embaixo. O rank ao vivo (ex.: C-POW) passa para a esquerda do bloco azul. Os '
+                  'azul embaixo. O HUD fica no canto superior direito e o rank ao vivo (ex.: C-POW) centralizado logo abaixo; nas batalhas e no fim do duelo ele desliza para fora junto com o painel original. Os '
                   'retratos são os do Free Duel, lidos do disco ao iniciar cada duelo.',
                   wraplength=630, justify='left').pack(anchor='w', pady=(0, 9))
         self.ps1_hud_new = tk.BooleanVar(value=False)
@@ -1905,7 +1905,7 @@ class ModEditor(ttk.Frame):
             messagebox.showinfo('Prévia do HUD', 'A prévia precisa do Pillow instalado.', parent=self)
             return
         image = render_preview(lp=(8000, 5600), start=(8000, 8000), deck=(36, 40))
-        image = image.crop((140, 0, 320, 72)).resize((720, 288), 0)   # 0 = vizinho mais próximo
+        image = image.crop((212, 0, 320, 72)).resize((648, 432), 0)   # 0 = vizinho mais próximo
         window = tk.Toplevel(self)
         window.title('Prévia do HUD de duelo (PS1, ampliada 4x)')
         window.transient(self.winfo_toplevel())

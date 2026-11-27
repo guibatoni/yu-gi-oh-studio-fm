@@ -110,41 +110,44 @@ def _shift(quads, dx):
     return [tuple((x + dx, y) for x, y in q) for q in quads]
 
 
+# Caixa do HUD na tela do duelo (pedida pelo usuário): x 223..315, y 5..61.
+BOX = (223, 5, 315, 61)
+GAP = 2                   # espaço entre o losango e as faixas
+
+
 def _side_rival():
-    cx, cy, h = 200, 17, 16
+    cx, cy, h = 236, 19, 13          # losango em y 6..32 (borda 5..33)
 
     def edge_up(y):      # aresta superior direita do losango
         return cx + (y - (cy - h))
 
     def edge_down(y):    # aresta inferior direita
         return cx + ((cy + h) - y)
-    gap = 3
-    top = _band((edge_up(2) + gap, 2), (edge_up(6) + gap, 6), (edge_up(10) + gap, 10), (262, 2), (262, 10))
-    bar = _band((edge_up(12) + gap, 12), (cx + h + gap, cy), (edge_down(21) + gap, 21), (275, 12), (275, 21))
-    deck = _band((edge_down(23) + gap, 23), (edge_down(27) + gap, 27), (edge_down(30) + gap, 30),
-                 (232, 23), (232, 30))           # termina em 30: a faixa azul começa em 31
-    return Side(RED, RED_DIM, (cx, cy, h), tuple(top + bar + deck), (222, 14, 268, 19), False,
-                (238, 3), (222, 24))
+    top = _band((edge_up(6) + GAP, 6), (edge_up(10) + GAP, 10), (edge_up(13) + GAP, 13), (300, 6), (300, 13))
+    bar = _band((edge_up(15) + GAP, 15), (cx + h + GAP, cy), (edge_down(22) + GAP, 22), (302, 15), (302, 22))
+    deck = _band((edge_down(24) + GAP, 24), (edge_down(28) + GAP, 28), (edge_down(31) + GAP, 31),
+                 (262, 24), (262, 31))
+    return Side(RED, RED_DIM, (cx, cy, h), tuple(top + bar + deck), (256, 17, 297, 20), False,
+                (271, 7), (252, 25))
 
 
 def _side_player():
-    cx, cy, h = 301, 45, 15
+    cx, cy, h = 302, 47, 13          # losango em y 34..60 (borda 33..61)
 
     def edge_up(y):      # aresta superior esquerda
         return cx - (y - (cy - h))
 
     def edge_down(y):    # aresta inferior esquerda
         return cx - ((cy + h) - y)
-    gap = 3
     # desenha como o rival (ponta do retrato à esquerda) em coordenadas espelhadas
-    top = _band((-(edge_up(31) - gap), 31), (-(edge_up(35) - gap), 35), (-(edge_up(39) - gap), 39),
-                (-232, 31), (-232, 39))
-    bar = _band((-(edge_up(41) - gap), 41), (-(cx - h - gap), cy), (-(edge_down(50) - gap), 50),
-                (-222, 41), (-222, 50))
-    deck = _band((-(edge_down(52) - gap), 52), (-(edge_down(56) - gap), 56), (-(edge_down(60) - gap), 60),
-                 (-262, 52), (-262, 60))
+    top = _band((-(edge_up(34) - GAP), 34), (-(edge_up(38) - GAP), 38), (-(edge_up(41) - GAP), 41),
+                (-240, 34), (-240, 41))
+    bar = _band((-(edge_up(43) - GAP), 43), (-(cx - h - GAP), cy), (-(edge_down(50) - GAP), 50),
+                (-237, 43), (-237, 50))
+    deck = _band((-(edge_down(52) - GAP), 52), (-(edge_down(56) - GAP), 56), (-(edge_down(59) - GAP), 59),
+                 (-276, 52), (-276, 59))
     quads = _mirror(top + bar + deck)
-    return Side(BLUE, BLUE_DIM, (cx, cy, h), tuple(quads), (228, 43, 279, 48), True, (262, 32), (276, 53))
+    return Side(BLUE, BLUE_DIM, (cx, cy, h), tuple(quads), (242, 45, 282, 48), True, (266, 35), (285, 53))
 
 
 SIDES = {1: _side_rival(), 0: _side_player()}

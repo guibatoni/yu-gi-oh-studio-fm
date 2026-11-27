@@ -50,7 +50,9 @@ SCRATCH_SPRITE = 0x1F800320              # GsSPRITE de rascunho do HUD original
 DECK_SIZE = 40
 RENDERABLE = 0x40                        # DisplayObject.flags: sem ele a lista não desenha o objeto
 X_BIAS = 160                             # vértices guardados como (x - 160, y) em bytes
-RANK_X, RANK_Y = 150, 36                 # canto do "C-POW 62" no layout novo
+RANK_X, RANK_Y = 237, 63                 # "C-POW 62" (8 letras de 8 px) centralizado sob o HUD
+PANEL_HOME = (280, 32)                   # posição do painel no duelo (Duel_InitScene)
+SLIDE_HIDE = 100                         # deslocamento a partir do qual o HUD já saiu da tela
 
 # Retratos (etapa 2): banco de 40 retratos do Free Duel no WA_MRG (48x48 8 bpp +
 # CLUT de 64 cores, 0x980 bytes cada; índice = id do duelista, 0 = casa "Deck Build").
@@ -182,6 +184,25 @@ def _build(base, rank_entry, player_portrait):
     a.nop()
     a.sll('t2', 't2', 16)
     a.or_('s4', 't1', 't2')
+    # O jogo desliza o painel para fora da tela nas batalhas e no fim do duelo
+    # (x 280 -> 384/408). O HUD segue o painel com 1,5x o deslocamento em x
+    # (sai da tela junto) e some de vez quando já está fora.
+    a.lh('t0', 0x30, 's1')
+    a.lh('t1', 0x32, 's1')
+    a.addiu('t0', 't0', -PANEL_HOME[0])
+    a.bgez('t0', 'slide_right')
+    a.addiu('t1', 't1', -PANEL_HOME[1])
+    a.move('t0', 'zero')
+    a.label('slide_right')
+    a.sra('t2', 't0', 1)
+    a.addu('t0', 't0', 't2')
+    a.sltiu('t3', 't0', SLIDE_HIDE)
+    a.beqz('t3', 'epilogue')                     # fora da tela: nada a desenhar
+    a.sw('t0', 0, 'sp')                          # deslocamento x (para o rank)
+    a.sw('t1', 4, 'sp')                          # deslocamento y
+    a.sll('t1', 't1', 16)
+    a.addu('t1', 't1', 't0')
+    a.addu('s4', 's4', 't1')
     a.lui('s5', 0x00FF)
     a.ori('s5', 's5', 0xFFFF)
     white = _bgr(WHITE, 0x60)
@@ -305,10 +326,12 @@ def _build(base, rank_entry, player_portrait):
         # DrawLiveRank(painel, sprite, 0, 0): desenha em (x-35, y+23) do painel
         a.lh('s6', 0x30, 's1')
         a.lh('s7', 0x32, 's1')
-        a.li('t0', RANK_X + 35)
+        a.lw('t0', 0, 'sp')
+        a.lw('t1', 4, 'sp')
+        a.addiu('t0', 't0', RANK_X + 35)
         a.sh('t0', 0x30, 's1')
-        a.li('t0', RANK_Y - 23)
-        a.sh('t0', 0x32, 's1')
+        a.addiu('t1', 't1', RANK_Y - 23)
+        a.sh('t1', 0x32, 's1')
         sch, scl = hi_lo(SCRATCH_SPRITE)
         a.lui('a1', sch)
         a.ori('a1', 'a1', scl & 0xFFFF)
@@ -321,6 +344,7 @@ def _build(base, rank_entry, player_portrait):
         a.move('a3', 'zero')
         a.sh('s6', 0x30, 's1')
         a.sh('s7', 0x32, 's1')
+    a.label('epilogue')
     for i, reg in enumerate(('s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7')):
         a.lw(reg, 4 * i + 8, 'sp')
     a.lw('ra', 44, 'sp')
