@@ -1,0 +1,3353 @@
+{
+  "formato": "studio-fm-modpack-v1",
+  "nome": "Eclipse do Farao",
+  "versao": "1.0.0",
+  "alvo": "PS1 SLUS-01411 - Original Drop x15",
+  "descricao": "Arquetipos por tipo, cacadores (counters), a cadeia do Time Wizard, 39 decks tematicos com IA dificil, drops que preparam o proximo duelo, quests de doacao e 6 decks iniciais.",
+  "regras": {
+    "ia_ps1": "dificil",
+    "atk_minimo_efeito": 1901,
+    "atk_minimo_efeito_fusao": 1801,
+    "taxa_de_poder": [
+      {
+        "atk_min": 3000,
+        "perder_lp": 500
+      },
+      {
+        "atk_min": 2800,
+        "perder_lp": 300
+      }
+    ],
+    "margem_bytes_ps1": 256,
+    "seed_quests": "eclipse-do-farao-1"
+  },
+  "magias": {
+    "destruicao": {
+      "Crush Card": {
+        "atk_min": 2000
+      },
+      "Warrior Elimination": {
+        "tipo": "Warrior"
+      },
+      "Eternal Rest": {
+        "tipo": "Zombie"
+      },
+      "Stain Storm": {
+        "tipo": "Machine"
+      },
+      "Eradicating Aerosol": {
+        "tipo": "Insect"
+      },
+      "Breath of Light": {
+        "tipo": "Fiend"
+      },
+      "Eternal Drought": {
+        "tipo": "Dragon"
+      }
+    }
+  },
+  "arquetipos": {
+    "Dragon": {
+      "nome": "Furia Draconica",
+      "efeitos": [
+        {
+          "acao": "bonus_por_tipo",
+          "tipo": "Dragon",
+          "valor": 150,
+          "def": 0,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Spellcaster": {
+      "nome": "Circulo Arcano",
+      "efeitos": [
+        {
+          "acao": "monstro_imune_magia"
+        },
+        {
+          "acao": "aura_tipo",
+          "tipo": "Spellcaster",
+          "valor": 200,
+          "def": 200,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Zombie": {
+      "nome": "Legiao dos Mortos",
+      "efeitos": [
+        {
+          "acao": "bonus_cemiterio_tipo",
+          "tipo": "Zombie",
+          "valor": 200,
+          "def": 200,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Warrior": {
+      "nome": "Grito de Guerra",
+      "efeitos": [
+        {
+          "acao": "aura_tipo",
+          "tipo": "Warrior",
+          "valor": 200,
+          "def": 0,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Beast-Warrior": {
+      "nome": "Domador",
+      "efeitos": [
+        {
+          "acao": "dano_perfurante"
+        },
+        {
+          "acao": "bonus_por_tipo",
+          "tipo": "Beast",
+          "valor": 200,
+          "def": 0,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Beast": {
+      "nome": "Matilha",
+      "efeitos": [
+        {
+          "acao": "ataque_primeiro_turno"
+        },
+        {
+          "acao": "bonus_por_tipo",
+          "tipo": "Beast",
+          "valor": 150,
+          "def": 0,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Winged Beast": {
+      "nome": "Rasante",
+      "efeitos": [
+        {
+          "acao": "nao_bloqueavel"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 300
+        }
+      ]
+    },
+    "Fiend": {
+      "nome": "Pacto Sombrio",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Todos",
+          "valor": 300,
+          "def": 300,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 200
+        }
+      ]
+    },
+    "Fairy": {
+      "nome": "Bencao",
+      "efeitos": [
+        {
+          "acao": "cura_lp",
+          "valor": 800
+        },
+        {
+          "acao": "monstro_imune_armadilha"
+        }
+      ]
+    },
+    "Insect": {
+      "nome": "Enxame",
+      "efeitos": [
+        {
+          "acao": "marcador_por_entrada_tipo",
+          "tipo": "Insect",
+          "valor": 150,
+          "def": 150,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Dinosaur": {
+      "nome": "Predador Primitivo",
+      "efeitos": [
+        {
+          "acao": "ataque_primeiro_turno"
+        },
+        {
+          "acao": "dano_perfurante"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 200
+        }
+      ]
+    },
+    "Reptile": {
+      "nome": "Escamas Antigas",
+      "efeitos": [
+        {
+          "acao": "monstro_imune_magia"
+        },
+        {
+          "acao": "bonus_cemiterio_tipo",
+          "tipo": "Reptile",
+          "valor": 150,
+          "def": 150,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Fish": {
+      "nome": "Cardume",
+      "efeitos": [
+        {
+          "acao": "aura_tipo",
+          "tipo": "Todos",
+          "atributo": "Water",
+          "valor": 200,
+          "def": 200,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Sea Serpent": {
+      "nome": "Mare Alta",
+      "efeitos": [
+        {
+          "acao": "bonus_por_tipo",
+          "tipo": "Aqua",
+          "valor": 250,
+          "def": 0,
+          "escopo": "aliados"
+        },
+        {
+          "acao": "monstro_imune_armadilha"
+        }
+      ]
+    },
+    "Machine": {
+      "nome": "Protocolo Duplo",
+      "efeitos": [
+        {
+          "acao": "ataques_multiplos",
+          "valor": 2
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 400
+        }
+      ]
+    },
+    "Thunder": {
+      "nome": "Descarga",
+      "efeitos": [
+        {
+          "acao": "dano_lp",
+          "valor": 500
+        }
+      ]
+    },
+    "Aqua": {
+      "nome": "Corrente",
+      "efeitos": [
+        {
+          "acao": "monstro_imune_armadilha"
+        },
+        {
+          "acao": "aura_tipo",
+          "tipo": "Sea Serpent",
+          "valor": 200,
+          "def": 0,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Pyro": {
+      "nome": "Combustao",
+      "efeitos": [
+        {
+          "acao": "dano_lp",
+          "valor": 700
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 200
+        }
+      ]
+    },
+    "Rock": {
+      "nome": "Muralha",
+      "efeitos": [
+        {
+          "acao": "monstro_imune_magia"
+        },
+        {
+          "acao": "bonus_por_tipo",
+          "tipo": "Rock",
+          "valor": 0,
+          "def": 400,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Plant": {
+      "nome": "Raizes",
+      "efeitos": [
+        {
+          "acao": "cura_lp",
+          "valor": 500
+        },
+        {
+          "acao": "bonus_cemiterio_tipo",
+          "tipo": "Plant",
+          "valor": 150,
+          "def": 150,
+          "escopo": "aliados"
+        }
+      ]
+    }
+  },
+  "assinaturas": {
+    "Blue-eyes White Dragon": {
+      "nome": "Rajada Branca",
+      "efeitos": [
+        {
+          "acao": "dano_perfurante"
+        },
+        {
+          "acao": "bonus_por_carta_id",
+          "carta": "Blue-eyes White Dragon",
+          "origem": "campo",
+          "valor": 300,
+          "def": 0,
+          "escopo": "aliados"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 300
+        }
+      ]
+    },
+    "Blue-eyes Ultimate Dragon": {
+      "nome": "Explosao Final",
+      "efeitos": [
+        {
+          "acao": "ataques_multiplos",
+          "valor": 3
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 1000
+        }
+      ]
+    },
+    "Tri-horned Dragon": {
+      "nome": "Chifres do Fim",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Dinosaur",
+          "valor": 600,
+          "def": 600,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 300
+        }
+      ]
+    },
+    "Red-eyes B. Dragon": {
+      "nome": "Potencial Sombrio",
+      "efeitos": [
+        {
+          "acao": "bonus_cemiterio_tipo",
+          "tipo": "Dragon",
+          "valor": 300,
+          "def": 0,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "B. Skull Dragon": {
+      "nome": "Chama Mortal",
+      "efeitos": [
+        {
+          "acao": "dano_lp",
+          "valor": 1000
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 400
+        }
+      ]
+    },
+    "Meteor B. Dragon": {
+      "nome": "Impacto",
+      "efeitos": [
+        {
+          "acao": "dano_lp",
+          "valor": 1200
+        },
+        {
+          "acao": "ataque_primeiro_turno"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 600
+        }
+      ]
+    },
+    "Gaia the Dragon Champion": {
+      "nome": "Investida Celeste",
+      "efeitos": [
+        {
+          "acao": "ataques_multiplos",
+          "valor": 2
+        },
+        {
+          "acao": "dano_perfurante"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 500
+        }
+      ]
+    },
+    "Thousand Dragon": {
+      "nome": "Milenio",
+      "efeitos": [
+        {
+          "acao": "monstro_indestrutivel"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 600
+        }
+      ]
+    },
+    "Twin-headed Thunder Dragon": {
+      "nome": "Trovao Gemeo",
+      "efeitos": [
+        {
+          "acao": "ataques_multiplos",
+          "valor": 2
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 400
+        }
+      ]
+    },
+    "Serpent Night Dragon": {
+      "nome": "Serpente Noturna",
+      "efeitos": [
+        {
+          "acao": "nao_bloqueavel"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 400
+        }
+      ]
+    },
+    "Curse of Dragon": {
+      "nome": "Montaria",
+      "efeitos": [
+        {
+          "acao": "bonus_por_tipo",
+          "tipo": "Warrior",
+          "valor": 400,
+          "def": 0,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Dark Magician": {
+      "nome": "Eco dos Magos",
+      "efeitos": [
+        {
+          "acao": "monstro_imune_magia"
+        },
+        {
+          "acao": "bonus_cemiterio_tipo",
+          "tipo": "Spellcaster",
+          "valor": 300,
+          "def": 300,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Magician of Black Chaos": {
+      "nome": "Caos Negro",
+      "efeitos": [
+        {
+          "acao": "monstro_imune_magia"
+        },
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Todos",
+          "valor": 500,
+          "def": 500,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 400
+        }
+      ]
+    },
+    "Dark Elf": {
+      "nome": "Eclipse Elfico",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Fairy",
+          "valor": 400,
+          "def": 400,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "aura_tipo",
+          "tipo": "Spellcaster",
+          "valor": 200,
+          "def": 200,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Gaia the Fierce Knight": {
+      "nome": "Carga",
+      "efeitos": [
+        {
+          "acao": "ataque_primeiro_turno"
+        },
+        {
+          "acao": "dano_perfurante"
+        },
+        {
+          "acao": "bonus_por_carta_id",
+          "carta": "Curse of Dragon",
+          "origem": "campo",
+          "valor": 500,
+          "def": 0,
+          "escopo": "aliados"
+        }
+      ]
+    },
+    "Black Luster Soldier": {
+      "nome": "Lamina do Inicio",
+      "efeitos": [
+        {
+          "acao": "ataques_multiplos",
+          "valor": 2
+        },
+        {
+          "acao": "monstro_imune_magia"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 600
+        }
+      ]
+    },
+    "Summoned Skull": {
+      "nome": "Eclipse",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Todos",
+          "atributo": "Light",
+          "valor": 500,
+          "def": 500,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 300
+        }
+      ]
+    },
+    "Kazejin": {
+      "nome": "Vendaval",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Winged Beast",
+          "valor": 600,
+          "def": 600,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "monstro_imune_armadilha"
+        }
+      ]
+    },
+    "Sanga of the Thunder": {
+      "nome": "Raio Seco",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Todos",
+          "atributo": "Water",
+          "valor": 500,
+          "def": 500,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "dano_lp",
+          "valor": 300
+        }
+      ]
+    },
+    "Suijin": {
+      "nome": "Diluvio",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Pyro",
+          "valor": 600,
+          "def": 600,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "monstro_imune_magia"
+        }
+      ]
+    },
+    "Gate Guardian": {
+      "nome": "Portao Selado",
+      "efeitos": [
+        {
+          "acao": "monstro_indestrutivel"
+        },
+        {
+          "acao": "monstro_imune_magia"
+        },
+        {
+          "acao": "monstro_imune_armadilha"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 1000
+        }
+      ]
+    },
+    "Zoa": {
+      "nome": "Devora-Magos",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Spellcaster",
+          "valor": 500,
+          "def": 500,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 300
+        }
+      ]
+    },
+    "Labyrinth Tank": {
+      "nome": "Esmaga-Guerreiros",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Warrior",
+          "valor": 400,
+          "def": 400,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "monstro_imune_armadilha"
+        }
+      ]
+    },
+    "Perfectly Ultimate Great Moth": {
+      "nome": "Metamorfose",
+      "efeitos": [
+        {
+          "acao": "marcador_por_entrada_tipo",
+          "tipo": "Insect",
+          "valor": 300,
+          "def": 300,
+          "escopo": "todos"
+        },
+        {
+          "acao": "monstro_imune_armadilha"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 500
+        }
+      ]
+    },
+    "Great Moth": {
+      "nome": "Po Toxico",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Plant",
+          "valor": 500,
+          "def": 500,
+          "escopo": "inimigos"
+        }
+      ]
+    },
+    "Crimson Sunbird": {
+      "nome": "Ave Cacadora",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Insect",
+          "valor": 500,
+          "def": 500,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "nao_bloqueavel"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 300
+        }
+      ]
+    },
+    "Harpie Lady Sisters": {
+      "nome": "Triplo Rasante",
+      "efeitos": [
+        {
+          "acao": "ataques_multiplos",
+          "valor": 3
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 300
+        }
+      ]
+    },
+    "Cosmo Queen": {
+      "nome": "Gravidade Estelar",
+      "efeitos": [
+        {
+          "acao": "monstro_imune_magia"
+        },
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Todos",
+          "valor": 400,
+          "def": 0,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 400
+        }
+      ]
+    },
+    "Javelin Beetle": {
+      "nome": "Lanca",
+      "efeitos": [
+        {
+          "acao": "dano_perfurante"
+        },
+        {
+          "acao": "ataque_primeiro_turno"
+        }
+      ]
+    },
+    "Metalzoa": {
+      "nome": "Roleta de Aco",
+      "efeitos": [
+        {
+          "acao": "dano_lp",
+          "valor": 800
+        },
+        {
+          "acao": "ataques_multiplos",
+          "valor": 2
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 600
+        }
+      ]
+    },
+    "Machine King": {
+      "nome": "Comando",
+      "efeitos": [
+        {
+          "acao": "bonus_por_tipo",
+          "tipo": "Machine",
+          "valor": 200,
+          "def": 0,
+          "escopo": "aliados"
+        },
+        {
+          "acao": "monstro_imune_armadilha"
+        }
+      ]
+    },
+    "Launcher Spider": {
+      "nome": "Bombardeio",
+      "efeitos": [
+        {
+          "acao": "dano_lp",
+          "valor": 600
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 200
+        }
+      ]
+    },
+    "#442": {
+      "nome": "Ferrugem",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Machine",
+          "valor": 500,
+          "def": 500,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "monstro_imune_armadilha"
+        }
+      ]
+    },
+    "#716": {
+      "nome": "Mata-Dragoes",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Dragon",
+          "valor": 500,
+          "def": 500,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "perder_lp_por_ataque",
+          "valor": 200
+        }
+      ]
+    },
+    "Swordstalker": {
+      "nome": "Exorcista",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Fiend",
+          "valor": 400,
+          "def": 400,
+          "escopo": "inimigos"
+        }
+      ]
+    },
+    "Rabid Horseman": {
+      "nome": "Cacador de Feras",
+      "efeitos": [
+        {
+          "acao": "enfraquecer_tipo_entrada",
+          "tipo": "Beast",
+          "valor": 400,
+          "def": 400,
+          "escopo": "inimigos"
+        },
+        {
+          "acao": "dano_perfurante"
+        }
+      ]
+    },
+    "Great Mammoth of Goldfine": {
+      "nome": "Fossil Vivo",
+      "efeitos": [
+        {
+          "acao": "bonus_cemiterio_tipo",
+          "tipo": "Zombie",
+          "valor": 300,
+          "def": 300,
+          "escopo": "aliados"
+        }
+      ]
+    }
+  },
+  "fusoes": [
+    {
+      "a": "Time Wizard",
+      "b": "Mystical Elf",
+      "resultado": "Dark Elf",
+      "nome": "Elfa envelhecida pelo tempo"
+    },
+    {
+      "a": "Time Wizard",
+      "b": "Dark Elf",
+      "resultado": "Dark Magician",
+      "nome": "O aprendiz vira mestre"
+    },
+    {
+      "a": "Time Wizard",
+      "b": "Dark Magician",
+      "resultado": "Magician of Black Chaos",
+      "nome": "Caos do tempo"
+    },
+    {
+      "a": "Time Wizard",
+      "b": "Cocoon of Evolution",
+      "resultado": "Perfectly Ultimate Great Moth",
+      "nome": "Mil anos em um turno"
+    },
+    {
+      "a": "Time Wizard",
+      "b": "Petit Moth",
+      "resultado": "Great Moth",
+      "nome": "Crescimento acelerado"
+    },
+    {
+      "a": "Time Wizard",
+      "b": "Machine King",
+      "resultado": "Metalzoa",
+      "nome": "Atualizacao do futuro"
+    },
+    {
+      "a": "Time Wizard",
+      "b": "Celtic Guardian",
+      "resultado": "Gaia the Fierce Knight",
+      "nome": "Cavaleiro de outra era"
+    },
+    {
+      "a": "Time Wizard",
+      "b": "Labyrinth Wall",
+      "resultado": "Labyrinth Tank",
+      "nome": "O muro que anda"
+    },
+    {
+      "a": "Gaia the Fierce Knight",
+      "b": "Dark Magician",
+      "resultado": "Black Luster Soldier",
+      "nome": "Lamina e feitico"
+    },
+    {
+      "a": "Kazejin",
+      "b": "Sanga of the Thunder",
+      "resultado": "Gate Guardian",
+      "nome": "Portao sem agua"
+    },
+    {
+      "a": "Tri-horned Dragon",
+      "b": "Blue-eyes White Dragon",
+      "resultado": "Blue-eyes Ultimate Dragon",
+      "nome": "Tres cabecas"
+    },
+    {
+      "a": "Summoned Skull",
+      "b": "Red-eyes B. Dragon",
+      "resultado": "B. Skull Dragon",
+      "nome": "Caveira negra"
+    },
+    {
+      "a": "Kuriboh",
+      "b": "Summoned Skull",
+      "resultado": "Zoa",
+      "nome": "Sacrificio fofo"
+    },
+    {
+      "a": "#442",
+      "b": "Sanga of the Thunder",
+      "resultado": "Twin-headed Thunder Dragon",
+      "nome": "Tempestade no mar"
+    },
+    {
+      "a": "Baby Dragon",
+      "b": "Curse of Dragon",
+      "resultado": "Serpent Night Dragon",
+      "nome": "Ninho amaldicoado"
+    }
+  ],
+  "suporte": {
+    "equip_por_tipo": {
+      "Dragon": [
+        "Dragon Treasure"
+      ],
+      "Spellcaster": [
+        "Book of Secret Arts"
+      ],
+      "Zombie": [
+        "Violet Crystal"
+      ],
+      "Warrior": [
+        "Legendary Sword"
+      ],
+      "Beast-Warrior": [
+        "Mystical Moon"
+      ],
+      "Beast": [
+        "Beast Fangs"
+      ],
+      "Winged Beast": [
+        "Follow Wind"
+      ],
+      "Fiend": [
+        "Dark Energy"
+      ],
+      "Fairy": [
+        "Silver Bow and Arrow"
+      ],
+      "Insect": [
+        "Laser Cannon Armor"
+      ],
+      "Dinosaur": [
+        "Raise Body Heat"
+      ],
+      "Reptile": [
+        "Horn of the Unicorn"
+      ],
+      "Fish": [
+        "Steel Shell"
+      ],
+      "Sea Serpent": [
+        "Steel Shell"
+      ],
+      "Machine": [
+        "Machine Conversion Factory"
+      ],
+      "Thunder": [
+        "Electro-whip"
+      ],
+      "Aqua": [
+        "Power of Kaishin"
+      ],
+      "Pyro": [
+        "Axe of Despair"
+      ],
+      "Rock": [
+        "Horn of the Unicorn"
+      ],
+      "Plant": [
+        "Vile Germs"
+      ]
+    },
+    "campo_por_tipo": {
+      "Dragon": "Mountain",
+      "Spellcaster": "Yami",
+      "Zombie": "Wasteland",
+      "Warrior": "Sogen",
+      "Beast-Warrior": "Sogen",
+      "Beast": "Forest",
+      "Winged Beast": "Mountain",
+      "Fiend": "Yami",
+      "Fairy": "Mountain",
+      "Insect": "Forest",
+      "Dinosaur": "Wasteland",
+      "Reptile": "Wasteland",
+      "Fish": "Umi",
+      "Sea Serpent": "Umi",
+      "Machine": "Wasteland",
+      "Thunder": "Umi",
+      "Aqua": "Umi",
+      "Pyro": "Wasteland",
+      "Rock": "Wasteland",
+      "Plant": "Forest"
+    },
+    "niveis": {
+      "inicial": {
+        "copias_equip": 2,
+        "copias_campo": 1,
+        "cartas": [
+          [
+            "#681",
+            1
+          ],
+          [
+            "Sparks",
+            1
+          ],
+          [
+            "Mooyan Curry",
+            1
+          ]
+        ]
+      },
+      "medio": {
+        "copias_equip": 2,
+        "copias_campo": 2,
+        "cartas": [
+          [
+            "Axe of Despair",
+            1
+          ],
+          [
+            "#683",
+            1
+          ],
+          [
+            "#684",
+            1
+          ],
+          [
+            "Final Flame",
+            1
+          ],
+          [
+            "Red Medicine",
+            1
+          ],
+          [
+            "Dark Hole",
+            1
+          ]
+        ]
+      },
+      "avancado": {
+        "copias_equip": 2,
+        "copias_campo": 2,
+        "cartas": [
+          [
+            "Megamorph",
+            1
+          ],
+          [
+            "Axe of Despair",
+            1
+          ],
+          [
+            "#683",
+            1
+          ],
+          [
+            "#685",
+            1
+          ],
+          [
+            "#686",
+            1
+          ],
+          [
+            "Dark Hole",
+            1
+          ],
+          [
+            "Ookazi",
+            1
+          ],
+          [
+            "Soul of the Pure",
+            1
+          ],
+          [
+            "Swords of Revealing Light",
+            1
+          ]
+        ]
+      },
+      "final": {
+        "copias_equip": 2,
+        "copias_campo": 2,
+        "cartas": [
+          [
+            "Megamorph",
+            2
+          ],
+          [
+            "#683",
+            1
+          ],
+          [
+            "#685",
+            1
+          ],
+          [
+            "#684",
+            1
+          ],
+          [
+            "Raigeki",
+            1
+          ],
+          [
+            "Dark Hole",
+            1
+          ],
+          [
+            "Tremendous Fire",
+            1
+          ],
+          [
+            "Crush Card",
+            1
+          ],
+          [
+            "Swords of Revealing Light",
+            1
+          ]
+        ]
+      }
+    }
+  },
+  "faixas": {
+    "inicial": [
+      {
+        "atk_min": 1400,
+        "atk_max": 1700,
+        "cartas": 3,
+        "copias": 1
+      },
+      {
+        "atk_min": 1000,
+        "atk_max": 1399,
+        "cartas": 8,
+        "copias": 2
+      },
+      {
+        "atk_min": 0,
+        "atk_max": 999,
+        "cartas": 99,
+        "copias": 2
+      }
+    ],
+    "medio": [
+      {
+        "atk_min": 1900,
+        "atk_max": 2400,
+        "cartas": 3,
+        "copias": 1
+      },
+      {
+        "atk_min": 1500,
+        "atk_max": 1899,
+        "cartas": 6,
+        "copias": 2
+      },
+      {
+        "atk_min": 1000,
+        "atk_max": 1499,
+        "cartas": 99,
+        "copias": 2
+      }
+    ],
+    "avancado": [
+      {
+        "atk_min": 2200,
+        "atk_max": 2900,
+        "cartas": 4,
+        "copias": 1
+      },
+      {
+        "atk_min": 1700,
+        "atk_max": 2199,
+        "cartas": 6,
+        "copias": 2
+      },
+      {
+        "atk_min": 1200,
+        "atk_max": 1699,
+        "cartas": 99,
+        "copias": 2
+      }
+    ],
+    "final": [
+      {
+        "atk_min": 2500,
+        "atk_max": 5000,
+        "cartas": 5,
+        "copias": 1
+      },
+      {
+        "atk_min": 1900,
+        "atk_max": 2499,
+        "cartas": 6,
+        "copias": 2
+      },
+      {
+        "atk_min": 1400,
+        "atk_max": 1899,
+        "cartas": 99,
+        "copias": 2
+      }
+    ]
+  },
+  "contra": {
+    "Dragon": {
+      "cartas": [
+        "Eternal Drought",
+        "Crush Card"
+      ],
+      "monstros": [
+        "#716"
+      ]
+    },
+    "Spellcaster": {
+      "cartas": [
+        "#684",
+        "Swords of Revealing Light"
+      ],
+      "monstros": [
+        "Zoa"
+      ]
+    },
+    "Zombie": {
+      "cartas": [
+        "Eternal Rest",
+        "Soul of the Pure"
+      ],
+      "monstros": []
+    },
+    "Warrior": {
+      "cartas": [
+        "Warrior Elimination",
+        "#686"
+      ],
+      "monstros": [
+        "Labyrinth Tank"
+      ]
+    },
+    "Beast-Warrior": {
+      "cartas": [
+        "#683",
+        "#685"
+      ],
+      "monstros": [
+        "Labyrinth Tank"
+      ]
+    },
+    "Beast": {
+      "cartas": [
+        "#686",
+        "Final Flame"
+      ],
+      "monstros": [
+        "Rabid Horseman"
+      ]
+    },
+    "Winged Beast": {
+      "cartas": [
+        "#685",
+        "Crush Card"
+      ],
+      "monstros": [
+        "Kazejin"
+      ]
+    },
+    "Fiend": {
+      "cartas": [
+        "Breath of Light",
+        "Elf's Light"
+      ],
+      "monstros": [
+        "Swordstalker"
+      ]
+    },
+    "Fairy": {
+      "cartas": [
+        "Yami",
+        "Sword of Dark Destruction"
+      ],
+      "monstros": [
+        "Summoned Skull"
+      ]
+    },
+    "Insect": {
+      "cartas": [
+        "Eradicating Aerosol",
+        "Hinotama"
+      ],
+      "monstros": [
+        "Crimson Sunbird"
+      ]
+    },
+    "Dinosaur": {
+      "cartas": [
+        "Crush Card",
+        "#686"
+      ],
+      "monstros": [
+        "Tri-horned Dragon"
+      ]
+    },
+    "Reptile": {
+      "cartas": [
+        "#684",
+        "Ookazi"
+      ],
+      "monstros": [
+        "Zoa"
+      ]
+    },
+    "Fish": {
+      "cartas": [
+        "#681",
+        "Sparks"
+      ],
+      "monstros": [
+        "Sanga of the Thunder"
+      ]
+    },
+    "Sea Serpent": {
+      "cartas": [
+        "Mountain",
+        "#683"
+      ],
+      "monstros": [
+        "Sanga of the Thunder"
+      ]
+    },
+    "Machine": {
+      "cartas": [
+        "Stain Storm",
+        "Umi"
+      ],
+      "monstros": [
+        "#442"
+      ]
+    },
+    "Thunder": {
+      "cartas": [
+        "#681",
+        "Wasteland"
+      ],
+      "monstros": [
+        "Suijin"
+      ]
+    },
+    "Aqua": {
+      "cartas": [
+        "Mountain",
+        "#684"
+      ],
+      "monstros": [
+        "Sanga of the Thunder"
+      ]
+    },
+    "Pyro": {
+      "cartas": [
+        "Umi",
+        "Steel Shell"
+      ],
+      "monstros": [
+        "Suijin"
+      ]
+    },
+    "Rock": {
+      "cartas": [
+        "Crush Card",
+        "Tremendous Fire"
+      ],
+      "monstros": [
+        "Metalzoa"
+      ]
+    },
+    "Plant": {
+      "cartas": [
+        "Hinotama",
+        "Final Flame"
+      ],
+      "monstros": [
+        "Great Moth"
+      ]
+    }
+  },
+  "drops": {
+    "contra_monstros_a_partir_de": 9,
+    "peso_contra_monstro_pow": 25,
+    "peso_contra_carta_tec": 40,
+    "peso_contra_carta_bcd": 15,
+    "peso_assinatura_pow": 20,
+    "peso_forte_pow": 10,
+    "peso_suporte_tec": 15,
+    "peso_monstro_bcd": 10
+  },
+  "ordem_historia": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38
+  ],
+  "oponentes": [
+    {
+      "id": 1,
+      "nome": "Simon Muran",
+      "tema": "Luz do Templo",
+      "tipos": [
+        "Spellcaster",
+        "Fairy"
+      ],
+      "nivel": "inicial",
+      "assinaturas": [
+        [
+          "Mystical Elf",
+          2
+        ]
+      ],
+      "drops_extra": {
+        "bcd": [
+          [
+            "Mystical Elf",
+            20
+          ],
+          [
+            "Eternal Drought",
+            6
+          ],
+          [
+            "Warrior Elimination",
+            6
+          ]
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "nome": "Teana",
+      "tema": "Jardim Sagrado",
+      "tipos": [
+        "Fairy",
+        "Plant"
+      ],
+      "nivel": "inicial",
+      "drops_extra": {
+        "tec": [
+          [
+            "Kuriboh",
+            10
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Spellcaster",
+          "quantidade": 4
+        }
+      ],
+      "frase": "Mostre que a luz do templo te acompanha."
+    },
+    {
+      "id": 3,
+      "nome": "Jono",
+      "tema": "Arena de Sogen",
+      "tipos": [
+        "Warrior",
+        "Beast-Warrior"
+      ],
+      "nivel": "inicial",
+      "assinaturas": [
+        [
+          "Celtic Guardian",
+          2
+        ]
+      ],
+      "drops_extra": {
+        "bcd": [
+          [
+            "Celtic Guardian",
+            12
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Fairy",
+          "quantidade": 5
+        },
+        {
+          "tipo": "carta",
+          "alvo": "Mystical Elf",
+          "quantidade": 1
+        }
+      ],
+      "frase": "Quer lutar comigo? Paga a entrada primeiro!"
+    },
+    {
+      "id": 4,
+      "nome": "Villager 1",
+      "tema": "Caca na Floresta",
+      "tipos": [
+        "Beast",
+        "Insect"
+      ],
+      "nivel": "inicial",
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Spellcaster",
+          "quantidade": 6
+        }
+      ],
+      "frase": "A vila tem fome. Traga oferendas."
+    },
+    {
+      "id": 5,
+      "nome": "Villager 2",
+      "tema": "Pedreira",
+      "tipos": [
+        "Rock",
+        "Reptile"
+      ],
+      "nivel": "inicial",
+      "quest": [
+        {
+          "tipo": "atributo",
+          "alvo": "Light",
+          "quantidade": 6
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Fairy",
+          "quantidade": 3
+        }
+      ],
+      "frase": "Pedras nao se movem sem luz."
+    },
+    {
+      "id": 6,
+      "nome": "Villager 3",
+      "tema": "Pescadores do Nilo",
+      "tipos": [
+        "Aqua",
+        "Fish"
+      ],
+      "nivel": "inicial",
+      "quest": [
+        {
+          "tipo": "atributo",
+          "alvo": "Light",
+          "quantidade": 8
+        }
+      ],
+      "frase": "O rio cobra seu tributo."
+    },
+    {
+      "id": 7,
+      "nome": "Seto",
+      "tema": "Engenharia Draconica",
+      "tipos": [
+        "Dragon",
+        "Machine"
+      ],
+      "nivel": "medio",
+      "assinaturas": [
+        [
+          "Curse of Dragon",
+          1
+        ],
+        [
+          "Baby Dragon",
+          2
+        ]
+      ],
+      "drops_extra": {
+        "bcd": [
+          [
+            "Baby Dragon",
+            15
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Spellcaster",
+          "quantidade": 6
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Fairy",
+          "quantidade": 6
+        },
+        {
+          "tipo": "carta",
+          "alvo": "Eternal Drought",
+          "quantidade": 1
+        }
+      ],
+      "frase": "Sacerdote nao duela com mendigos. Pague."
+    },
+    {
+      "id": 8,
+      "nome": "Heishin",
+      "tema": "Feiticaria Proibida",
+      "tipos": [
+        "Fiend",
+        "Spellcaster"
+      ],
+      "nivel": "medio",
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Dragon",
+          "quantidade": 4
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Machine",
+          "quantidade": 4
+        }
+      ],
+      "frase": "O poder do Milenio exige sacrificio."
+    },
+    {
+      "id": 9,
+      "nome": "Rex Raptor",
+      "tema": "Era Jurassica",
+      "tipos": [
+        "Dinosaur",
+        "Dragon"
+      ],
+      "nivel": "medio",
+      "assinaturas": [
+        [
+          "Red-eyes B. Dragon",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Red-eyes B. Dragon",
+            6
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Dragon",
+          "quantidade": 6
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Spellcaster",
+          "quantidade": 6
+        }
+      ],
+      "frase": "Dinossauros comem fracos. Alimente-os."
+    },
+    {
+      "id": 10,
+      "nome": "Weevil Underwood",
+      "tema": "Colmeia",
+      "tipos": [
+        "Insect",
+        "Plant"
+      ],
+      "nivel": "medio",
+      "assinaturas": [
+        [
+          "Petit Moth",
+          2
+        ],
+        [
+          "Cocoon of Evolution",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "tec": [
+          [
+            "Cocoon of Evolution",
+            8
+          ]
+        ],
+        "bcd": [
+          [
+            "Petit Moth",
+            12
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Dinosaur",
+          "quantidade": 8
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Dragon",
+          "quantidade": 4
+        }
+      ],
+      "frase": "Hihihi. Insetos tem fome de feras grandes."
+    },
+    {
+      "id": 11,
+      "nome": "Mai Valentine",
+      "tema": "Danca das Harpias",
+      "tipos": [
+        "Winged Beast",
+        "Fairy"
+      ],
+      "nivel": "medio",
+      "assinaturas": [
+        [
+          "Harpie Lady Sisters",
+          1
+        ]
+      ],
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Insect",
+          "quantidade": 8
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Plant",
+          "quantidade": 6
+        }
+      ],
+      "frase": "Minhas harpias gostam de insetos."
+    },
+    {
+      "id": 12,
+      "nome": "Bandit Keith",
+      "tema": "Fabrica de Fogo",
+      "tipos": [
+        "Machine",
+        "Pyro"
+      ],
+      "nivel": "medio",
+      "assinaturas": [
+        [
+          "Machine King",
+          1
+        ],
+        [
+          "Launcher Spider",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Machine King",
+            6
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Winged Beast",
+          "quantidade": 8
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Fairy",
+          "quantidade": 8
+        }
+      ],
+      "frase": "Na America tudo tem preco, parceiro."
+    },
+    {
+      "id": 13,
+      "nome": "Shadi",
+      "tema": "Tumba Antiga",
+      "tipos": [
+        "Rock",
+        "Spellcaster"
+      ],
+      "nivel": "medio",
+      "drops_extra": {
+        "tec": [
+          [
+            "Time Wizard",
+            5
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Machine",
+          "quantidade": 8
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Pyro",
+          "quantidade": 6
+        }
+      ],
+      "frase": "A balanca pesa sua alma. Ofereca algo."
+    },
+    {
+      "id": 14,
+      "nome": "Yami Bakura",
+      "tema": "Cemiterio Vivo",
+      "tipos": [
+        "Zombie",
+        "Fiend"
+      ],
+      "nivel": "medio",
+      "assinaturas": [
+        [
+          "Summoned Skull",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Summoned Skull",
+            6
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Rock",
+          "quantidade": 8
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Spellcaster",
+          "quantidade": 8
+        }
+      ],
+      "frase": "Almas tem preco. A sua esta barata."
+    },
+    {
+      "id": 15,
+      "nome": "Pegasus",
+      "tema": "Ilusao Eletrica",
+      "tipos": [
+        "Spellcaster",
+        "Thunder"
+      ],
+      "nivel": "medio",
+      "drops_extra": {
+        "tec": [
+          [
+            "Time Wizard",
+            5
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Zombie",
+          "quantidade": 10
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Fiend",
+          "quantidade": 8
+        }
+      ],
+      "frase": "Vejo sua mente. Ela quer duelar."
+    },
+    {
+      "id": 16,
+      "nome": "Isis",
+      "tema": "Profecia do Nilo",
+      "tipos": [
+        "Fairy",
+        "Aqua"
+      ],
+      "nivel": "medio",
+      "assinaturas": [
+        [
+          "Suijin",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Dark Elf",
+            3
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Thunder",
+          "quantidade": 8
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Spellcaster",
+          "quantidade": 10
+        }
+      ],
+      "frase": "O colar mostrou sua derrota."
+    },
+    {
+      "id": 17,
+      "nome": "Kaiba",
+      "tema": "Dragao Branco",
+      "tipos": [
+        "Dragon"
+      ],
+      "nivel": "medio",
+      "assinaturas": [
+        [
+          "Blue-eyes White Dragon",
+          1
+        ],
+        [
+          "Curse of Dragon",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Blue-eyes White Dragon",
+            3
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Fairy",
+          "quantidade": 10
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Aqua",
+          "quantidade": 8
+        }
+      ],
+      "frase": "Prove que nao e um amador."
+    },
+    {
+      "id": 18,
+      "nome": "Mage Soldier",
+      "tema": "Guarda Real",
+      "tipos": [
+        "Warrior",
+        "Spellcaster"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Gaia the Fierce Knight",
+          1
+        ],
+        [
+          "Celtic Guardian",
+          2
+        ]
+      ],
+      "drops_extra": {
+        "tec": [
+          [
+            "Celtic Guardian",
+            15
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Dragon",
+          "quantidade": 12
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Machine",
+          "quantidade": 8
+        }
+      ],
+      "frase": "Ninguem passa pela guarda sem tributo."
+    },
+    {
+      "id": 19,
+      "nome": "Jono 2nd",
+      "tema": "Fera Domada",
+      "tipos": [
+        "Warrior",
+        "Beast-Warrior"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Rabid Horseman",
+          1
+        ]
+      ],
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Dinosaur",
+          "quantidade": 10
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Insect",
+          "quantidade": 10
+        }
+      ],
+      "frase": "Eu treinei. Agora o preco subiu."
+    },
+    {
+      "id": 20,
+      "nome": "Teana 2nd",
+      "tema": "Tempestade Sagrada",
+      "tipos": [
+        "Fairy",
+        "Thunder"
+      ],
+      "nivel": "avancado",
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Winged Beast",
+          "quantidade": 10
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Zombie",
+          "quantidade": 10
+        }
+      ],
+      "frase": "Nao vou mais pegar leve com voce."
+    },
+    {
+      "id": 21,
+      "nome": "Ocean Mage",
+      "tema": "Abismo",
+      "tipos": [
+        "Aqua",
+        "Sea Serpent"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Suijin",
+          1
+        ],
+        [
+          "#442",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Suijin",
+            4
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Warrior",
+          "quantidade": 12
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Thunder",
+          "quantidade": 10
+        }
+      ],
+      "frase": "O mar so se abre para quem paga."
+    },
+    {
+      "id": 22,
+      "nome": "High Mage Secmeton",
+      "tema": "Leviata",
+      "tipos": [
+        "Sea Serpent",
+        "Fish"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "#442",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "#442",
+            5
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Aqua",
+          "quantidade": 12
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Sea Serpent",
+          "quantidade": 8
+        }
+      ],
+      "frase": "As profundezas pedem mais oferendas."
+    },
+    {
+      "id": 23,
+      "nome": "Forest Mage",
+      "tema": "Floresta Faminta",
+      "tipos": [
+        "Plant",
+        "Insect"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Great Moth",
+          1
+        ]
+      ],
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Insect",
+          "quantidade": 12
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Plant",
+          "quantidade": 12
+        }
+      ],
+      "frase": "A floresta devora quem chega de maos vazias."
+    },
+    {
+      "id": 24,
+      "nome": "High Mage Anubisius",
+      "tema": "Rei da Selva",
+      "tipos": [
+        "Beast",
+        "Plant"
+      ],
+      "nivel": "avancado",
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Plant",
+          "quantidade": 15
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Insect",
+          "quantidade": 10
+        }
+      ],
+      "frase": "Anubis julga. Traga seu tributo."
+    },
+    {
+      "id": 25,
+      "nome": "Mountain Mage",
+      "tema": "Pico das Tempestades",
+      "tipos": [
+        "Winged Beast",
+        "Dragon"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Crimson Sunbird",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Kazejin",
+            3
+          ],
+          [
+            "Tri-horned Dragon",
+            2
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Winged Beast",
+          "quantidade": 12
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Dragon",
+          "quantidade": 10
+        }
+      ],
+      "frase": "O vento so leva quem e leve."
+    },
+    {
+      "id": 26,
+      "nome": "High Mage Atenza",
+      "tema": "Trovao Ancestral",
+      "tipos": [
+        "Dragon",
+        "Thunder"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Sanga of the Thunder",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Sanga of the Thunder",
+            3
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Winged Beast",
+          "quantidade": 15
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Dragon",
+          "quantidade": 12
+        }
+      ],
+      "frase": "O trovao responde a quem oferece."
+    },
+    {
+      "id": 27,
+      "nome": "Desert Mage",
+      "tema": "Areias Mortas",
+      "tipos": [
+        "Rock",
+        "Zombie"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Great Mammoth of Goldfine",
+          1
+        ]
+      ],
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Rock",
+          "quantidade": 12
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Zombie",
+          "quantidade": 12
+        }
+      ],
+      "frase": "O deserto guarda ossos. Traga mais."
+    },
+    {
+      "id": 28,
+      "nome": "High Mage Martis",
+      "tema": "Pantano Primitivo",
+      "tipos": [
+        "Reptile",
+        "Dinosaur"
+      ],
+      "nivel": "avancado",
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Rock",
+          "quantidade": 15
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Dinosaur",
+          "quantidade": 12
+        }
+      ],
+      "frase": "Escamas antigas exigem respeito."
+    },
+    {
+      "id": 29,
+      "nome": "Meadow Mage",
+      "tema": "Cavalaria de Sogen",
+      "tipos": [
+        "Beast-Warrior",
+        "Warrior"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Gaia the Fierce Knight",
+          1
+        ]
+      ],
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Warrior",
+          "quantidade": 15
+        }
+      ],
+      "frase": "A campina pertence aos cavaleiros."
+    },
+    {
+      "id": 30,
+      "nome": "High Mage Kepura",
+      "tema": "Besta Coroada",
+      "tipos": [
+        "Beast-Warrior",
+        "Beast"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Rabid Horseman",
+          1
+        ]
+      ],
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Beast-Warrior",
+          "quantidade": 15
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Warrior",
+          "quantidade": 15
+        }
+      ],
+      "frase": "Feras e guerreiros me servem."
+    },
+    {
+      "id": 31,
+      "nome": "Labyrinth Mage",
+      "tema": "Labirinto Vivo",
+      "tipos": [
+        "Rock",
+        "Warrior"
+      ],
+      "nivel": "avancado",
+      "assinaturas": [
+        [
+          "Labyrinth Wall",
+          2
+        ]
+      ],
+      "drops_extra": {
+        "tec": [
+          [
+            "Time Wizard",
+            4
+          ]
+        ],
+        "bcd": [
+          [
+            "Labyrinth Wall",
+            12
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Spellcaster",
+          "quantidade": 20
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Warrior",
+          "quantidade": 15
+        }
+      ],
+      "frase": "Todo labirinto tem um pedagio."
+    },
+    {
+      "id": 32,
+      "nome": "Seto 2nd",
+      "tema": "Arsenal do Sacerdote",
+      "tipos": [
+        "Dragon",
+        "Machine"
+      ],
+      "nivel": "final",
+      "assinaturas": [
+        [
+          "Blue-eyes White Dragon",
+          1
+        ],
+        [
+          "Metalzoa",
+          1
+        ]
+      ],
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Rock",
+          "quantidade": 15
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Warrior",
+          "quantidade": 15
+        },
+        {
+          "tipo": "carta",
+          "alvo": "Labyrinth Wall",
+          "quantidade": 3
+        }
+      ],
+      "frase": "Voce passou do labirinto. Nao de mim."
+    },
+    {
+      "id": 33,
+      "nome": "Guardian Sebek",
+      "tema": "Fornalha",
+      "tipos": [
+        "Pyro",
+        "Fiend"
+      ],
+      "nivel": "final",
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Dragon",
+          "quantidade": 15
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Aqua",
+          "quantidade": 15
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Plant",
+          "quantidade": 15
+        }
+      ],
+      "frase": "Sebek guarda o santuario. Pague."
+    },
+    {
+      "id": 34,
+      "nome": "Guardian Neku",
+      "tema": "Ritual Negro",
+      "tipos": [
+        "Fiend",
+        "Spellcaster"
+      ],
+      "nivel": "final",
+      "assinaturas": [
+        [
+          "Zoa",
+          1
+        ]
+      ],
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Pyro",
+          "quantidade": 15
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Fiend",
+          "quantidade": 15
+        }
+      ],
+      "frase": "As trevas pedem tudo que voce tem."
+    },
+    {
+      "id": 35,
+      "nome": "Heishin 2nd",
+      "tema": "Dragao das Trevas",
+      "tipos": [
+        "Fiend",
+        "Dragon"
+      ],
+      "nivel": "final",
+      "assinaturas": [
+        [
+          "Summoned Skull",
+          1
+        ],
+        [
+          "Red-eyes B. Dragon",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "tec": [
+          [
+            "Dark Elf",
+            4
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Fiend",
+          "quantidade": 20
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Spellcaster",
+          "quantidade": 20
+        }
+      ],
+      "frase": "O Milenio sera meu. Sua alma tambem."
+    },
+    {
+      "id": 36,
+      "nome": "Seto 3rd",
+      "tema": "Olhos Azuis",
+      "tipos": [
+        "Dragon"
+      ],
+      "nivel": "final",
+      "assinaturas": [
+        [
+          "Blue-eyes White Dragon",
+          2
+        ],
+        [
+          "Tri-horned Dragon",
+          1
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Blue-eyes White Dragon",
+            4
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Dragon",
+          "quantidade": 20
+        },
+        {
+          "tipo": "tipo",
+          "alvo": "Fiend",
+          "quantidade": 15
+        }
+      ],
+      "frase": "Tres dragoes. Uma unica chance."
+    },
+    {
+      "id": 37,
+      "nome": "DarkNite",
+      "tema": "Noite Eterna",
+      "tipos": [
+        "Fiend"
+      ],
+      "nivel": "final",
+      "assinaturas": [
+        [
+          "Summoned Skull",
+          2
+        ]
+      ],
+      "drops_extra": {
+        "pow": [
+          [
+            "Dark Magician",
+            2
+          ]
+        ]
+      },
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Dragon",
+          "quantidade": 25
+        },
+        {
+          "tipo": "atributo",
+          "alvo": "Light",
+          "quantidade": 20
+        }
+      ],
+      "frase": "Ninguem enfrenta a noite sem pagar."
+    },
+    {
+      "id": 38,
+      "nome": "Nitemare",
+      "tema": "Eclipse do Farao",
+      "tipos": [
+        "Dragon",
+        "Spellcaster"
+      ],
+      "nivel": "final",
+      "assinaturas": [
+        [
+          "Dark Magician",
+          1
+        ],
+        [
+          "Blue-eyes White Dragon",
+          1
+        ],
+        [
+          "Cosmo Queen",
+          1
+        ]
+      ],
+      "quest": [
+        {
+          "tipo": "tipo",
+          "alvo": "Fiend",
+          "quantidade": 25
+        },
+        {
+          "tipo": "atributo",
+          "alvo": "Dark",
+          "quantidade": 25
+        }
+      ],
+      "frase": "O eclipse chegou. Entregue sua luz."
+    },
+    {
+      "id": 39,
+      "nome": "Duel Master K",
+      "tema": "Maquina Final",
+      "tipos": [
+        "Machine",
+        "Thunder"
+      ],
+      "nivel": "final",
+      "assinaturas": [
+        [
+          "Metalzoa",
+          1
+        ],
+        [
+          "Launcher Spider",
+          1
+        ]
+      ]
+    }
+  ],
+  "iniciais": [
+    {
+      "nome": "Chamas do Dragao",
+      "tipos": [
+        "Dragon",
+        "Pyro"
+      ],
+      "triplo_equip": "Dragon Treasure",
+      "equip_2": "Horn of the Unicorn",
+      "campo": "Mountain",
+      "armadilha": "#681",
+      "cura": "Mooyan Curry",
+      "remocao": "Raigeki"
+    },
+    {
+      "nome": "Floresta Selvagem",
+      "tipos": [
+        "Beast",
+        "Plant"
+      ],
+      "triplo_equip": "Beast Fangs",
+      "equip_2": "Vile Germs",
+      "campo": "Forest",
+      "armadilha": "#686",
+      "cura": "Red Medicine",
+      "remocao": "Dark Hole"
+    },
+    {
+      "nome": "Laminas de Sogen",
+      "tipos": [
+        "Warrior",
+        "Beast-Warrior"
+      ],
+      "triplo_equip": "Legendary Sword",
+      "equip_2": "Mystical Moon",
+      "campo": "Sogen",
+      "armadilha": "#683",
+      "cura": "Mooyan Curry",
+      "remocao": "Dark Hole"
+    },
+    {
+      "nome": "Mares Profundas",
+      "tipos": [
+        "Aqua",
+        "Fish"
+      ],
+      "triplo_equip": "Power of Kaishin",
+      "equip_2": "Steel Shell",
+      "campo": "Umi",
+      "armadilha": "#685",
+      "cura": "Red Medicine",
+      "remocao": "Raigeki"
+    },
+    {
+      "nome": "Sombras de Yami",
+      "tipos": [
+        "Fiend",
+        "Zombie"
+      ],
+      "triplo_equip": "Dark Energy",
+      "equip_2": "Violet Crystal",
+      "campo": "Yami",
+      "armadilha": "#684",
+      "cura": "Red Medicine",
+      "remocao": "Dark Hole"
+    },
+    {
+      "nome": "Tempestade de Aco",
+      "tipos": [
+        "Machine",
+        "Thunder"
+      ],
+      "triplo_equip": "Machine Conversion Factory",
+      "equip_2": "Electro-whip",
+      "campo": "Wasteland",
+      "armadilha": "#681",
+      "cura": "Goblin's Secret Remedy",
+      "remocao": "Raigeki"
+    }
+  ],
+  "inicial_faixa_monstros": {
+    "atk_max": 1300,
+    "atk_max_forte": 1600
+  },
+  "referencias": {
+    "Blue-eyes White Dragon": [
+      1,
+      "Dragon",
+      3000
+    ],
+    "Mystical Elf": [
+      2,
+      "Spellcaster",
+      800
+    ],
+    "Baby Dragon": [
+      4,
+      "Dragon",
+      1200
+    ],
+    "Time Wizard": [
+      16,
+      "Spellcaster",
+      500
+    ],
+    "Summoned Skull": [
+      22,
+      "Fiend",
+      2500
+    ],
+    "Dark Magician": [
+      35,
+      "Spellcaster",
+      2500
+    ],
+    "Gaia the Dragon Champion": [
+      37,
+      "Dragon",
+      2600
+    ],
+    "Gaia the Fierce Knight": [
+      38,
+      "Warrior",
+      2300
+    ],
+    "Curse of Dragon": [
+      39,
+      "Dragon",
+      2000
+    ],
+    "Celtic Guardian": [
+      41,
+      "Warrior",
+      1400
+    ],
+    "Great Moth": [
+      57,
+      "Insect",
+      2600
+    ],
+    "Kuriboh": [
+      58,
+      "Fiend",
+      300
+    ],
+    "Harpie Lady Sisters": [
+      63,
+      "Winged Beast",
+      1950
+    ],
+    "Perfectly Ultimate Great Moth": [
+      67,
+      "Insect",
+      3500
+    ],
+    "Thousand Dragon": [
+      69,
+      "Dragon",
+      2400
+    ],
+    "Cocoon of Evolution": [
+      72,
+      "Insect",
+      0
+    ],
+    "Red-eyes B. Dragon": [
+      82,
+      "Dragon",
+      2400
+    ],
+    "Rabid Horseman": [
+      92,
+      "Beast-Warrior",
+      2000
+    ],
+    "B. Skull Dragon": [
+      217,
+      "Dragon",
+      3200
+    ],
+    "Petit Moth": [
+      278,
+      "Insect",
+      300
+    ],
+    "Black Luster Soldier": [
+      364,
+      "Warrior",
+      3000
+    ],
+    "Labyrinth Wall": [
+      366,
+      "Rock",
+      0
+    ],
+    "Labyrinth Tank": [
+      370,
+      "Machine",
+      2400
+    ],
+    "Sanga of the Thunder": [
+      371,
+      "Thunder",
+      2600
+    ],
+    "Kazejin": [
+      372,
+      "Spellcaster",
+      2400
+    ],
+    "Suijin": [
+      373,
+      "Aqua",
+      2500
+    ],
+    "Gate Guardian": [
+      374,
+      "Warrior",
+      3750
+    ],
+    "Swordstalker": [
+      378,
+      "Warrior",
+      2000
+    ],
+    "Blue-eyes Ultimate Dragon": [
+      380,
+      "Dragon",
+      4500
+    ],
+    "Launcher Spider": [
+      390,
+      "Machine",
+      2200
+    ],
+    "Zoa": [
+      391,
+      "Fiend",
+      2600
+    ],
+    "Metalzoa": [
+      392,
+      "Machine",
+      3000
+    ],
+    "Machine King": [
+      407,
+      "Machine",
+      2200
+    ],
+    "Crimson Sunbird": [
+      467,
+      "Winged Beast",
+      2300
+    ],
+    "Dark Elf": [
+      551,
+      "Spellcaster",
+      2000
+    ],
+    "Great Mammoth of Goldfine": [
+      564,
+      "Zombie",
+      2200
+    ],
+    "Twin-headed Thunder Dragon": [
+      613,
+      "Thunder",
+      2800
+    ],
+    "Tri-horned Dragon": [
+      705,
+      "Dragon",
+      2850
+    ],
+    "Serpent Night Dragon": [
+      706,
+      "Dragon",
+      2350
+    ],
+    "Cosmo Queen": [
+      708,
+      "Spellcaster",
+      2900
+    ],
+    "Meteor B. Dragon": [
+      713,
+      "Dragon",
+      3500
+    ],
+    "Javelin Beetle": [
+      717,
+      "Insect",
+      2450
+    ],
+    "Magician of Black Chaos": [
+      722,
+      "Spellcaster",
+      2800
+    ],
+    "Legendary Sword": [
+      301,
+      "Equip",
+      null
+    ],
+    "Sword of Dark Destruction": [
+      302,
+      "Equip",
+      null
+    ],
+    "Dark Energy": [
+      303,
+      "Equip",
+      null
+    ],
+    "Axe of Despair": [
+      304,
+      "Equip",
+      null
+    ],
+    "Laser Cannon Armor": [
+      305,
+      "Equip",
+      null
+    ],
+    "Elf's Light": [
+      307,
+      "Equip",
+      null
+    ],
+    "Beast Fangs": [
+      308,
+      "Equip",
+      null
+    ],
+    "Steel Shell": [
+      309,
+      "Equip",
+      null
+    ],
+    "Vile Germs": [
+      310,
+      "Equip",
+      null
+    ],
+    "Silver Bow and Arrow": [
+      312,
+      "Equip",
+      null
+    ],
+    "Horn of the Unicorn": [
+      314,
+      "Equip",
+      null
+    ],
+    "Dragon Treasure": [
+      315,
+      "Equip",
+      null
+    ],
+    "Electro-whip": [
+      316,
+      "Equip",
+      null
+    ],
+    "Mystical Moon": [
+      319,
+      "Equip",
+      null
+    ],
+    "Violet Crystal": [
+      322,
+      "Equip",
+      null
+    ],
+    "Book of Secret Arts": [
+      323,
+      "Equip",
+      null
+    ],
+    "Machine Conversion Factory": [
+      325,
+      "Equip",
+      null
+    ],
+    "Raise Body Heat": [
+      326,
+      "Equip",
+      null
+    ],
+    "Follow Wind": [
+      327,
+      "Equip",
+      null
+    ],
+    "Power of Kaishin": [
+      328,
+      "Equip",
+      null
+    ],
+    "Megamorph": [
+      657,
+      "Equip",
+      null
+    ],
+    "Forest": [
+      330,
+      "Magic",
+      null
+    ],
+    "Wasteland": [
+      331,
+      "Magic",
+      null
+    ],
+    "Mountain": [
+      332,
+      "Magic",
+      null
+    ],
+    "Sogen": [
+      333,
+      "Magic",
+      null
+    ],
+    "Umi": [
+      334,
+      "Magic",
+      null
+    ],
+    "Yami": [
+      335,
+      "Magic",
+      null
+    ],
+    "Dark Hole": [
+      336,
+      "Magic",
+      null
+    ],
+    "Raigeki": [
+      337,
+      "Magic",
+      null
+    ],
+    "Mooyan Curry": [
+      338,
+      "Magic",
+      null
+    ],
+    "Red Medicine": [
+      339,
+      "Magic",
+      null
+    ],
+    "Goblin's Secret Remedy": [
+      340,
+      "Magic",
+      null
+    ],
+    "Soul of the Pure": [
+      341,
+      "Magic",
+      null
+    ],
+    "Sparks": [
+      343,
+      "Magic",
+      null
+    ],
+    "Hinotama": [
+      344,
+      "Magic",
+      null
+    ],
+    "Final Flame": [
+      345,
+      "Magic",
+      null
+    ],
+    "Ookazi": [
+      346,
+      "Magic",
+      null
+    ],
+    "Tremendous Fire": [
+      347,
+      "Magic",
+      null
+    ],
+    "Swords of Revealing Light": [
+      348,
+      "Magic",
+      null
+    ],
+    "Warrior Elimination": [
+      653,
+      "Magic",
+      null
+    ],
+    "Eternal Rest": [
+      656,
+      "Magic",
+      null
+    ],
+    "Stain Storm": [
+      660,
+      "Magic",
+      null
+    ],
+    "Crush Card": [
+      661,
+      "Magic",
+      null
+    ],
+    "Eradicating Aerosol": [
+      662,
+      "Magic",
+      null
+    ],
+    "Breath of Light": [
+      663,
+      "Magic",
+      null
+    ],
+    "Eternal Drought": [
+      664,
+      "Magic",
+      null
+    ],
+    "#716": [
+      716,
+      "Warrior",
+      2550
+    ],
+    "#442": [
+      442,
+      "Sea Serpent",
+      2250
+    ],
+    "#681": [
+      681,
+      "Trap",
+      null
+    ],
+    "#683": [
+      683,
+      "Trap",
+      null
+    ],
+    "#684": [
+      684,
+      "Trap",
+      null
+    ],
+    "#685": [
+      685,
+      "Trap",
+      null
+    ],
+    "#686": [
+      686,
+      "Trap",
+      null
+    ]
+  },
+  "referencias_nota": "IDs oficiais do FM (SLUS-01411). Usados quando o projeto não tem nomes; tipo e ATK são conferidos com o cartas.csv."
+}
