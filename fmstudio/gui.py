@@ -460,13 +460,14 @@ class EffectDialog(tk.Toplevel):
         type_label = {'aura_tipo': 'Tipo de monstro que recebe o bônus',
                       'bonus_por_tipo': 'Tipo contado no campo',
                       ENTRY_GROW: 'Tipo de monstro que dispara o ganho',
-                      ENTRY_SHRINK: 'Tipo de monstro que perde ATK/DEF'}.get(action, 'Tipo contado')
+                      ENTRY_SHRINK: 'Tipo de monstro que perde ATK/DEF',
+                      'dano_monstro_alvo': 'Tipo do monstro alvo (Todos = qualquer um)'}.get(action, 'Tipo contado')
         self.labels['tipo_id'].configure(text=type_label)
         scope_label = {'aura_tipo': 'Lados afetados pela aura',
                        ENTRY_GROW: 'Campos onde a entrada conta',
                        ENTRY_SHRINK: 'Campos atingidos pela redução'}
         self.labels['escopo'].configure(text=scope_label.get(action, 'Lados que entram na contagem'))
-        typ = filtered or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo')
+        typ = filtered or action in ('cura_lp_deck_tipo','dano_lp_deck_tipo','dano_monstro_alvo')
         choices = [-1, *(i for i in range(25) if not marker or i < 20 or i == 24)]
         if self.type_ids != choices:
             self.type_ids = choices
@@ -523,7 +524,7 @@ class EffectDialog(tk.Toplevel):
             else:
                 help_text='Causa X LP ao lado selecionado. Entrada em campo suportada no PS1 Drop x15.'
         elif action=='dano_monstro_alvo':
-            help_text=('Ao entrar: o monstro mais forte do oponente (no PS1; no simulador, o alvo escolhido) perde X de ATK e DEF, '
+            help_text=('Ao entrar: o monstro mais forte do oponente do tipo escolhido (no PS1; no simulador, o alvo escolhido) perde X de ATK e DEF, '
                        'com a animação da 349 mostrando o número. Se X for maior ou igual à DEF atual dele, é destruído '
                        'com a animação do Crush Card (indestrutível e imune a mágicas resistem no PS1).')
         elif action=='limpar_armadilhas':

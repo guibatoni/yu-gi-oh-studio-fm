@@ -49,7 +49,7 @@ class Game:
         self.sounds = []
 
     # cartas e regras
-    def card(self, slot, cid, *, atk=1000, defense=1000, flags=0x8000, obj=None):
+    def card(self, slot, cid, *, atk=1000, defense=1000, flags=0x8000, obj=None, kind=0):
         at = card_address(slot)
         obj = obj or 0x80150000 + slot * 0x100
         self.cpu.load(at, struct.pack('<I', obj))
@@ -57,6 +57,7 @@ class Game:
         self.cpu.load(obj + 0x30, struct.pack('<hhh', 10 + slot, 20, 30))
         self.stats = getattr(self, 'stats', {})
         self.stats[at] = (atk, defense)
+        self.cpu.load(ee.STATS + 4 * (cid - 1), struct.pack('<I', kind << 26))
 
     def rules(self, cid, bonuses):
         rules_at = 0x400 + cid * 0x40
@@ -201,7 +202,7 @@ class EntryEffectsTests(unittest.TestCase):
         game.card(7, 500)
         game.card(21, 11, atk=1200, defense=900)
         game.card(22, 12, atk=1800, defense=1500)
-        game.rules(500, [bonus(ee.OP_DAMAGE, 0, 0, 600)])
+        game.rules(500, [bonus(ee.OP_DAMAGE, 0, 0xFFFF, 600)])
         game.call('entry', 7)
         self.start(game)
         game.frames()
@@ -217,12 +218,24 @@ class EntryEffectsTests(unittest.TestCase):
         self.assertIn(0x21, game.sounds)
         self.assertEqual(game.calls, [])
 
+    def test_damage_filters_by_type(self):
+        game = Game(turn=0)
+        game.card(7, 500)
+        game.card(21, 11, atk=1200, defense=900, kind=7)
+        game.card(22, 12, atk=1800, defense=1500, kind=1)
+        game.rules(500, [bonus(ee.OP_DAMAGE, 0, 7, 600)])
+        game.call('entry', 7)
+        self.start(game)
+        game.frames()
+        self.assertEqual(s16(game.cpu, card_address(21) + 0x12), -600)
+        self.assertEqual(s16(game.cpu, card_address(22) + 0x12), 0)
+
     def test_fatal_damage_becomes_crush_on_target_only(self):
         game = Game(turn=0)
         game.card(7, 500)
         game.card(21, 11, atk=1200, defense=900)
         game.card(23, 12, atk=1800, defense=700)
-        game.rules(500, [bonus(ee.OP_DAMAGE, 0, 0, 800)])
+        game.rules(500, [bonus(ee.OP_DAMAGE, 0, 0xFFFF, 800)])
         game.call('entry', 7)
         self.start(game)
         game.frames()

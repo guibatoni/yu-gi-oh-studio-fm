@@ -373,8 +373,9 @@ class DuelLab:
         return {'aplicado':amount,'bloqueado':False,'destruido':destroyed,
                 'hp':max(0,hp-damage)}
 
-    def _strongest(self, side):
-        units=[m for m in self.resolve()[0] if m['lado']==side and int(m['tipo_id']) in MONSTER_TYPES]
+    def _strongest(self, side, kind=-1):
+        units=[m for m in self.resolve()[0] if m['lado']==side and int(m['tipo_id']) in MONSTER_TYPES
+               and kind in (-1,int(m['tipo_id']))]
         if not units:
             return None
         return max(units,key=lambda m:(int(m['ataque']),-int(m['slot'])))['slot']
@@ -526,13 +527,15 @@ class DuelLab:
                                 'alvo':opposing})
             elif action=='dano_monstro_alvo' and event=='invocar' and kind=='monstro':
                 # Igual ao PS1: sem alvo escolhido, o monstro mais forte do oponente.
+                kind_filter=eff.get('tipo_id',-1)
                 slot=target_slot if target_side==opposing else None
-                if slot is None or self.get(opposing,slot) is None:
-                    slot=self._strongest(opposing)
+                chosen=self.get(opposing,slot) if slot is not None else None
+                if chosen is None or kind_filter not in (-1,int(chosen.get('tipo_id',-1))):
+                    slot=self._strongest(opposing,kind_filter)
                 if slot is None:
                     if not strict:
                         continue
-                    raise ModError('O oponente não tem monstro para receber o dano.')
+                    raise ModError('O oponente não tem monstro (do tipo escolhido) para receber o dano.')
                 hit=self.entry_damage(opposing,slot,value)
                 summary.append({'acao':action,'alvo':(opposing,slot), **hit})
             elif action in ENTRY_SPELL_ACTIONS:

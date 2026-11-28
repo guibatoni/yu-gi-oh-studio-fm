@@ -80,6 +80,18 @@ class SimulatorTests(unittest.TestCase):
         strongest = next(m for m in game.resolve()[0] if (m['lado'], m['slot']) == (CPU, 1))
         self.assertEqual((strongest['ataque'], strongest['defesa']), (1200, 900))
 
+    def test_damage_only_hits_chosen_type(self):
+        self.cards[3]['tipo_id'] = 7
+        damage = check_effect({'evento': 'invocar', 'acao': 'dano_monstro_alvo',
+                               'alvo': 'monstro_alvo', 'valor': 300, 'tipo_id': 7})
+        self.assertEqual(damage['tipo_id'], 7)
+        game = self.game({1: [damage]})
+        summary = game.apply_event(1, PLAYER, 'invocar', source_slot=1, target_side=CPU,
+                                   target_slot=1, strict=False)
+        self.assertEqual(summary[0]['alvo'], (CPU, 2))          # o slot 1 não é do tipo
+        game = self.game({1: [check_effect(dict(damage, tipo_id=12))]})
+        self.assertEqual(game.apply_event(1, PLAYER, 'invocar', source_slot=1, strict=False), [])
+
     def test_fatal_damage_destroys(self):
         damage = check_effect({'evento': 'invocar', 'acao': 'dano_monstro_alvo',
                                'alvo': 'monstro_alvo', 'valor': 1500})
@@ -111,7 +123,7 @@ class CompileTests(unittest.TestCase):
         bonuses = [struct.unpack_from('<BBHHH', plan.data, offset + 8 + 8 * i) for i in range(count)]
         self.assertEqual(bonuses, [
             (ee.OP_SPELL, 8, 350, 0, 0), (ee.OP_SPELL, 10, 348, 1, 0), (ee.OP_SPELL, 13, 672, 0, 0),
-            (ee.OP_TOGGLE, 0, 0, 0, 0), (ee.OP_TERRAIN, 1, 6, 0, 0), (ee.OP_DAMAGE, 0, 0, 700, 0)])
+            (ee.OP_TOGGLE, 0, 0, 0, 0), (ee.OP_TERRAIN, 1, 6, 0, 0), (ee.OP_DAMAGE, 0, 0xFFFF, 700, 0)])
         self.assertTrue(ee.wanted(plan))
 
 

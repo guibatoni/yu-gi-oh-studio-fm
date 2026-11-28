@@ -81,6 +81,7 @@ CREATE_REQUEST = 0x8002C68C    # idem, bloqueando a cena
 SE_PLAY = 0x8003FEE0
 ROTATE = 0x80019BA0            # (objeto, ângulo de, ângulo para, quadros)
 CALC = 0x800170C8              # CalculateStats(card) → def << 16 | atk
+STATS = 0x801D4244             # u32 por carta; tipo nos bits 26-30
 HEAL_NUMBERS = 0x8015B4BC + 0x1C   # banco do efeito 5 (cura), s32 da configuração 0
 OCCUPIED, DEFENSE = 0x8000, 0x0800
 FIELD, STARTUP, DRAW = 5, 1, 2
@@ -500,7 +501,24 @@ def _assemble(base: int, capacity: int, follow: int | None, heal_pending: int | 
         a.move('s3', 'v0')
         a.andi('t6', 't6', OCCUPIED)
         a.beq('t6', 'zero', 'damage_next')
+        a.lhu('t7', D_CUR + 4, 's0')           # tipo pedido (0xFFFF = qualquer)
+        a.ori('t8', 'zero', 0xFFFF)
+        a.beq('t7', 't8', 'damage_stats')
+        a.lhu('t9', 0x0C, 's3')                # id
         a.nop()
+        a.addiu('t9', 't9', -1)
+        a.sltiu('t8', 't9', capacity)
+        a.beq('t8', 'zero', 'damage_next')
+        a.sll('t9', 't9', 2)
+        li32('t8', STATS)
+        a.addu('t9', 't9', 't8')
+        a.lw('t9', 0, 't9')
+        a.nop()
+        a.srl('t9', 't9', 26)
+        a.andi('t9', 't9', 31)
+        a.bne('t9', 't7', 'damage_next')
+        a.nop()
+        a.label('damage_stats')
         a.jal(CALC)
         a.move('a0', 's3')
         a.andi('t1', 'v0', 0xFFFF)
@@ -683,7 +701,7 @@ def encode(effect: dict) -> bytes | None:
     if action == 'trocar_posicao':
         return struct.pack('<BBHHH', OP_TOGGLE, 0, 0, 0, 0)
     if action == 'dano_monstro_alvo':
-        return struct.pack('<BBHHH', OP_DAMAGE, 0, 0, effect['valor'], 0)
+        return struct.pack('<BBHHH', OP_DAMAGE, 0, effect.get('tipo_id', -1) & 0xFFFF, effect['valor'], 0)
     return None
 
 

@@ -429,6 +429,8 @@ def check_effect(entry: dict):
         item = {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
         if action in DECK_ACTIONS:
             item['tipo_id'] = _bounded_int(entry.get('tipo_id',-1),'Tipo do deck',-1,24)
+        if action == 'dano_monstro_alvo':
+            item['tipo_id'] = _bounded_int(entry.get('tipo_id',-1),'Tipo do monstro alvo',-1,24)
         return item
     if target in ('aliados_tipo','monstro_alvo','monstro_equipado'):
         raise ModError('Alvo não permitido para efeito comum')
