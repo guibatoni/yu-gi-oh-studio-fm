@@ -304,7 +304,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
             # Papel de parede do menu principal: só dados do SU.MRG (setores 80-97).
             from .ps1_menu_wallpaper import SU_PATH, apply as apply_wallpaper, requested_wall
             wallpaper = requested_wall(project)
-            su_entry = entries.get(SU_PATH) if wallpaper is not None else None
+            # O menu inicial (só NEW GAME e LOAD) também fica no SU.MRG.
+            su_entry = entries.get(SU_PATH) if (wallpaper is not None or native_profile) else None
             if wallpaper is not None and su_entry is None:
                 raise ModError('Papel de parede: DATA/SU.MRG não encontrado na imagem.')
             original_su = b''.join(reader.read_entry(su_entry)) if su_entry else None
@@ -528,6 +529,13 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     patched_su, wallpaper_report = None, {'status': 'original'}
     if wallpaper is not None:
         patched_su, wallpaper_report = apply_wallpaper(original_su, wallpaper)
+    title_menu_report = {'status': 'original'}
+    if native_profile and original_su is not None:
+        from .ps1_title_menu import apply as apply_title_menu, status as title_menu_status
+        if title_menu_status(patched_su or original_su) != 'divergente':
+            patched_su, title_menu_report = apply_title_menu(patched_su or original_su)
+        else:
+            title_menu_report = {'status': 'divergente'}
     if requested_art:
         if original_wa is None or wa_entry is None:
             raise ModError('DATA/WA_MRG.MRG não encontrado para aplicar artes.')
@@ -972,6 +980,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'subtipos_ps1':subtype_report,
                 'bonus_mao_ps1':hand_bonus_report,
                 'efeitos_entrada_ps1':entry_effects_report,
+                'menu_inicial_ps1':title_menu_report,
                 'escolha_deck_inicial_ps1':starter_choice_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
