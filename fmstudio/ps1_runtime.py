@@ -59,6 +59,11 @@ FUSION_CALLERS = (
     (0x800727C0, 0x80072A48),  # AI searches for fusions.
 )
 CONFIG_EXTRAS = 2 + 2 * (CARD_COUNT + 1)
+# Regras além de NEAR_RULES bytes vão para a área do Link Duel (ps1_link_space); os
+# offsets de 16 bits relativos a CONFIG alcançam até CONFIG + 0xFFFF.
+NEAR_RULES = 256
+FAR_ADDRESS = 0x801D1200
+FAR_END = 0x801D3000
 GRAVE_FILTER_OFFSET = 2  # Reserved directory entry for card ID 0.
 FIXED_DECK_CONFIG = CONFIG_EXTRAS + 8
 NAME_COLOR_CONFIG = FIXED_DECK_CONFIG + 2
@@ -79,6 +84,11 @@ class EffectPlan:
     name_colors: int = 0
     fusions: tuple[tuple[int, int, int], ...] = ()
     capacity: int = CARD_COUNT
+    far: bytes = b''      # regras que não cabem no banco original: área do Link Duel
+
+    @property
+    def far_end(self):
+        return FAR_ADDRESS + len(self.far)
 
     @property
     def fusion_report(self):
@@ -212,6 +222,8 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
             struct.pack_into('<H', data, color_config, len(data))
             data.extend(_pack_name_colors(colors, capacity))
     offsets, grave_filters = {}, {}
+    far = bytearray()
+    near_limit = len(data) + NEAR_RULES
     for key, effects in sorted(getattr(project, 'effects', {}).items(), key=lambda pair: int(pair[0])):
         cid = int(key)
         if not effects:
@@ -320,8 +332,15 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
         payload = struct.pack('<BBBBHH', protections, attacks, limit_byte,
                               len(bonuses), equip_attack, cost) + b''.join(bonuses)
         if payload not in offsets:
-            offsets[payload] = len(data)
-            data.extend(payload)
+            if len(data) + len(payload) <= near_limit:
+                offsets[payload] = len(data)
+                data.extend(payload)
+            else:
+                if FAR_ADDRESS + len(far) + len(payload) > FAR_END:
+                    raise ModError('As regras de efeitos passam do espaço extra do PS1 '
+                                   f'({FAR_END - FAR_ADDRESS + NEAR_RULES} bytes).')
+                offsets[payload] = FAR_ADDRESS - CONFIG_ADDRESS + len(far)
+                far.extend(payload)
         struct.pack_into('<H', data, 2 + 2 * cid, offsets[payload])
         accepted.extend(entries)
     if grave_filters:
@@ -332,7 +351,8 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
     data[1] = any(action in ENTRY_EFFECTS for _, action in accepted)
     configured = accepted or deck_drops or prefix is not None or fixed_decks or colors or edited_fusions or capacity > CARD_COUNT
     plan = EffectPlan(bytes(data) if configured else b'', tuple(accepted), tuple(pending), default,
-                      deck_drops, prefix, tuple(sorted(fixed_decks)), len(colors), edited_fusions, capacity)
+                      deck_drops, prefix, tuple(sorted(fixed_decks)), len(colors), edited_fusions, capacity,
+                      bytes(far))
     if plan.data_end > plan.bank_end:
         raise ModError('As regras nativas excedem a área reservada do perfil Drop x15.')
     return plan
@@ -524,6 +544,11 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     if not plan.data:
         return {'status': 'sem_regras_configuradas', 'rotina_presente': code_ok, 'quantidade': 0}
     table_ok = exe[cfg_start:cfg_start+len(plan.data)] == plan.data
+    if plan.far:
+        from .ps1_link_space import status as link_status
+        far_at = FAR_ADDRESS - EXE_DELTA
+        table_ok = (table_ok and exe[far_at:far_at + len(plan.far)] == plan.far
+                    and link_status(exe) == 'liberado')
     hooks_ok = all(exe[pc-EXE_DELTA:pc-EXE_DELTA+4*len(words)] ==
                    struct.pack(f'<{len(words)}I', *words)
                    for pc, _, words in _rule_patches(plan))
@@ -657,9 +682,19 @@ def install_runtime(original: bytes, exe: bytes, plan: EffectPlan, *,
     if plan.data:
         config = CONFIG_ADDRESS - EXE_DELTA
         out[config:config + len(plan.data)] = plan.data
+    if plan.far:
+        from .ps1_link_space import claim as claim_link_space
+        claimed, link_report = claim_link_space(bytes(out))
+        if link_report['status'] != 'liberado':
+            raise ModError('Regras extras de efeitos: a área do Link Duel não está disponível neste SLUS.')
+        out[:] = claimed
+        far_at = FAR_ADDRESS - EXE_DELTA
+        if any(out[far_at:far_at + len(plan.far)]):
+            raise ModError('Regras extras de efeitos: a área do Link Duel já está ocupada.')
+        out[far_at:far_at + len(plan.far)] = plan.far
     report = {'status': 'aplicado', 'efeitos': [
         {'id': cid, 'acao': action} for cid, action in plan.accepted],
-        'pontos_mips': offsets, 'bytes_tabela': len(plan.data),
+        'pontos_mips': offsets, 'bytes_tabela': len(plan.data), 'bytes_regras_extras': len(plan.far),
         'limite_padrao_por_id': plan.global_limit,
         'drops_do_deck': list(plan.deck_drops), 'password_id_prefix': plan.password_prefix,
         'decks_fixos': list(plan.fixed_decks), 'nomes_tier': plan.name_colors,

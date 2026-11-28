@@ -437,11 +437,19 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     debug_space_report = {'status': 'nao_usado'}
 
     def reserve_code(size):
-        """Rotinas do mod: primeiro na área do menu de debug, depois no banco de textos."""
+        """Rotinas do mod: menu de debug e Link Duel; depois, o banco de textos."""
         nonlocal patched_exe, regions, code_space, debug_space_report
         if native_profile and not code_space and debug_space_report['status'] == 'nao_usado':
             from .ps1_debug_space import claim as claim_debug_space
             patched_exe, code_space, debug_space_report = claim_debug_space(patched_exe)
+            # Área do Link Duel (desligado): depois das regras extras de efeitos.
+            from .ps1_link_space import LINK_END, claim as claim_link_space
+            from .ps1_runtime import FAR_ADDRESS
+            claimed, link_report = claim_link_space(patched_exe)
+            if link_report['status'] == 'liberado':
+                patched_exe = claimed
+                code_space = list(code_space) + [((native_plan.far_end + 15) & ~15, LINK_END)]
+                debug_space_report = dict(debug_space_report, area_link_duel=link_report)
         try:
             address, code_space = reserve_block(patched_exe, code_space, size)
             return address
