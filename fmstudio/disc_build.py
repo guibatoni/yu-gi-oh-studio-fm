@@ -395,10 +395,9 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         or any(raw.get('acao') == 'bonus_por_carta_id' and raw.get('origem_contagem') == 'mao'
                for effects in getattr(project, 'effects', {}).values() for raw in effects))
     hand_bonus_hook = None
-    from .ps1_entry_effects import ENTRY_ACTIONS as _ENTRY_SPELLS
-    entry_spells_wanted = bool(native_profile) and any(
-        action in _ENTRY_SPELLS for _, action in native_plan.accepted)
-    entry_effects_wanted = entry_spells_wanted or lifelink_wanted
+    from .ps1_entry_effects import plan_ops as _entry_ops
+    entry_ops = _entry_ops(native_plan) if native_profile else frozenset()
+    entry_effects_wanted = bool(entry_ops) or lifelink_wanted
     entry_effects_hook = None
     entry_effects_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
     hand_bonus_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
@@ -480,7 +479,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if entry_effects_wanted:
         # Efeitos de entrada com animações das mágicas + animação de cura do Vínculo com Vida.
         from .ps1_entry_effects import block_size as entry_effects_block_size
-        entry_effects_hook = reserve_code(entry_effects_block_size())
+        entry_effects_hook = reserve_code(entry_effects_block_size(
+            entry_ops, entries=bool(entry_ops), heal=lifelink_wanted))
     if duel_hud_wanted:
         from .ps1_duel_hud import block_size as duel_hud_block_size
         duel_hud_hook = reserve_code(duel_hud_block_size(True, duel_hud_portrait is not None))
@@ -784,7 +784,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         from .ps1_entry_effects import apply as apply_entry_effects
         from .ps1_lifelink import pending_address as lifelink_pending
         patched_exe, entry_effects_report = apply_entry_effects(
-            patched_exe, entry_effects_hook, native_plan.capacity, entries=entry_spells_wanted,
+            patched_exe, entry_effects_hook, native_plan.capacity, ops=entry_ops,
             heal_pending=(lifelink_pending(lifelink_hook, native_plan.capacity)
                           if lifelink_hook is not None else None))
 

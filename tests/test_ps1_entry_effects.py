@@ -27,10 +27,11 @@ def card_address(slot):
 class Game:
     """Estado mínimo do duelo + simulação das rotinas do jogo chamadas pelo bloco."""
 
-    def __init__(self, turn=0):
+    def __init__(self, turn=0, ops=frozenset(ee.ENTRY_CODES)):
         self.cpu = cpu = MiniCpu()
-        cpu.load(HOOK, ee.code(HOOK, 722, FOLLOW, PENDING))
-        self.marks = ee.labels(HOOK, 722, FOLLOW, PENDING)
+        follow = FOLLOW if ops else None
+        cpu.load(HOOK, ee.code(HOOK, 722, follow, PENDING, ops))
+        self.marks = ee.labels(HOOK, 722, follow, PENDING, ops)
         self.data = self.marks['data']
         cpu.load(ee.TURN, bytes([turn]))
         cpu.load(ee.SCENE, struct.pack('<H', ee.FIELD))
@@ -112,7 +113,7 @@ class Game:
 
     def call(self, label, a0=0):
         cpu = self.cpu
-        cpu.r[29], cpu.r[31], cpu.r[4] = 0x801FFF00, RETURN, a0
+        cpu.r[29], cpu.r[31], cpu.r[4], cpu.r[28] = 0x801FFF00, RETURN, a0, ee.GP
         stop = {RETURN, FOLLOW}
         end = cpu.run(self.marks[label], stop=stop, limit=5000, calls=self.calls_map())
         assert cpu.r[29] == 0x801FFF00
@@ -245,7 +246,19 @@ class EntryEffectsTests(unittest.TestCase):
         self.assertEqual(u16(game.cpu, card_address(5) + 0x16), 0x8800)
         self.assertEqual(u16(game.cpu, card_address(8) + 0x16), 0x8000)
         self.assertEqual(game.rotations, [(0x80150500, 0, 0xC0, 6), (0x80150800, 0xC0, 0, 6)])
-        self.assertEqual(game.sounds, [0x20, 0x20])
+        self.assertEqual(game.sounds, [0x20])
+
+    def test_lifelink_only_block(self):
+        game = Game(ops=frozenset())
+        game.cpu.load(ee.HEAL_NUMBERS, struct.pack('<i', 500))
+        game.cpu.load(PENDING, struct.pack('<I', 1800))
+        self.start(game)
+        game.frames()
+        self.assertEqual(struct.unpack_from('<i', game.cpu.mem, ee.HEAL_NUMBERS & M)[0], 500)
+        self.assertEqual(game.objects[0][0], 5)
+        self.assertEqual(struct.unpack_from('<I', game.cpu.mem, PENDING & M)[0], 0)
+        game.call('run')                       # nada mais pendente: não liga de novo
+        self.assertEqual(u16(game.cpu, ee.EFFECT_FLAGS), 0)
 
     def test_lifelink_heal_animation_swaps_bank_number(self):
         game = Game()
@@ -277,9 +290,17 @@ class EntryEffectsTests(unittest.TestCase):
         put(ee.OWN_SLOT, ee.EMPTY_HANDLER)
         put(ee.ENTRY_SITE, ee._j(FOLLOW))
         original = bytes(exe)
-        out, report = ee.apply(original, HOOK, 722, entries=True, heal_pending=PENDING)
+        ops = frozenset(ee.ENTRY_CODES)
+        out, report = ee.apply(original, HOOK, 722, ops=ops, heal_pending=PENDING)
         self.assertEqual(report['status'], 'aplicado')
-        self.assertTrue(ee.installed(out, 722, entries=True, heal_pending=PENDING))
+        self.assertTrue(ee.installed(out, 722, ops=ops, heal_pending=PENDING))
+        self.assertEqual(ee.runtime_view(out)[:HOOK - 0x80010000 + 0x800],
+                         original[:HOOK - 0x80010000 + 0x800])
+        # só o Vínculo com Vida: bloco pequeno, sem desvio na entrada em campo
+        small, report = ee.apply(original, HOOK, 722, ops=frozenset(), heal_pending=PENDING)
+        self.assertLess(report['bytes'], 600)
+        self.assertEqual(ee._word(small, ee.ENTRY_SITE), ee._j(FOLLOW))
+        self.assertTrue(ee.installed(small, 722, ops=frozenset(), heal_pending=PENDING))
         self.assertEqual(ee.runtime_view(out)[:HOOK - 0x80010000 + 0x800],
                          original[:HOOK - 0x80010000 + 0x800])
 

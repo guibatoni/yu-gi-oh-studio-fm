@@ -471,7 +471,9 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     from .ps1_hand_bonus import runtime_view as hand_view
     from .ps1_fixed_drop import runtime_view as fixed_drop_view
     from .ps1_entry_effects import runtime_view as entry_view
-    exe = fixed_drop_view(hand_view(subtype_view(lifelink_view(runtime_view(entry_view(exe))))))
+    # Desfaz na ordem inversa da instalação: os três primeiros encadeiam o mesmo salto
+    # de entrada em campo (efeitos de entrada → bônus na mão → animação de LP).
+    exe = runtime_view(lifelink_view(fixed_drop_view(subtype_view(hand_view(entry_view(exe))))))
     bundle = _runtime_bundle(plan)
     ENTRY_POINTS = bundle.ENTRY_POINTS
     RUNTIME = bundle.RUNTIME

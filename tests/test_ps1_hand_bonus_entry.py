@@ -124,6 +124,21 @@ class HandBonusEntryTests(unittest.TestCase):
         self.assertEqual(struct.unpack_from('<I', view, at(hb.ENTRY_SITE))[0], hb._j(hb.SUMMON_ENTRY))
         self.assertEqual(struct.unpack_from('<I', view, at(hb.CALL_SITE))[0], hb._jal(hb.COUNT_BONUS))
 
+    def test_chains_over_life_splash(self):
+        # A animação de LP ao entrar (ps1_life_splash) já trocou o salto: o bônus segue para ela.
+        splash = 0x80031000
+        data = bytearray(0x800 + 0x200000)
+        data[:8] = b'PS-X EXE'
+        struct.pack_into('<I', data, 0x18, 0x80010000)
+        struct.pack_into('<I', data, 0x1C, len(data) - 0x800)
+        at = lambda address: 0x800 + address - 0x80010000
+        struct.pack_into('<I', data, at(hb.CALL_SITE), hb._jal(hb.COUNT_BONUS))
+        struct.pack_into('<I', data, at(hb.ENTRY_SITE), hb._j(splash))
+        out, _ = hb.apply(bytes(data), HOOK)
+        self.assertEqual(out[at(HOOK):at(HOOK) + len(hb.code(HOOK, splash))], hb.code(HOOK, splash))
+        view = hb.runtime_view(out)
+        self.assertEqual(struct.unpack_from('<I', view, at(hb.ENTRY_SITE))[0], hb._j(splash))
+
 
 if __name__ == '__main__':
     unittest.main()

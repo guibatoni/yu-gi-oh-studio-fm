@@ -56,15 +56,17 @@ def _jal(target: int) -> int:
     return 0x0C000000 | ((target & 0x0FFFFFFF) >> 2)
 
 
-def code(base: int) -> bytes:
-    return _build(base).bytes()
+def code(base: int, follow: int = SUMMON_ENTRY) -> bytes:
+    return _build(base, follow).bytes()
 
 
-def _labels(base: int) -> dict:
-    return _build(base).labels
+def _labels(base: int, follow: int = SUMMON_ENTRY) -> dict:
+    asm = _build(base, follow)
+    asm.bytes()
+    return asm.labels
 
 
-def _build(base: int) -> Asm:
+def _build(base: int, follow: int = SUMMON_ENTRY) -> Asm:
     a = Asm(base)
     # ------------------------------------------------ count_bonus(bônus, lado)
     # Chamado só por CalculateStats com i == slot: s7 ($23) = slot de quem tem
@@ -263,7 +265,7 @@ def _build(base: int) -> Asm:
     a.move('a0', 's0')
     a.lw('ra', 0x2C, 'sp'); a.lw('s0', 0x28, 'sp'); a.lw('s1', 0x24, 'sp')
     a.lw('s2', 0x20, 'sp'); a.lw('s3', 0x1C, 'sp')
-    a.j(SUMMON_ENTRY)                           # segue para summon_damage(slot)
+    a.j(follow)                                 # segue o salto anterior (summon_damage ou animação de LP)
     a.addiu('sp', 'sp', 0x30)
     a.label('snapshots')
     for _ in range(10 * SNAP_BONUSES // 4):
@@ -279,34 +281,51 @@ def _j(target: int) -> int:
     return 0x08000000 | ((target & 0x0FFFFFFF) >> 2)
 
 
+def _target(word: int) -> int:
+    return 0x80000000 | ((word & 0x03FFFFFF) << 2)
+
+
 def apply(exe: bytes, hook: int) -> tuple[bytes, dict]:
     site = exe_pos(CALL_SITE, exe, 4)
     if struct.unpack_from('<I', exe, site)[0] != _jal(COUNT_BONUS):
         raise ModError('Bônus na mão: a chamada de count_bonus do runtime não é a esperada.')
     entry_site = exe_pos(ENTRY_SITE, exe, 4)
-    if struct.unpack_from('<I', exe, entry_site)[0] != _j(SUMMON_ENTRY):
+    word = struct.unpack_from('<I', exe, entry_site)[0]
+    if word >> 26 != 2:
         raise ModError('Bônus na mão: a entrada em campo do runtime não é a esperada.')
-    block = code(hook)
+    follow = _target(word)          # summon_damage ou a animação de LP ao entrar (ps1_life_splash)
+    block = code(hook, follow)
     at = exe_pos(hook, exe, len(block))
     if any(exe[at:at + len(block)]):
         raise ModError('Bônus na mão: a área reservada no SLUS não está livre.')
     out = bytearray(exe)
     out[at:at + len(block)] = block
     struct.pack_into('<I', out, site, _jal(hook))
-    struct.pack_into('<I', out, entry_site, _j(_labels(hook)['entry']))
+    struct.pack_into('<I', out, entry_site, _j(_labels(hook, follow)['entry']))
     return bytes(out), {'status': 'aplicado', 'rotina': f'0x{hook:08X}',
                         'contagem': 'ao entrar em campo (fica fixa)', 'validado_epsxe': False}
 
 
+def _follow_of(exe: bytes, hook: int) -> int | None:
+    """Salto que o bloco instalado segue no fim de ``entry``."""
+    marks = _labels(hook)
+    at = exe_pos(marks['snapshots'] - 8, exe, 4)
+    word = struct.unpack_from('<I', exe, at)[0]
+    return _target(word) if word >> 26 == 2 else None
+
+
 def runtime_view(exe: bytes) -> bytes:
-    """SLUS com a chamada original de count_bonus, se o desvio estiver inteiro."""
+    """SLUS com a chamada original de count_bonus e o salto de entrada anterior."""
     try:
         site = exe_pos(CALL_SITE, exe, 4)
         word = struct.unpack_from('<I', exe, site)[0]
         if word == _jal(COUNT_BONUS) or word >> 26 != 3:
             return exe
         hook = 0x80000000 | ((word & 0x03FFFFFF) << 2)
-        block = code(hook)
+        follow = _follow_of(exe, hook)
+        if follow is None:
+            return exe
+        block = code(hook, follow)
         at = exe_pos(hook, exe, len(block))
         if exe[at:at + len(block)] != block:
             return exe
@@ -315,6 +334,6 @@ def runtime_view(exe: bytes) -> bytes:
     out = bytearray(exe)
     struct.pack_into('<I', out, site, _jal(COUNT_BONUS))
     entry_site = exe_pos(ENTRY_SITE, exe, 4)
-    if struct.unpack_from('<I', exe, entry_site)[0] == _j(_labels(hook)['entry']):
-        struct.pack_into('<I', out, entry_site, _j(SUMMON_ENTRY))
+    if struct.unpack_from('<I', exe, entry_site)[0] == _j(_labels(hook, follow)['entry']):
+        struct.pack_into('<I', out, entry_site, _j(follow))
     return bytes(out)
