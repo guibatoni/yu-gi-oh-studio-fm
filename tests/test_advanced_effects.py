@@ -115,7 +115,7 @@ class AdvancedTests(unittest.TestCase):
         self.assertEqual(lab.trigger('jogador',1)[0]['quantidade'],0)
 
     def test_damage_to_monster_kills_and_equip_removed(self):
-        lab=self.lab({'1':[effect('dano_monstro_alvo',value=500)]})
+        lab=self.lab({'1':[effect('dano_monstro_alvo',value=500,typ=-1)]})
         lab.set_field([m(cid=1,typ=DRAGON),m('adversario',1,4,DRAGON,900,300)])
         result=lab.trigger('jogador',1,target_side='adversario',target_slot=1)
         self.assertTrue(result[0]['destruido'])
