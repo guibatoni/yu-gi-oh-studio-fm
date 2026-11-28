@@ -43,7 +43,11 @@ class MiniCpu:
                 elif fn == 3:
                     signed = r[rt] - (1 << 32) if r[rt] & 0x80000000 else r[rt]
                     val = (signed >> sa) & 0xFFFFFFFF
+                elif fn == 4: val = r[rt] << (r[rs] & 31) & 0xFFFFFFFF
                 elif fn == 6: val = r[rt] >> (r[rs] & 31)
+                elif fn == 0x2A:
+                    sa_, sb_ = (r[rs] ^ 0x80000000), (r[rt] ^ 0x80000000)
+                    val = int(sa_ < sb_)
                 elif fn == 0x10: val = hi
                 elif fn == 0x12: val = lo
                 elif fn == 0x19:
@@ -81,6 +85,9 @@ class MiniCpu:
                     target = (pc + 4 + (s16(imm) << 2)) & 0xFFFFFFFF
             elif op == 9:
                 r[rt] = (r[rs] + s16(imm)) & 0xFFFFFFFF
+            elif op == 10:
+                signed = r[rs] - (1 << 32) if r[rs] & 0x80000000 else r[rs]
+                r[rt] = int(signed < s16(imm))
             elif op == 11:
                 r[rt] = int(r[rs] < (s16(imm) & 0xFFFFFFFF))
             elif op == 12:

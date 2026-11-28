@@ -11,7 +11,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from pathlib import Path
 from .core import (Project, ModError, check_effect, EVENTS, ACTIONS, TARGETS, SCOPES, FIELDS, DEFAULT_NAME_COLOR, FILTER_COMBINATIONS,
                    ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ENTRY_TYPE_EVENT,
-                   ONCE_ACTIONS, legacy_god_description_icon_card, ps1_god24_card_ids,
+                   ONCE_ACTIONS, ENTRY_SPELL_ACTIONS, TERRAINS, legacy_god_description_icon_card, ps1_god24_card_ids,
                    ps1_supports_god24)
 from .drafts import DraftSession
 from .disc import DiscError
@@ -117,6 +117,8 @@ class EffectDialog(tk.Toplevel):
         'dano_lp_deck_tipo': 'inimigo',
         'descartar_alvo': 'inimigo',
         'dano_monstro_alvo': 'monstro_alvo',
+        **dict.fromkeys(ENTRY_SPELL_ACTIONS - {'mudar_terreno'}, 'inimigo'),
+        'mudar_terreno': 'proprio',
         ENTRY_GROW: 'proprio',
         ENTRY_SHRINK: 'aliados_tipo',
     }
@@ -297,7 +299,7 @@ class EffectDialog(tk.Toplevel):
         def match(action):
             if action in EFFECT_ACTIONS:
                 kind='Contínuos'
-            elif action in ENTRY_EFFECTS:
+            elif action in ENTRY_EFFECTS or action in ENTRY_SPELL_ACTIONS or action in ONCE_ACTIONS:
                 kind='Ao entrar em campo'
             elif action in EQUIPMENT_ACTIONS:
                 kind='Equipamentos'
@@ -391,7 +393,8 @@ class EffectDialog(tk.Toplevel):
             elif value not in ('continuo','equipado','regra_deck') and (
                     action in EFFECT_ACTIONS|EQUIPMENT_ACTIONS or
                     action in ENTRY_EFFECTS and value != ENTRY_EFFECTS[action] or
-                    action in QUICK_ACTIONS and not (value=='atacar' and action=='perder_lp_por_ataque')):
+                    action in QUICK_ACTIONS and not (value=='atacar' and action=='perder_lp_por_ataque') or
+                    action in ENTRY_SPELL_ACTIONS and value != 'invocar'):
                 self._set('acao','aumentar_atk')
         if key=='acao':
             if value in ENTRY_EFFECTS:
@@ -404,13 +407,15 @@ class EffectDialog(tk.Toplevel):
                 self._set('evento','regra_deck')
             elif value == 'perder_lp_por_ataque':
                 self._set('evento','atacar')
-            elif value in ONCE_ACTIONS:
+            elif value in ONCE_ACTIONS or value in ENTRY_SPELL_ACTIONS:
                 self._set('evento','invocar')
             elif self.vars['evento'].get() in ('continuo','equipado','regra_deck', ENTRY_TYPE_EVENT):
                 self._set('evento','invocar')
         action=self.vars['acao'].get()
         if key=='acao' and action=='descartar_alvo':
             self.vars['valor'].set('1')
+        if key == 'acao' and action in ENTRY_SPELL_ACTIONS:
+            self.vars['valor'].set('3' if action == 'espadas_reveladoras' else '0')
         if key == 'acao' and action == 'dano_lp':
             self._set('alvo', 'inimigo')
         if action == 'vinculo_vida':
@@ -471,7 +476,8 @@ class EffectDialog(tk.Toplevel):
                 selected = -1
                 self.vars['tipo_id'].set(selected)
             self.type_combo.current(choices.index(selected))
-        protection=action in (EQUIPMENT_ACTIONS-{'equip_atk'}) or action in BOOLEAN_ACTIONS or action == 'vinculo_vida'
+        protection=(action in (EQUIPMENT_ACTIONS-{'equip_atk'}) or action in BOOLEAN_ACTIONS or action == 'vinculo_vida'
+                    or action in ENTRY_SPELL_ACTIONS - {'espadas_reveladoras', 'mudar_terreno'})
         self.def_entry.configure(state='normal' if continuous or marker else 'disabled')
         self.type_combo.configure(state='readonly' if typ else 'disabled')
         self.attribute_combo.configure(state='readonly' if filtered else 'disabled')
@@ -479,7 +485,7 @@ class EffectDialog(tk.Toplevel):
         self.scope_combo.configure(state='readonly' if continuous or marker else 'disabled')
         if protection:
             self.vars['valor'].set('0')
-        elif self.vars['valor'].get()=='0' and not (continuous or marker):
+        elif self.vars['valor'].get()=='0' and not (continuous or marker or action == 'mudar_terreno'):
             self.vars['valor'].set('500' if action!='descartar_alvo' else '1')
         self.value_entry.configure(state='disabled' if protection else 'normal')
         if action in COUNT_ZONES:
@@ -491,7 +497,7 @@ class EffectDialog(tk.Toplevel):
             self.specific_button.grid_remove()
         if action == 'vinculo_vida':
             self.labels['valor'].configure(text='Cura automática: ATK efetivo do atacante')
-            help_text='⚔ ♥ Quando este monstro ataca (monstro ou direto) ou é atacado, o dono recupera LP iguais ao ATK atual dele, no início da batalha. Funciona no simulador e no PS1.'
+            help_text='⚔ ♥ Quando este monstro ataca (monstro ou direto) ou é atacado, o dono recupera LP iguais ao ATK total dele (com bônus de campo, equipamentos e efeitos), no início da batalha. No PS1, a animação de cura com o número aparece ao voltar ao campo. Funciona no simulador e no PS1.'
         elif action=='bonus_cemiterio_tipo':
             help_text='Recebe o bônus por carta correspondente no cemitério. Atualiza conforme as cartas entram ou saem.'
         elif action=='bonus_deck_tipo':
@@ -517,7 +523,21 @@ class EffectDialog(tk.Toplevel):
             else:
                 help_text='Causa X LP ao lado selecionado. Entrada em campo suportada no PS1 Drop x15.'
         elif action=='dano_monstro_alvo':
-            help_text='Dano a criatura é experimental: HP simulado começa igual à DEF-base (mínimo 1).'
+            help_text=('Ao entrar: o monstro mais forte do oponente (no PS1; no simulador, o alvo escolhido) perde X de ATK e DEF, '
+                       'com a animação da 349 mostrando o número. Se X for maior ou igual à DEF atual dele, é destruído '
+                       'com a animação do Crush Card (indestrutível e imune a mágicas resistem no PS1).')
+        elif action=='limpar_armadilhas':
+            help_text='Ao entrar: destrói as magias e armadilhas viradas do oponente, com a animação da carta 672 (Harpie\'s Feather Duster). Simulador e PS1.'
+        elif action=='revelar_cartas':
+            help_text='Ao entrar: revela as cartas viradas para baixo do oponente, com a animação da carta 350 (Dark-piercing Light). Simulador e PS1.'
+        elif action=='espadas_reveladoras':
+            self.labels['valor'].configure(text='Turnos (1, 2 ou 3)')
+            help_text='Ao entrar: efeito da carta 348 (Swords of Revealing Light): o oponente não ataca por X turnos dele. Simulador e PS1.'
+        elif action=='trocar_posicao':
+            help_text='Ao entrar: cada monstro do oponente troca de posição (ataque → defesa, defesa → ataque), com o giro da Stop Defense. Simulador e PS1.'
+        elif action=='mudar_terreno':
+            self.labels['valor'].configure(text='Terreno: ' + ', '.join(f'{k} = {v}' for k, v in TERRAINS.items()))
+            help_text='Ao entrar: muda o terreno do campo como as mágicas 330–335 (0 volta ao campo normal, sem bônus de terreno). Simulador e PS1.'
         elif action=='descartar_alvo':
             help_text='O oponente descarta até X cartas da mão configurada no simulador, uma vez por invocação.'
         elif action == ENTRY_GROW:

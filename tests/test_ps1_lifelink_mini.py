@@ -16,6 +16,8 @@ LIFE_ID, PLAIN_ID = 627, 11
 
 
 class LifelinkMiniTests(unittest.TestCase):
+    bonus = 0
+
     def battle(self, attacker, target, *, attack=2100, target_attack=900, lp=(3260, 8750),
                scene=0x0009, occupied=False, life_ids=(LIFE_ID,), target_id=PLAIN_ID):
         cpu = MiniCpu()
@@ -38,7 +40,13 @@ class LifelinkMiniTests(unittest.TestCase):
             c.load(ll.DUEL_BATTLE, struct.pack('<bbB', attacker, target, 1))
             c.load(ll.SCENE, struct.pack('<H', scene | 0x8000))
         cpu.r[29], cpu.r[31] = 0x801FFF00, RETURN
-        end = cpu.run(HOOK, stop={RETURN}, limit=2000, calls={ll.BATTLE: runtime_battle})
+        def calculate_stats(c):         # runtime: ATK do registro + bônus de campo
+            atk = struct.unpack_from('<h', c.mem, (c.r[4] + 0x0E) & 0x1FFFFF)[0]
+            c.r[2] = (1000 << 16) | ((atk + self.bonus) & 0xFFFF)
+        end = cpu.run(HOOK, stop={RETURN}, limit=2000,
+                      calls={ll.BATTLE: runtime_battle, ll.CALC: calculate_stats})
+        self.pending = struct.unpack_from('<2I', cpu.mem,
+                                          ll.pending_address(HOOK, 722) & 0x1FFFFF)
         self.assertEqual(end, RETURN)
         self.assertEqual(cpu.r[29], 0x801FFF00)
         return tuple(struct.unpack_from('<H', cpu.mem, (ll.SIDE_LP + 32 * s) & 0x1FFFFF)[0] for s in (0, 1))
@@ -56,6 +64,11 @@ class LifelinkMiniTests(unittest.TestCase):
 
     def test_only_first_frame(self):
         self.assertEqual(self.battle(5, -1, scene=0x8009), (3260, 8750))
+
+    def test_uses_total_attack_with_bonus_and_queues_animation(self):
+        self.bonus = 450
+        self.assertEqual(self.battle(5, -1), (3260 + 2550, 8750))
+        self.assertEqual(self.pending, (2550, 0))
 
     def test_plain_card_and_cap(self):
         self.assertEqual(self.battle(5, -1, life_ids=()), (3260, 8750))

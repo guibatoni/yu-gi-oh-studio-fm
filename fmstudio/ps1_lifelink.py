@@ -37,6 +37,7 @@ CONFIG = 0x801CD7A0                 # Config: offsets[id] em +2 + 2*id
 SIDE_LP = 0x800E9FF0 + 0x14         # LP do lado 0; lado 1 em +32
 OCCUPIED = 0x8000
 SCENE = 0x8009B23A                  # u16; Battle só inicia a batalha com o bit 15 limpo
+CALC = 0x800170C8                   # CalculateStats(card) -> def << 16 | atk (runtime)
 
 
 def code(base: int, capacity: int) -> bytes:
@@ -64,7 +65,7 @@ def code(base: int, capacity: int) -> bytes:
     a.jr('ra')
     a.addiu('sp', 'sp', 0x20)
 
-    # heal(slot): folha, só registradores t
+    # heal(slot): ATK total (CalculateStats, com bônus) vira LP do dono
     a.label('heal')
     a.bltz('a0', 'ret')                         # sem monstro (ataque direto)
     a.addiu('t0', 'a0', -5)
@@ -95,13 +96,20 @@ def code(base: int, capacity: int) -> bytes:
     a.beqz('t3', 'ret')
     a.addu('t3', 't3', 't5')
     a.lbu('t3', 0, 't3')                        # Rules.protection
-    a.lh('t2', 0x0E, 't1')                      # ATK atual
+    a.nop()
     a.andi('t3', 't3', LIFELINK)
     a.beqz('t3', 'ret')
     a.nop()
-    a.blez('t2', 'ret')
-    a.sltiu('t0', 'a0', 15)                     # lado 0 se slot < 15
+    a.addiu('sp', 'sp', -24)
+    a.sw('ra', 20, 'sp'); a.sw('s0', 16, 'sp')
+    a.move('s0', 'a0')
+    a.jal(CALC)                                 # ATK com bônus de campo, equipamentos etc.
+    a.move('a0', 't1')
+    a.andi('t2', 'v0', 0xFFFF)
+    a.blez('t2', 'heal_out')
+    a.sltiu('t0', 's0', 15)                     # lado 0 se slot < 15
     a.xori('t0', 't0', 1)
+    a.sll('t7', 't0', 2)
     a.sll('t0', 't0', 5)
     lh, ll = hi_lo(SIDE_LP)
     a.lui('t1', lh); a.addiu('t1', 't1', ll); a.addu('t1', 't1', 't0')
@@ -114,14 +122,34 @@ def code(base: int, capacity: int) -> bytes:
     a.ori('t3', 'zero', 0xFFFF)                 # LP é u16: 65535 no máximo
     a.label('store')
     a.sh('t3', 0, 't1')
+    a.la('t5', 'pending')                       # animação de cura depois da batalha
+    a.addu('t5', 't5', 't7')
+    a.lw('t6', 0, 't5')
+    a.nop()
+    a.addu('t6', 't6', 't2')
+    a.sw('t6', 0, 't5')
+    a.label('heal_out')
+    a.lw('ra', 20, 'sp'); a.lw('s0', 16, 'sp')
+    a.jr('ra')
+    a.addiu('sp', 'sp', 24)
     a.label('ret')
     a.jr('ra')
     a.nop()
+    a.align(4)
+    a.label('pending')                          # cura a mostrar por lado (ps1_entry_effects)
+    a.word(0)
+    a.word(0)
     return a.bytes()
 
 
 def block_size() -> int:
     return len(code(0x80100000, 722))
+
+
+def pending_address(hook: int, capacity: int) -> int:
+    """Endereço das curas a mostrar (2 x u32, lado 0 e 1) dentro do bloco."""
+    a_len = len(code(hook, capacity))
+    return hook + a_len - 8
 
 
 def wants_lifelink(plan) -> bool:
@@ -143,7 +171,7 @@ def apply(exe: bytes, hook: int, capacity: int) -> tuple[bytes, dict]:
     out[at:at + len(block)] = block
     struct.pack_into('<I', out, exe_pos(TABLE_SITE, exe, 4), hook)
     return bytes(out), {'status': 'aplicado', 'rotina': f'0x{hook:08X}',
-                        'regra': 'ATK atual ao atacar ou ser atacado', 'validado_epsxe': False}
+                        'regra': 'ATK total (com bônus) ao atacar ou ser atacado', 'validado_epsxe': False}
 
 
 def installed(exe: bytes, capacity: int) -> bool:

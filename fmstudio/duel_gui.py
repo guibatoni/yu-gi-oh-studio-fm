@@ -6,7 +6,15 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .continuous import SIDES
-from .core import ENTRY_EFFECTS, ModError
+from .core import ENTRY_EFFECTS, TERRAINS, ModError
+
+ENTRY_SPELL_TEXT = {
+    'limpar_armadilhas': lambda e: f'Magias/armadilhas do oponente destruídas ({len(e.get("cartas", []))}).',
+    'revelar_cartas': lambda e: 'Cartas viradas do oponente reveladas.',
+    'espadas_reveladoras': lambda e: f'Espadas da Luz Reveladora: o oponente não ataca por {e["valor"]} turno(s).',
+    'trocar_posicao': lambda e: 'Monstros do oponente trocaram de posição (ataque ↔ defesa).',
+    'mudar_terreno': lambda e: f'Terreno agora: {TERRAINS.get(e["valor"], e["valor"])}.',
+}
 from .duel_ai import play_ai_turn, posture
 from .duel_rank import project_rank
 from .expanded import display_name
@@ -249,6 +257,8 @@ class MatchDialog(tk.Toplevel):
                     text += 'Destruído por ficar com ATK e DEF em 0.'
                 else:
                     text += f'Marcador {event["valor"]:+} ATK / {event["valor_def"]:+} DEF.'
+            elif action in ENTRY_SPELL_TEXT:
+                text = ENTRY_SPELL_TEXT[action](event)
             elif 'carta' in event:
                 side = event['lado']
                 visible = side == 'jogador' or event.get('face_up', True)

@@ -36,8 +36,10 @@ PROTECTIONS = {
     # Bit livre no runtime; lido pela rotina de ps1_lifelink na cena de batalha.
     'vinculo_vida': 128,
 }
+from .ps1_entry_effects import ENTRY_ACTIONS as ENTRY_SPELLS, encode as encode_entry_spell
 PLAY_ACTIONS = (EFFECT_ACTIONS | EQUIPMENT_ACTIONS | set(PROTECTIONS) |
-                set(ENTRY_EFFECTS) | {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp', 'cura_lp'})
+                set(ENTRY_EFFECTS) | {'ataques_multiplos', 'perder_lp_por_ataque', 'dano_lp', 'cura_lp'} |
+                ENTRY_SPELLS)
 SUPPORTED = PLAY_ACTIONS | COPY_ACTIONS
 BONUS_CODES = {'aura_tipo': 1, 'bonus_por_tipo': 2, 'bonus_deck_tipo': 3,
                # mão: bônus de deck com o match marcado (ps1_hand_bonus conta a mão)
@@ -272,6 +274,12 @@ def compile_effects(project, profile: bool, *, fixed_decks=None, fusions=None) -
                 scope = SCOPES[effect['escopo']] | predicate
                 bonuses.append(struct.pack('<BBHHH', code, scope, match,
                                            effect['valor'], effect.get('valor_def', 0)))
+            elif action in ENTRY_SPELLS:
+                packed = encode_entry_spell(effect)
+                if packed is None:
+                    pending.append(f'#{cid}: {action} no PS1 só funciona ao entrar em campo.')
+                    continue
+                bonuses.append(packed)
             elif action == 'dano_lp' and effect['evento'] == 'atacar':
                 # O campo attack_cost das regras já é cobrado no hook
                 # Battle() uma vez por ataque, para ambos os duelistas.
@@ -462,7 +470,8 @@ def verify_effects(exe: bytes, plan: EffectPlan, *, original: bytes | None = Non
     from .ps1_subtypes import runtime_view as subtype_view
     from .ps1_hand_bonus import runtime_view as hand_view
     from .ps1_fixed_drop import runtime_view as fixed_drop_view
-    exe = fixed_drop_view(hand_view(subtype_view(lifelink_view(runtime_view(exe)))))
+    from .ps1_entry_effects import runtime_view as entry_view
+    exe = fixed_drop_view(hand_view(subtype_view(lifelink_view(runtime_view(entry_view(exe))))))
     bundle = _runtime_bundle(plan)
     ENTRY_POINTS = bundle.ENTRY_POINTS
     RUNTIME = bundle.RUNTIME

@@ -50,6 +50,11 @@ ACTIONS = {
     'dano_lp_deck_tipo':'Causar dano aos LP por carta do tipo no deck',
     'descartar_alvo':'Ao entrar: adversário descarta X cartas',
     'dano_monstro_alvo':'Causar dano ao monstro alvo',
+    'limpar_armadilhas':'Ao entrar: destrói magias/armadilhas do oponente (como a 672)',
+    'revelar_cartas':'Ao entrar: revela as cartas viradas do oponente (como a 350)',
+    'espadas_reveladoras':'Ao entrar: Espadas da Luz Reveladora (348) por 1 a 3 turnos',
+    'trocar_posicao':'Ao entrar: troca ataque ↔ defesa dos monstros do oponente',
+    'mudar_terreno':'Ao entrar: muda o terreno (ou volta ao normal)',
     'equip_imune_armadilha':'Equipamento: imune a armadilhas',
     'equip_imune_magia_armadilha':'Equipamento: imune a mágicas e armadilhas',
     'equip_indestrutivel':'Equipamento: indestrutível',
@@ -82,6 +87,10 @@ SCOPES = {'aliados':'Apenas aliados', 'inimigos':'Apenas inimigos',
           'todos':'Ambos os lados'}
 DECK_ACTIONS = {'bonus_deck_tipo','cura_lp_deck_tipo','dano_lp_deck_tipo'}
 ONCE_ACTIONS = {'cura_lp_deck_tipo','dano_lp_deck_tipo','descartar_alvo','dano_monstro_alvo'}
+ENTRY_SPELL_ACTIONS = {'limpar_armadilhas', 'revelar_cartas', 'espadas_reveladoras',
+                       'trocar_posicao', 'mudar_terreno'}
+TERRAINS = {0: 'Normal (sem terreno)', 1: 'Forest', 2: 'Wasteland', 3: 'Mountain',
+            4: 'Sogen', 5: 'Umi', 6: 'Yami'}   # 1-6 = mágicas 330-335
 MONSTER_PASSIVE_ACTIONS = {
     'ataques_multiplos','ataque_primeiro_turno','monstro_indestrutivel','monstro_imune_magia',
     'monstro_imune_armadilha','dano_perfurante','nao_bloqueavel','monstro_indestrutivel_batalha',
@@ -390,6 +399,21 @@ def check_effect(entry: dict):
             raise ModError('Equipamento de ATK requer valor maior que zero')
         if action != 'equip_atk' and amount:
             raise ModError('Equipamento de proteção não utiliza valor numérico')
+        return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
+    if action in ENTRY_SPELL_ACTIONS:
+        if event != 'invocar':
+            raise ModError('Esse efeito só pode ser acionado ao entrar em campo')
+        correct = 'proprio' if action == 'mudar_terreno' else 'inimigo'
+        if target != correct:
+            raise ModError('Alvo incompatível com o efeito selecionado')
+        if action == 'espadas_reveladoras':
+            amount = _bounded_int(entry.get('valor'), 'turnos das Espadas', 1, 3)
+        elif action == 'mudar_terreno':
+            amount = _bounded_int(entry.get('valor', 0), 'terreno', 0, 6)
+        else:
+            if str(entry.get('valor', 0)) != '0':
+                raise ModError('Esse efeito de entrada não usa valor numérico')
+            amount = 0
         return {'evento':event,'acao':action,'alvo':target,'valor':amount,'observacao':note}
     if event in ('continuo','equipado'):
         raise ModError('Esse efeito requer gatilho de ativação, não contínuo/equipado')

@@ -5,7 +5,8 @@ from copy import copy, deepcopy
 import re
 
 from .continuous import SIDES, _in_scope, entry_hand_counts, matches_filter, project_stats, resolve_field
-from .core import ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ModError, check_effect, simulation_nonnegative_int
+from .core import (ENTRY_EFFECTS, ENTRY_GROW, ENTRY_SHRINK, ENTRY_SPELL_ACTIONS, ModError, check_effect,
+                   simulation_nonnegative_int)
 from .guardian import guardian_bonuses
 from .mod_data import MONSTER_TYPES, card_effects, opposite, validate_deck
 from .tables import DECK_SIZE
@@ -372,6 +373,42 @@ class DuelLab:
         return {'aplicado':amount,'bloqueado':False,'destruido':destroyed,
                 'hp':max(0,hp-damage)}
 
+    def _strongest(self, side):
+        units=[m for m in self.resolve()[0] if m['lado']==side and int(m['tipo_id']) in MONSTER_TYPES]
+        if not units:
+            return None
+        return max(units,key=lambda m:(int(m['ataque']),-int(m['slot'])))['slot']
+
+    def entry_damage(self, side: str, slot: int, value: int) -> dict:
+        """Dano de entrada (igual ao PS1): -X de ATK e DEF; fatal (X >= DEF atual) destrói.
+
+        No PS1 o fatal usa a rotina do Crush Card, então indestrutível e imune a
+        mágicas resistem ao fatal (e não perdem pontos).
+        """
+        unit=self.get(side,slot)
+        resolved=next(m for m in self.resolve()[0] if (m['lado'],m['slot'])==(side,slot))
+        if value>=int(resolved['defesa']):
+            if resolved['indestrutivel'] or resolved['imune_magia']:
+                return {'aplicado':0,'bloqueado':True,'destruido':False,'hp':int(resolved['defesa'])}
+            self.remove(side,slot)
+            return {'aplicado':value,'bloqueado':False,'destruido':True,'hp':0}
+        for key in ('modificador_atk','modificador_def'):
+            unit[key]=unit.get(key,0)-value
+        return {'aplicado':value,'bloqueado':False,'destruido':False,
+                'hp':int(resolved['defesa'])-value}
+
+    def _entry_spell(self, action, value, side, opposing) -> dict:
+        """Efeitos de entrada com mágicas do jogo; o DuelMatch completa terreno/armadilhas."""
+        if action=='revelar_cartas':
+            for unit in self.monsters:
+                if unit['lado']==opposing:
+                    unit['face_up']=True
+        elif action=='trocar_posicao':
+            for unit in self.monsters:
+                if unit['lado']==opposing and int(unit.get('tipo_id',0)) in MONSTER_TYPES:
+                    unit['posicao']='ataque' if unit.get('posicao')=='defesa' else 'defesa'
+        return {}
+
     def trigger(self, side: str, slot: int, event: str='invocar',
                 *, target_side: str | None = None, target_slot: int | None = None,
                 kind='monstro') -> list[dict]:
@@ -487,6 +524,20 @@ class DuelLab:
                 self.graveyards[opposing].extend(removed)
                 summary.append({'acao':action,'quantidade':len(removed),'cartas':removed,
                                 'alvo':opposing})
+            elif action=='dano_monstro_alvo' and event=='invocar' and kind=='monstro':
+                # Igual ao PS1: sem alvo escolhido, o monstro mais forte do oponente.
+                slot=target_slot if target_side==opposing else None
+                if slot is None or self.get(opposing,slot) is None:
+                    slot=self._strongest(opposing)
+                if slot is None:
+                    if not strict:
+                        continue
+                    raise ModError('O oponente não tem monstro para receber o dano.')
+                hit=self.entry_damage(opposing,slot,value)
+                summary.append({'acao':action,'alvo':(opposing,slot), **hit})
+            elif action in ENTRY_SPELL_ACTIONS:
+                summary.append({'acao':action,'valor':value,'alvo':opposing,
+                                **self._entry_spell(action,value,side,opposing)})
             elif action=='dano_monstro_alvo':
                 if target_slot is None or self.get(target_side,target_slot) is None:
                     if not strict:

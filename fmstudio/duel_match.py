@@ -335,6 +335,19 @@ class DuelMatch(DuelLab):
         elif cid == 348:
             self.swords[enemy] = 3
 
+    def _entry_spell(self, action, value, side, opposing):
+        result = super()._entry_spell(action, value, side, opposing)
+        if action == 'limpar_armadilhas':
+            removed = list(self.traps[opposing])
+            self.traps[opposing].clear()
+            self.graveyards[opposing].extend(removed)
+            result['cartas'] = removed
+        elif action == 'espadas_reveladoras':
+            self.swords[opposing] = value
+        elif action == 'mudar_terreno':
+            self.terrain = value or None
+        return result
+
     def _counter_trap(self, side, cid):
         if cid not in self.traps[side]:
             return False

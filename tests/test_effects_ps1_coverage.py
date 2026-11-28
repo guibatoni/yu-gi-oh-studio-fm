@@ -8,7 +8,7 @@ from fmstudio.ps1_runtime import SUPPORTED
 STUDIO_ONLY = {
     'aumentar_atk', 'reduzir_atk', 'aumentar_def', 'reduzir_def',   # mudança de ATK/DEF por evento
     'cura_lp_deck_tipo', 'dano_lp_deck_tipo',                       # LP por carta do tipo no deck
-    'descartar_alvo', 'dano_monstro_alvo',
+    'descartar_alvo',
 }
 
 
@@ -19,6 +19,9 @@ class EffectCoverageTests(unittest.TestCase):
         self.assertEqual(STUDIO_ONLY & SUPPORTED, set())
         self.assertIn('bonus_mao_tipo', SUPPORTED)
         self.assertIn('vinculo_vida', SUPPORTED)
+        for action in ('dano_monstro_alvo', 'limpar_armadilhas', 'revelar_cartas',
+                       'espadas_reveladoras', 'trocar_posicao', 'mudar_terreno'):
+            self.assertIn(action, SUPPORTED)
 
 
 if __name__ == '__main__':

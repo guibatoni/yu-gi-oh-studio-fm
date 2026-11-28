@@ -395,6 +395,12 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         or any(raw.get('acao') == 'bonus_por_carta_id' and raw.get('origem_contagem') == 'mao'
                for effects in getattr(project, 'effects', {}).values() for raw in effects))
     hand_bonus_hook = None
+    from .ps1_entry_effects import ENTRY_ACTIONS as _ENTRY_SPELLS
+    entry_spells_wanted = bool(native_profile) and any(
+        action in _ENTRY_SPELLS for _, action in native_plan.accepted)
+    entry_effects_wanted = entry_spells_wanted or lifelink_wanted
+    entry_effects_hook = None
+    entry_effects_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
     hand_bonus_report = ({'status': 'sem_efeitos'} if native_profile else {'status': 'perfil_incompativel'})
     subtype_report = ({'status': 'sem_subtipos'} if native_profile else {'status': 'perfil_incompativel'})
     starter_choice_hook, starter_choice_texts, starter_choice_decks = None, [], []
@@ -424,7 +430,8 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     fixed_drop_report = ({'status': 'sem_drops_fixos'} if native_profile else {'status': 'perfil_incompativel'})
     if native_profile and (texts or quest_enabled or equip_bonus_requested or frames_enabled
                            or splash_requested or lp_hud_wide or lifelink_wanted or starter_choice_on
-                           or subtype_wanted or hand_bonus_wanted or fixed_drop_map or duel_hud_wanted):
+                           or subtype_wanted or hand_bonus_wanted or fixed_drop_map or duel_hud_wanted
+                           or entry_effects_wanted):
         from .ps1_text import description_regions
         regions = description_regions(native_plan, has_lp=mod_plan.has_lp)
     code_space = []
@@ -470,6 +477,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         # Bônus por cartas na mão: desvio da chamada de count_bonus (após o runtime).
         from .ps1_hand_bonus import block_size as hand_bonus_block_size
         hand_bonus_hook = reserve_code(hand_bonus_block_size())
+    if entry_effects_wanted:
+        # Efeitos de entrada com animações das mágicas + animação de cura do Vínculo com Vida.
+        from .ps1_entry_effects import block_size as entry_effects_block_size
+        entry_effects_hook = reserve_code(entry_effects_block_size())
     if duel_hud_wanted:
         from .ps1_duel_hud import block_size as duel_hud_block_size
         duel_hud_hook = reserve_code(duel_hud_block_size(True, duel_hud_portrait is not None))
@@ -768,6 +779,14 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
     if hand_bonus_hook is not None:
         from .ps1_hand_bonus import apply as apply_hand_bonus
         patched_exe, hand_bonus_report = apply_hand_bonus(patched_exe, hand_bonus_hook)
+    if entry_effects_hook is not None:
+        # Por último: encadeia no salto de entrada em campo deixado pelas rotinas acima.
+        from .ps1_entry_effects import apply as apply_entry_effects
+        from .ps1_lifelink import pending_address as lifelink_pending
+        patched_exe, entry_effects_report = apply_entry_effects(
+            patched_exe, entry_effects_hook, native_plan.capacity, entries=entry_spells_wanted,
+            heal_pending=(lifelink_pending(lifelink_hook, native_plan.capacity)
+                          if lifelink_hook is not None else None))
 
     # O Drop x15 pode substituir uma cópia anterior com a trava de abertura removida.
     if starter_choice_hook is not None:
@@ -951,6 +970,7 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
                 'hud_duelo_ps1':duel_hud_report,
                 'subtipos_ps1':subtype_report,
                 'bonus_mao_ps1':hand_bonus_report,
+                'efeitos_entrada_ps1':entry_effects_report,
                 'escolha_deck_inicial_ps1':starter_choice_report,
                 'expansao_cartas_ps1':expansion_report,
                 'edicao_do_mod_ps1':{'bloqueio_turno_inicial':native_profile,'aplicado':mod_plan.applied,
