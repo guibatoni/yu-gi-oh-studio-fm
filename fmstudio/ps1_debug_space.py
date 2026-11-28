@@ -38,6 +38,26 @@ LINK_MODES = (14, 15, 16)
 LINK_RUNNERS = (0x8002D7CC, 0x8002DA1C, 0x8002DC38)
 
 
+# Teste de som do menu de debug: funções 0x8003F8D4..0x8003FE14 chamadas só pelo menu
+# de debug (0x80030EF4 e 0x8003102C); nenhum salto, ponteiro ou endereço montado de fora.
+SOUND_START = 0x8003F8D4
+SOUND_END = 0x8003FE14
+SOUND_SHA256 = '5b0555f93c72d1d1b6f99438796534fd4e750e4c8a141038a8cfd9e741dd6a16'
+
+
+def _sound_state(exe: bytes, debug_free: bool) -> str:
+    try:
+        at = exe_pos(SOUND_START, exe, SOUND_END - SOUND_START)
+        region = exe[at:at + SOUND_END - SOUND_START]
+    except Exception:
+        return 'divergente'
+    if hashlib.sha256(region).hexdigest() == SOUND_SHA256:
+        return 'original'
+    if debug_free and not any(region):
+        return 'liberado'
+    return 'divergente'
+
+
 def _link_state(exe: bytes) -> str:
     try:
         entries = [struct.unpack_from('<I', exe, exe_pos(MODE_TABLE + 4 * m, exe, 4))[0]
@@ -89,6 +109,13 @@ def claim(exe: bytes) -> tuple[bytes, list[tuple[int, int]], dict]:
     regions = [(DEBUG_START, DEBUG_END)]
     report = {'status': 'liberado', 'inicio': f'0x{DEBUG_START:08X}', 'fim': f'0x{DEBUG_END:08X}',
               'bytes': DEBUG_END - DEBUG_START, 'modo_debug': 'volta ao menu principal'}
+    sound = _sound_state(exe, state == 'liberado')
+    if sound != 'divergente':
+        if sound == 'original':
+            at = exe_pos(SOUND_START, exe, SOUND_END - SOUND_START)
+            out[at:at + SOUND_END - SOUND_START] = bytes(SOUND_END - SOUND_START)
+        regions.append((SOUND_START, SOUND_END))
+        report.update(teste_de_som='removido', bytes=report['bytes'] + SOUND_END - SOUND_START)
     link = _link_state(exe)
     if link != 'divergente':
         if link == 'original':

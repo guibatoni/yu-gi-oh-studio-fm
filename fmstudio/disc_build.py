@@ -452,6 +452,11 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         # O maior bloco primeiro: cabe inteiro na área do menu de debug.
         from .ps1_duel_hud import block_size as duel_hud_block_size
         duel_hud_hook = reserve_code(duel_hud_block_size(True, duel_hud_portrait is not None))
+    if entry_effects_wanted:
+        # Efeitos de entrada com animações das mágicas + animação de cura do Vínculo com Vida.
+        from .ps1_entry_effects import block_size as entry_effects_block_size
+        entry_effects_hook = reserve_code(entry_effects_block_size(
+            entry_ops, entries=bool(entry_ops), heal=lifelink_wanted))
     if quest_enabled:
         quest_handlers, regions = reserve_quest_handlers(patched_exe, regions)
     equip_bonus_report = {'status': 'original'} if native_profile else {'status': 'perfil_incompativel'}
@@ -480,11 +485,6 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         # Bônus por cartas na mão: desvio da chamada de count_bonus (após o runtime).
         from .ps1_hand_bonus import block_size as hand_bonus_block_size
         hand_bonus_hook = reserve_code(hand_bonus_block_size())
-    if entry_effects_wanted:
-        # Efeitos de entrada com animações das mágicas + animação de cura do Vínculo com Vida.
-        from .ps1_entry_effects import block_size as entry_effects_block_size
-        entry_effects_hook = reserve_code(entry_effects_block_size(
-            entry_ops, entries=bool(entry_ops), heal=lifelink_wanted))
     if fixed_drop_map:
         # Drop fixo por duelista: desvio na entrada de Duel_SelectCardDrop (após o runtime).
         fixed_drop_hook = reserve_code(fixed_drop_block_size())
