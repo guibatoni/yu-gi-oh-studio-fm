@@ -448,6 +448,10 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         except ModError:
             address, regions = reserve_block(patched_exe, regions, size)
             return address
+    if duel_hud_wanted:
+        # O maior bloco primeiro: cabe inteiro na área do menu de debug.
+        from .ps1_duel_hud import block_size as duel_hud_block_size
+        duel_hud_hook = reserve_code(duel_hud_block_size(True, duel_hud_portrait is not None))
     if quest_enabled:
         quest_handlers, regions = reserve_quest_handlers(patched_exe, regions)
     equip_bonus_report = {'status': 'original'} if native_profile else {'status': 'perfil_incompativel'}
@@ -481,9 +485,6 @@ def build_test_disc(project, source_image: Path, *, require_complete: bool=False
         from .ps1_entry_effects import block_size as entry_effects_block_size
         entry_effects_hook = reserve_code(entry_effects_block_size(
             entry_ops, entries=bool(entry_ops), heal=lifelink_wanted))
-    if duel_hud_wanted:
-        from .ps1_duel_hud import block_size as duel_hud_block_size
-        duel_hud_hook = reserve_code(duel_hud_block_size(True, duel_hud_portrait is not None))
     if fixed_drop_map:
         # Drop fixo por duelista: desvio na entrada de Duel_SelectCardDrop (após o runtime).
         fixed_drop_hook = reserve_code(fixed_drop_block_size())
